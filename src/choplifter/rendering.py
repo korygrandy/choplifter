@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import math
 import pygame
 
@@ -9,6 +10,61 @@ from .mission import EnemyKind, HostageState, MissionState, ProjectileKind
 
 _HUD_FONT: pygame.font.Font | None = None
 _TOAST_FONT: pygame.font.Font | None = None
+
+_MISSION1_BG_ORIG: pygame.Surface | None = None
+_MISSION1_BG_LOAD_FAILED: bool = False
+_MISSION1_BG_SCALED: dict[tuple[int, int], pygame.Surface] = {}
+
+
+def draw_sky(screen: pygame.Surface, horizon_y: float) -> None:
+    """Draw the sky area above the horizon.
+
+    If a background image is available, it is scaled to fit the sky area.
+    Falls back to a solid sky color if the image can't be loaded.
+    """
+
+    width = screen.get_width()
+    height = screen.get_height()
+    horizon_h = max(0, min(int(horizon_y), height))
+    if horizon_h <= 0:
+        return
+
+    bg = _get_mission1_bg_scaled(width, horizon_h)
+    if bg is None:
+        screen.fill((135, 190, 235), pygame.Rect(0, 0, width, horizon_h))
+        return
+
+    screen.blit(bg, (0, 0))
+
+
+def _get_mission1_bg_scaled(width: int, height: int) -> pygame.Surface | None:
+    global _MISSION1_BG_ORIG, _MISSION1_BG_LOAD_FAILED
+
+    if _MISSION1_BG_LOAD_FAILED:
+        return None
+
+    if _MISSION1_BG_ORIG is None:
+        module_dir = Path(__file__).resolve().parent
+        repo_root = module_dir.parents[1]
+        candidate_paths = (
+            module_dir / "assets" / "mission1-bg.jpg",
+            repo_root / "asset" / "mission1-bg.jpg",
+        )
+        path = next((p for p in candidate_paths if p.exists()), candidate_paths[0])
+        try:
+            _MISSION1_BG_ORIG = pygame.image.load(str(path)).convert()
+        except Exception:
+            _MISSION1_BG_LOAD_FAILED = True
+            return None
+
+    key = (width, height)
+    cached = _MISSION1_BG_SCALED.get(key)
+    if cached is not None:
+        return cached
+
+    scaled = pygame.transform.smoothscale(_MISSION1_BG_ORIG, (width, height))
+    _MISSION1_BG_SCALED[key] = scaled
+    return scaled
 
 
 def draw_ground(screen: pygame.Surface, ground_y: float) -> None:

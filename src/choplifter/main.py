@@ -13,7 +13,7 @@ from .mission import (
     spawn_projectile_from_helicopter_logged,
     update_mission,
 )
-from .rendering import draw_ground, draw_helicopter, draw_hud, draw_mission, draw_toast
+from .rendering import draw_ground, draw_helicopter, draw_hud, draw_mission, draw_sky, draw_toast
 from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, PhysicsSettings, WindowSettings
 from .sky_smoke import SkySmokeSystem
 
@@ -310,7 +310,7 @@ def run() -> None:
         sky_smoke.update(frame_dt, width=screen.get_width(), horizon_y=int(heli_settings.ground_y))
 
         # Render.
-        screen.fill((135, 190, 235))
+        draw_sky(screen, heli_settings.ground_y)
         sky_smoke.draw(screen, horizon_y=int(heli_settings.ground_y))
         draw_ground(screen, heli_settings.ground_y)
         draw_mission(screen, mission)
