@@ -71,10 +71,10 @@ def draw_ground(screen: pygame.Surface, ground_y: float) -> None:
     pygame.draw.line(screen, (90, 90, 90), (0, int(ground_y)), (screen.get_width(), int(ground_y)), 2)
 
 
-def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter) -> None:
+def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x: float = 0.0) -> None:
     # Minimal placeholder: a rotated body + rotor line.
     body_w, body_h = 70, 22
-    x = int(helicopter.pos.x)
+    x = int(helicopter.pos.x - camera_x)
     y = int(helicopter.pos.y)
 
     body = pygame.Surface((body_w, body_h), pygame.SRCALPHA)
@@ -103,12 +103,12 @@ def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter) -> None:
     pygame.draw.line(screen, (30, 30, 30), (cx - dx, cy - dy), (cx + dx, cy + dy), 4)
 
 
-def draw_mission(screen: pygame.Surface, mission: MissionState) -> None:
-    _draw_base(screen, mission)
-    _draw_compounds(screen, mission)
-    _draw_hostages(screen, mission)
-    _draw_enemies(screen, mission)
-    _draw_projectiles(screen, mission)
+def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0) -> None:
+    _draw_base(screen, mission, camera_x=camera_x)
+    _draw_compounds(screen, mission, camera_x=camera_x)
+    _draw_hostages(screen, mission, camera_x=camera_x)
+    _draw_enemies(screen, mission, camera_x=camera_x)
+    _draw_projectiles(screen, mission, camera_x=camera_x)
 
     if mission.ended and mission.end_text:
         boarded = sum(1 for h in mission.hostages if h.state is HostageState.BOARDED)
@@ -185,8 +185,13 @@ def draw_toast(screen: pygame.Surface, message: str) -> None:
     screen.blit(panel, (x, y))
 
 
-def _draw_base(screen: pygame.Surface, mission: MissionState) -> None:
-    r = pygame.Rect(int(mission.base.pos.x), int(mission.base.pos.y), int(mission.base.width), int(mission.base.height))
+def _draw_base(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+    r = pygame.Rect(
+        int(mission.base.pos.x - camera_x),
+        int(mission.base.pos.y),
+        int(mission.base.width),
+        int(mission.base.height),
+    )
     pygame.draw.rect(screen, (60, 60, 75), r, border_radius=8)
     pygame.draw.rect(screen, (210, 210, 210), r, 2, border_radius=8)
 
@@ -200,9 +205,9 @@ def _draw_base(screen: pygame.Surface, mission: MissionState) -> None:
     )
 
 
-def _draw_compounds(screen: pygame.Surface, mission: MissionState) -> None:
+def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
     for c in mission.compounds:
-        r = pygame.Rect(int(c.pos.x), int(c.pos.y), int(c.width), int(c.height))
+        r = pygame.Rect(int(c.pos.x - camera_x), int(c.pos.y), int(c.width), int(c.height))
         color = (160, 120, 70) if not c.is_open else (120, 95, 60)
         pygame.draw.rect(screen, color, r)
         pygame.draw.rect(screen, (30, 30, 30), r, 2)
@@ -211,44 +216,46 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState) -> None:
             pygame.draw.rect(screen, (35, 35, 35), gap)
 
 
-def _draw_hostages(screen: pygame.Surface, mission: MissionState) -> None:
+def _draw_hostages(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
     for h in mission.hostages:
         if h.state in (HostageState.IDLE, HostageState.BOARDED, HostageState.SAVED):
             continue
 
         if h.state is HostageState.KIA:
-            pygame.draw.circle(screen, (120, 10, 10), (int(h.pos.x), int(h.pos.y)), 4)
+            pygame.draw.circle(screen, (120, 10, 10), (int(h.pos.x - camera_x), int(h.pos.y)), 4)
             continue
 
-        pygame.draw.circle(screen, (245, 235, 210), (int(h.pos.x), int(h.pos.y)), 5)
-        pygame.draw.circle(screen, (25, 25, 25), (int(h.pos.x), int(h.pos.y)), 5, 1)
+        pygame.draw.circle(screen, (245, 235, 210), (int(h.pos.x - camera_x), int(h.pos.y)), 5)
+        pygame.draw.circle(screen, (25, 25, 25), (int(h.pos.x - camera_x), int(h.pos.y)), 5, 1)
 
 
-def _draw_projectiles(screen: pygame.Surface, mission: MissionState) -> None:
+def _draw_projectiles(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
     for p in mission.projectiles:
+        x = int(p.pos.x - camera_x)
+        y = int(p.pos.y)
         if p.kind is ProjectileKind.BULLET:
-            pygame.draw.circle(screen, (240, 240, 240), (int(p.pos.x), int(p.pos.y)), 2)
+            pygame.draw.circle(screen, (240, 240, 240), (x, y), 2)
         elif p.kind is ProjectileKind.ENEMY_BULLET:
-            pygame.draw.circle(screen, (200, 40, 40), (int(p.pos.x), int(p.pos.y)), 2)
+            pygame.draw.circle(screen, (200, 40, 40), (x, y), 2)
         else:
-            pygame.draw.circle(screen, (35, 35, 35), (int(p.pos.x), int(p.pos.y)), 4)
+            pygame.draw.circle(screen, (35, 35, 35), (x, y), 4)
 
 
-def _draw_enemies(screen: pygame.Surface, mission: MissionState) -> None:
+def _draw_enemies(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
     ground_y = mission.base.pos.y + mission.base.height
 
     for e in mission.enemies:
         if e.kind is EnemyKind.TANK:
             # Simple tank block near ground.
             w, h = 44, 18
-            r = pygame.Rect(int(e.pos.x - w / 2), int(ground_y - h), w, h)
+            r = pygame.Rect(int(e.pos.x - camera_x - w / 2), int(ground_y - h), w, h)
             pygame.draw.rect(screen, (70, 70, 70), r)
             pygame.draw.rect(screen, (25, 25, 25), r, 2)
             # Turret marker.
             pygame.draw.line(screen, (25, 25, 25), (r.centerx, r.top + 3), (r.centerx + 10, r.top - 6), 3)
 
         elif e.kind is EnemyKind.JET:
-            x = int(e.pos.x)
+            x = int(e.pos.x - camera_x)
             y = int(e.pos.y)
             direction = 1 if e.vel.x >= 0 else -1
             pygame.draw.polygon(
@@ -258,8 +265,8 @@ def _draw_enemies(screen: pygame.Surface, mission: MissionState) -> None:
             )
 
         elif e.kind is EnemyKind.AIR_MINE:
-            pygame.draw.circle(screen, (200, 40, 40), (int(e.pos.x), int(e.pos.y)), 9)
-            pygame.draw.circle(screen, (25, 25, 25), (int(e.pos.x), int(e.pos.y)), 9, 2)
+            pygame.draw.circle(screen, (200, 40, 40), (int(e.pos.x - camera_x), int(e.pos.y)), 9)
+            pygame.draw.circle(screen, (25, 25, 25), (int(e.pos.x - camera_x), int(e.pos.y)), 9, 2)
 
 
 def _draw_end(

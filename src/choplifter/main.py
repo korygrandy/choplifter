@@ -271,7 +271,7 @@ def run() -> None:
 
         while accumulator >= tick.dt:
             was_grounded = helicopter.grounded
-            update_helicopter(helicopter, helicopter_input, tick.dt, physics, heli_settings, world_width=float(window.width))
+            update_helicopter(helicopter, helicopter_input, tick.dt, physics, heli_settings, world_width=float(mission.world_width))
             if not was_grounded and helicopter.grounded:
                 hostage_crush_check_logged(mission, helicopter, helicopter.last_landing_vy, logger)
             update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
@@ -309,13 +309,23 @@ def run() -> None:
         # Visual-only sky particles.
         sky_smoke.update(frame_dt, width=screen.get_width(), horizon_y=int(heli_settings.ground_y))
 
+        # Side-scrolling camera (world x -> screen x).
+        world_w = float(mission.world_width)
+        view_w = float(screen.get_width())
+        max_cam_x = max(0.0, world_w - view_w)
+        camera_x = helicopter.pos.x - view_w * 0.5
+        if camera_x < 0.0:
+            camera_x = 0.0
+        elif camera_x > max_cam_x:
+            camera_x = max_cam_x
+
         # Render.
         # Background above the horizon.
         draw_sky(screen, heli_settings.ground_y)
         sky_smoke.draw(screen, horizon_y=int(heli_settings.ground_y))
         draw_ground(screen, heli_settings.ground_y)
-        draw_mission(screen, mission)
-        draw_helicopter(screen, helicopter)
+        draw_mission(screen, mission, camera_x=camera_x)
+        draw_helicopter(screen, helicopter, camera_x=camera_x)
         draw_hud(screen, mission, helicopter)
         if toast_message:
             draw_toast(screen, toast_message)

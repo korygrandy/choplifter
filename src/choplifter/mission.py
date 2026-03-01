@@ -122,6 +122,7 @@ class MissionTuning:
 
 @dataclass(frozen=True)
 class LevelConfig:
+    world_width: float
     compound_xs: tuple[float, ...]
     compound_width: float
     compound_height: float
@@ -192,10 +193,17 @@ class MissionState:
 
     @staticmethod
     def create_default(heli: HelicopterSettings) -> "MissionState":
-        return MissionState.create_from_level_config(heli, create_level_1_config())
+        level = create_level_1_config()
+        return MissionState.create_from_level_config(heli, level)
 
     @staticmethod
-    def create_from_level_config(heli: HelicopterSettings, level: LevelConfig, world_width: float = 1280.0) -> "MissionState":
+    def create_from_level_config(
+        heli: HelicopterSettings,
+        level: LevelConfig,
+        world_width: float | None = None,
+    ) -> "MissionState":
+        if world_width is None:
+            world_width = level.world_width
         compounds: list[Compound] = []
         hostage_index = 0
         compound_w = level.compound_width
@@ -275,6 +283,7 @@ class MissionState:
 
 def create_level_1_config() -> LevelConfig:
     return LevelConfig(
+        world_width=3200.0,
         compound_xs=(140.0, 360.0, 580.0, 800.0),
         compound_width=80.0,
         compound_height=60.0,
