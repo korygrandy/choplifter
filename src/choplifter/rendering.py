@@ -15,9 +15,9 @@ _MISSION1_BG_ORIG: pygame.Surface | None = None
 _MISSION1_BG_LOAD_FAILED: bool = False
 _MISSION1_BG_SCALED: dict[tuple[int, int], pygame.Surface] = {}
 
-_CHOPPER1_ORIG: pygame.Surface | None = None
-_CHOPPER1_LOAD_FAILED: bool = False
-_CHOPPER1_SCALED: dict[int, pygame.Surface] = {}
+_CHOPPER_ORIG: dict[str, pygame.Surface] = {}
+_CHOPPER_LOAD_FAILED: set[str] = set()
+_CHOPPER_SCALED: dict[tuple[str, int], pygame.Surface] = {}
 
 _BURN_SPRITE_CACHE: dict[tuple[str, int], pygame.Surface] = {}
 
@@ -81,7 +81,8 @@ def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x:
     x = int(helicopter.pos.x - camera_x)
     y = int(helicopter.pos.y)
 
-    sprite = _get_chopper1_scaled(width_px=120)
+    skin = getattr(helicopter, "skin_asset", "chopper-one.png")
+    sprite = _get_chopper_scaled(skin, width_px=120)
     if sprite is not None:
         s = sprite
         # The base sprite is authored facing LEFT; flip for RIGHT-facing.
@@ -119,60 +120,130 @@ def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x:
     pygame.draw.line(screen, (30, 30, 30), (cx - dx, cy - dy), (cx + dx, cy + dy), 4)
 
 
-def _get_chopper1_scaled(*, width_px: int) -> pygame.Surface | None:
-    global _CHOPPER1_ORIG, _CHOPPER1_LOAD_FAILED
-
-    if _CHOPPER1_LOAD_FAILED:
+def _get_chopper_scaled(asset_filename: str, *, width_px: int) -> pygame.Surface | None:
+    if asset_filename in _CHOPPER_LOAD_FAILED:
         return None
 
-    if _CHOPPER1_ORIG is None:
+    width_px = max(1, int(width_px))
+    cache_key = (asset_filename, width_px)
+    cached = _CHOPPER_SCALED.get(cache_key)
+    if cached is not None:
+        return cached
+
+    orig = _CHOPPER_ORIG.get(asset_filename)
+    if orig is None:
         module_dir = Path(__file__).resolve().parent
-        candidate_paths = (
-            module_dir / "assets" / "chopper-one.png",
-            module_dir / "assets" / "chopper-one.jpg",
-        )
-        path = next((p for p in candidate_paths if p.exists()), candidate_paths[0])
+        path = module_dir / "assets" / asset_filename
         try:
             loaded = pygame.image.load(str(path))
             if pygame.display.get_surface() is not None:
                 loaded = loaded.convert_alpha()
-            _CHOPPER1_ORIG = loaded
 
-            # If the sprite has no transparency (common when saved as JPG),
-            # treat the top-left pixel as a background key color.
-            # This keeps the game playable even if the asset wasn't exported with alpha.
-            w = _CHOPPER1_ORIG.get_width()
-            h = _CHOPPER1_ORIG.get_height()
+            # If the sprite has no transparency, treat top-left as background key.
+            w = loaded.get_width()
+            h = loaded.get_height()
             if w > 0 and h > 0:
                 corners = ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1))
-                if all(_CHOPPER1_ORIG.get_at(p).a == 255 for p in corners):
-                    key = _CHOPPER1_ORIG.get_at((0, 0))
-                    _CHOPPER1_ORIG.set_colorkey((key.r, key.g, key.b), pygame.RLEACCEL)
+                if all(loaded.get_at(p).a == 255 for p in corners):
+                    key = loaded.get_at((0, 0))
+                    loaded.set_colorkey((key.r, key.g, key.b), pygame.RLEACCEL)
+
+            _CHOPPER_ORIG[asset_filename] = loaded
+            orig = loaded
         except Exception:
-            _CHOPPER1_LOAD_FAILED = True
+            _CHOPPER_LOAD_FAILED.add(asset_filename)
             return None
 
-    width_px = max(1, int(width_px))
-    cached = _CHOPPER1_SCALED.get(width_px)
-    if cached is not None:
-        return cached
-
-    ow, oh = _CHOPPER1_ORIG.get_width(), _CHOPPER1_ORIG.get_height()
+    ow, oh = orig.get_width(), orig.get_height()
     if ow <= 0 or oh <= 0:
-        _CHOPPER1_LOAD_FAILED = True
+        _CHOPPER_LOAD_FAILED.add(asset_filename)
         return None
 
     scale = width_px / float(ow)
-    h = max(1, int(oh * scale))
-    scaled = pygame.transform.smoothscale(_CHOPPER1_ORIG, (width_px, h))
+    out_h = max(1, int(oh * scale))
+    scaled = pygame.transform.smoothscale(orig, (width_px, out_h))
 
-    # Preserve colorkey if we had to key out a background color.
-    key = _CHOPPER1_ORIG.get_colorkey()
+    key = orig.get_colorkey()
     if key is not None:
         scaled.set_colorkey(key, pygame.RLEACCEL)
 
-    _CHOPPER1_SCALED[width_px] = scaled
+    _CHOPPER_SCALED[cache_key] = scaled
     return scaled
+
+
+def draw_chopper_select_overlay(
+    screen: pygame.Surface,
+    choices: list[tuple[str, str]],
+    selected_index: int,
+) -> None:
+    """Draw a simple chopper selection overlay.
+
+    choices: list of (asset_filename, display_name)
+    """
+
+    global _TOAST_FONT
+    if _TOAST_FONT is None:
+        pygame.font.init()
+        _TOAST_FONT = pygame.font.SysFont("consolas", 26)
+    title_font = _TOAST_FONT
+
+    w = screen.get_width()
+    h = screen.get_height()
+
+    # Dim the game view.
+    dim = pygame.Surface((w, h), pygame.SRCALPHA)
+    dim.fill((0, 0, 0, 160))
+    screen.blit(dim, (0, 0))
+
+    title = title_font.render("Select a Chopper", True, (240, 240, 240))
+    screen.blit(title, (w // 2 - title.get_width() // 2, 44))
+
+    hint_font = pygame.font.SysFont("consolas", 18)
+    hint = hint_font.render("Left/Right (or D-pad) to choose • Enter/A to start", True, (220, 220, 220))
+    screen.blit(hint, (w // 2 - hint.get_width() // 2, 80))
+
+    n = max(1, len(choices))
+    selected_index = max(0, min(int(selected_index), n - 1))
+
+    margin_x = 26
+    gap = 14
+    box_top = 130
+    box_h = min(210, h - box_top - 40)
+    available_w = w - margin_x * 2
+    box_w = int((available_w - gap * (n - 1)) / float(n))
+    box_w = max(90, box_w)
+
+    # Center row if boxes don't exactly fill due to min-width clamping.
+    row_w = box_w * n + gap * (n - 1)
+    start_x = max(margin_x, (w - row_w) // 2)
+
+    for i, (asset, name) in enumerate(choices):
+        x = start_x + i * (box_w + gap)
+        rect = pygame.Rect(x, box_top, box_w, box_h)
+
+        is_selected = i == selected_index
+        border = 4 if is_selected else 2
+        bg = (20, 20, 20, 200) if is_selected else (10, 10, 10, 180)
+
+        panel = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        panel.fill(bg)
+        screen.blit(panel, rect.topleft)
+
+        pygame.draw.rect(screen, (240, 240, 240) if is_selected else (160, 160, 160), rect, border)
+
+        # Thumbnail.
+        thumb_w = min(110, rect.width - 18)
+        thumb = _get_chopper_scaled(asset, width_px=thumb_w)
+        if thumb is not None:
+            tx = rect.centerx - thumb.get_width() // 2
+            ty = rect.y + 18
+            screen.blit(thumb, (tx, ty))
+
+        # Name.
+        label = hint_font.render(name, True, (240, 240, 240) if is_selected else (200, 200, 200))
+        lx = rect.centerx - label.get_width() // 2
+        ly = rect.bottom - label.get_height() - 14
+        screen.blit(label, (lx, ly))
 
 
 def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0) -> None:

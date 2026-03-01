@@ -14,7 +14,7 @@ from .mission import (
     spawn_projectile_from_helicopter_logged,
     update_mission,
 )
-from .rendering import draw_ground, draw_helicopter, draw_hud, draw_mission, draw_sky, draw_toast
+from .rendering import draw_chopper_select_overlay, draw_ground, draw_helicopter, draw_hud, draw_mission, draw_sky, draw_toast
 from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, PhysicsSettings, WindowSettings
 from .sky_smoke import SkySmokeSystem
 
@@ -121,8 +121,25 @@ def run() -> None:
 
     sky_smoke = SkySmokeSystem()
 
+    # Pre-game chopper selection overlay.
+    chopper_choices: list[tuple[str, str]] = [
+        ("chopper-one.png", "Classic"),
+        ("chopper-two-orange.png", "Orange"),
+        ("chopper-three-green.png", "Green"),
+        ("chopper-four-blue.png", "Blue"),
+        ("chopper-five-desert.png", "Desert"),
+    ]
+    selected_chopper_index = 0
+    selected_chopper_asset = chopper_choices[selected_chopper_index][0]
+    mode: str = "select_chopper"
+    prev_menu_dir = 0
+
     mission = MissionState.create_default(heli_settings)
-    helicopter = Helicopter.spawn(heli_settings, start_x=mission.base.pos.x + mission.base.width * 0.5)
+    helicopter = Helicopter.spawn(
+        heli_settings,
+        start_x=mission.base.pos.x + mission.base.width * 0.5,
+        skin_asset=selected_chopper_asset,
+    )
     helicopter.facing = Facing.LEFT
 
     prev_crashes = mission.crashes
@@ -134,11 +151,16 @@ def run() -> None:
 
     def reset_game() -> None:
         nonlocal helicopter, mission, accumulator
+        nonlocal selected_chopper_asset
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed
 
         mission = MissionState.create_default(heli_settings)
-        helicopter = Helicopter.spawn(heli_settings, start_x=mission.base.pos.x + mission.base.width * 0.5)
+        helicopter = Helicopter.spawn(
+            heli_settings,
+            start_x=mission.base.pos.x + mission.base.width * 0.5,
+            skin_asset=selected_chopper_asset,
+        )
         helicopter.facing = Facing.LEFT
         accumulator = 0.0
         sky_smoke.reset()
@@ -185,17 +207,28 @@ def run() -> None:
             elif event.type == pygame.KEYDOWN:
                 if matches_key(event.key, controls.quit):
                     running = False
+                elif mode == "select_chopper":
+                    if event.key in (pygame.K_LEFT, pygame.K_a) or matches_key(event.key, controls.tilt_left):
+                        selected_chopper_index = (selected_chopper_index - 1) % len(chopper_choices)
+                        selected_chopper_asset = chopper_choices[selected_chopper_index][0]
+                    elif event.key in (pygame.K_RIGHT, pygame.K_d) or matches_key(event.key, controls.tilt_right):
+                        selected_chopper_index = (selected_chopper_index + 1) % len(chopper_choices)
+                        selected_chopper_asset = chopper_choices[selected_chopper_index][0]
+                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                        mode = "playing"
+                        set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
+                        reset_game()
                 elif matches_key(event.key, controls.restart) and mission.ended:
                     reset_game()
                 elif matches_key(event.key, controls.toggle_debug):
                     debug = DebugSettings(show_overlay=not debug.show_overlay)
-                elif matches_key(event.key, controls.cycle_facing):
+                elif mode == "playing" and matches_key(event.key, controls.cycle_facing):
                     helicopter.cycle_facing()
-                elif matches_key(event.key, controls.reverse_flip):
+                elif mode == "playing" and matches_key(event.key, controls.reverse_flip):
                     helicopter.reverse_flip()
-                elif matches_key(event.key, controls.doors):
+                elif mode == "playing" and matches_key(event.key, controls.doors):
                     toggle_doors_with_logging()
-                elif matches_key(event.key, controls.fire):
+                elif mode == "playing" and matches_key(event.key, controls.fire):
                     spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
                     if helicopter.facing is Facing.FORWARD:
                         audio.play_bomb()
@@ -221,12 +254,18 @@ def run() -> None:
             gp_tilt_left = x_axis <= -deadzone
             gp_tilt_right = x_axis >= deadzone
 
+            menu_dir = -1 if gp_tilt_left else (1 if gp_tilt_right else 0)
+
             if active_js.get_numhats() > 0:
                 hat_x, hat_y = active_js.get_hat(0)
                 gp_tilt_left = gp_tilt_left or hat_x <= -1
                 gp_tilt_right = gp_tilt_right or hat_x >= 1
                 gp_lift_up = gp_lift_up or hat_y >= 1
                 gp_lift_down = gp_lift_down or hat_y <= -1
+                if hat_x <= -1:
+                    menu_dir = -1
+                elif hat_x >= 1:
+                    menu_dir = 1
 
             axes = active_js.get_numaxes()
             if axes >= 6:
@@ -245,34 +284,44 @@ def run() -> None:
             y_down = bool(active_js.get_numbuttons() > 3 and active_js.get_button(3))
             start_down = bool(active_js.get_numbuttons() > 7 and active_js.get_button(7))
 
-            if start_down and not prev_btn_start_down and mission.ended:
-                reset_game()
+            if mode == "select_chopper":
+                if menu_dir != 0 and menu_dir != prev_menu_dir:
+                    selected_chopper_index = (selected_chopper_index + menu_dir) % len(chopper_choices)
+                    selected_chopper_asset = chopper_choices[selected_chopper_index][0]
+                if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
+                    mode = "playing"
+                    set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
+                    reset_game()
+            else:
+                if start_down and not prev_btn_start_down and mission.ended:
+                    reset_game()
 
-            if a_down and not prev_btn_a_down:
-                toggle_doors_with_logging()
-            if b_down and not prev_btn_b_down:
-                helicopter.reverse_flip()
-            if y_down and not prev_btn_y_down:
-                helicopter.cycle_facing()
-            if x_down and not prev_btn_x_down:
-                spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
-                if helicopter.facing is Facing.FORWARD:
-                    audio.play_bomb()
-                else:
-                    audio.play_shoot()
+                if a_down and not prev_btn_a_down:
+                    toggle_doors_with_logging()
+                if b_down and not prev_btn_b_down:
+                    helicopter.reverse_flip()
+                if y_down and not prev_btn_y_down:
+                    helicopter.cycle_facing()
+                if x_down and not prev_btn_x_down:
+                    spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
+                    if helicopter.facing is Facing.FORWARD:
+                        audio.play_bomb()
+                    else:
+                        audio.play_shoot()
 
             prev_btn_a_down = a_down
             prev_btn_b_down = b_down
             prev_btn_x_down = x_down
             prev_btn_y_down = y_down
             prev_btn_start_down = start_down
+            prev_menu_dir = menu_dir
 
         helicopter_input = HelicopterInput(
-            tilt_left=kb_tilt_left or gp_tilt_left,
-            tilt_right=kb_tilt_right or gp_tilt_right,
-            lift_up=kb_lift_up or gp_lift_up,
-            lift_down=kb_lift_down or gp_lift_down,
-            brake=kb_brake,
+            tilt_left=(kb_tilt_left or gp_tilt_left) if mode == "playing" else False,
+            tilt_right=(kb_tilt_right or gp_tilt_right) if mode == "playing" else False,
+            lift_up=(kb_lift_up or gp_lift_up) if mode == "playing" else False,
+            lift_down=(kb_lift_down or gp_lift_down) if mode == "playing" else False,
+            brake=kb_brake if mode == "playing" else False,
         )
 
         # Fixed-timestep update.
@@ -281,45 +330,46 @@ def run() -> None:
             accumulator = 0.25
 
         while accumulator >= tick.dt:
-            was_grounded = helicopter.grounded
-            update_helicopter(helicopter, helicopter_input, tick.dt, physics, heli_settings, world_width=float(mission.world_width))
-            if not was_grounded and helicopter.grounded:
-                hostage_crush_check_logged(mission, helicopter, helicopter.last_landing_vy, logger)
-            update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
+            if mode == "playing":
+                was_grounded = helicopter.grounded
+                update_helicopter(helicopter, helicopter_input, tick.dt, physics, heli_settings, world_width=float(mission.world_width))
+                if not was_grounded and helicopter.grounded:
+                    hostage_crush_check_logged(mission, helicopter, helicopter.last_landing_vy, logger)
+                update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
 
-            saved_delta = mission.stats.saved - prev_saved
-            if saved_delta > 0:
-                audio.play_rescue()
-                prev_saved = mission.stats.saved
+                saved_delta = mission.stats.saved - prev_saved
+                if saved_delta > 0:
+                    audio.play_rescue()
+                    prev_saved = mission.stats.saved
 
-            boarded_now = boarded_count(mission)
-            boarded_delta = boarded_now - prev_boarded
-            if boarded_delta > 0:
-                audio.play_board()
-                prev_boarded = boarded_now
+                boarded_now = boarded_count(mission)
+                boarded_delta = boarded_now - prev_boarded
+                if boarded_delta > 0:
+                    audio.play_board()
+                    prev_boarded = boarded_now
 
-            open_compounds = sum(1 for c in mission.compounds if c.is_open)
-            if open_compounds > prev_open_compounds:
-                audio.play_explosion_small()
-                prev_open_compounds = open_compounds
+                open_compounds = sum(1 for c in mission.compounds if c.is_open)
+                if open_compounds > prev_open_compounds:
+                    audio.play_explosion_small()
+                    prev_open_compounds = open_compounds
 
-            tank_delta = mission.stats.tanks_destroyed - prev_tanks_destroyed
-            if tank_delta > 0:
-                audio.play_explosion_big()
-                prev_tanks_destroyed = mission.stats.tanks_destroyed
+                tank_delta = mission.stats.tanks_destroyed - prev_tanks_destroyed
+                if tank_delta > 0:
+                    audio.play_explosion_big()
+                    prev_tanks_destroyed = mission.stats.tanks_destroyed
 
-            if mission.crashes != prev_crashes:
-                if mission.ended:
-                    set_toast(f"THE END: {mission.end_reason} (Enter/Start)")
-                else:
-                    set_toast(f"CRASH {mission.crashes}/3 — respawn (invuln {mission.invuln_seconds:0.1f}s)")
-                    audio.play_crash()
-                prev_crashes = mission.crashes
+                if mission.crashes != prev_crashes:
+                    if mission.ended:
+                        set_toast(f"THE END: {mission.end_reason} (Enter/Start)")
+                    else:
+                        set_toast(f"CRASH {mission.crashes}/3 — respawn (invuln {mission.invuln_seconds:0.1f}s)")
+                        audio.play_crash()
+                    prev_crashes = mission.crashes
 
-            lost_delta = mission.stats.lost_in_transit - prev_lost_in_transit
-            if lost_delta > 0:
-                set_toast(f"Passengers lost in crash: +{lost_delta}")
-                prev_lost_in_transit = mission.stats.lost_in_transit
+                lost_delta = mission.stats.lost_in_transit - prev_lost_in_transit
+                if lost_delta > 0:
+                    set_toast(f"Passengers lost in crash: +{lost_delta}")
+                    prev_lost_in_transit = mission.stats.lost_in_transit
 
             accumulator -= tick.dt
 
@@ -348,7 +398,10 @@ def run() -> None:
         draw_ground(screen, heli_settings.ground_y)
         draw_mission(screen, mission, camera_x=camera_x)
         draw_helicopter(screen, helicopter, camera_x=camera_x)
-        draw_hud(screen, mission, helicopter)
+        if mode == "playing":
+            draw_hud(screen, mission, helicopter)
+        else:
+            draw_chopper_select_overlay(screen, chopper_choices, selected_chopper_index)
         if toast_message:
             draw_toast(screen, toast_message)
 

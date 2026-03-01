@@ -25,9 +25,15 @@ class Helicopter:
     damage: float
     fuel: float
     last_landing_vy: float
+    skin_asset: str
 
     @staticmethod
-    def spawn(settings: HelicopterSettings, *, start_x: float = 1080.0) -> "Helicopter":
+    def spawn(
+        settings: HelicopterSettings,
+        *,
+        start_x: float = 1080.0,
+        skin_asset: str = "chopper-one.png",
+    ) -> "Helicopter":
         return Helicopter(
             pos=Vec2(start_x, settings.ground_y - 120.0),
             vel=Vec2(0.0, 0.0),
@@ -38,6 +44,7 @@ class Helicopter:
             damage=0.0,
             fuel=100.0,
             last_landing_vy=0.0,
+            skin_asset=skin_asset,
         )
 
     def toggle_doors(self) -> None:
