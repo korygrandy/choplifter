@@ -59,6 +59,7 @@ def run() -> None:
     prev_btn_y_down = False
     prev_btn_start_down = False
     prev_btn_rb_down = False
+    prev_btn_lb_down = False
 
     def set_toast(message: str) -> None:
         nonlocal toast_message, toast_seconds
@@ -230,6 +231,7 @@ def run() -> None:
         prev_btn_y_down = False
         prev_btn_start_down = False
         prev_btn_rb_down = False
+        prev_btn_lb_down = False
         logger.info("RESET: mission restarted")
 
     def toggle_particles() -> None:
@@ -344,6 +346,7 @@ def run() -> None:
                     reset_game()
                 elif matches_key(event.key, controls.toggle_debug):
                     debug = DebugSettings(show_overlay=not debug.show_overlay)
+                    set_toast(f"Debug overlay: {'ON' if debug.show_overlay else 'OFF'}")
                 elif mode == "playing" and matches_key(event.key, controls.cycle_facing):
                     helicopter.cycle_facing()
                 elif mode == "playing" and matches_key(event.key, controls.reverse_flip):
@@ -418,6 +421,12 @@ def run() -> None:
             y_down = bool(active_js.get_numbuttons() > 3 and active_js.get_button(3))
             start_down = bool(active_js.get_numbuttons() > 7 and active_js.get_button(7))
             rb_down = bool(active_js.get_numbuttons() > 5 and active_js.get_button(5))
+            lb_down = bool(active_js.get_numbuttons() > 4 and active_js.get_button(4))
+
+            # Debug overlay toggle (gamepad).
+            if lb_down and not prev_btn_lb_down:
+                debug = DebugSettings(show_overlay=not debug.show_overlay)
+                set_toast(f"Debug overlay: {'ON' if debug.show_overlay else 'OFF'}")
 
             if mode == "select_chopper":
                 if menu_dir != 0 and menu_dir != prev_menu_dir:
@@ -506,6 +515,7 @@ def run() -> None:
             prev_btn_y_down = y_down
             prev_btn_start_down = start_down
             prev_btn_rb_down = rb_down
+            prev_btn_lb_down = lb_down
             prev_menu_dir = menu_dir
             prev_menu_vert = menu_vert
 

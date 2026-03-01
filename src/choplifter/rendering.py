@@ -503,10 +503,7 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
     x = 12
     y = screen.get_height() - 12 - len(lines) * 20
     for i, line in enumerate(lines):
-        surf = font.render(line, True, (10, 10, 10))
-        # Shadow for readability.
-        shadow = font.render(line, True, (255, 255, 255))
-        screen.blit(shadow, (x + 1, y + i * 20 + 1))
+        surf = font.render(line, True, (240, 240, 240))
         screen.blit(surf, (x, y + i * 20))
 
 

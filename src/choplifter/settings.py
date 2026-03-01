@@ -44,4 +44,4 @@ class HelicopterSettings:
 
 @dataclass(frozen=True)
 class DebugSettings:
-    show_overlay: bool = True
+    show_overlay: bool = False
