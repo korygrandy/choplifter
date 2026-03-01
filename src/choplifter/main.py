@@ -15,6 +15,7 @@ from .mission import (
 )
 from .rendering import draw_ground, draw_helicopter, draw_hud, draw_mission, draw_toast
 from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, PhysicsSettings, WindowSettings
+from .sky_smoke import SkySmokeSystem
 
 
 def run() -> None:
@@ -113,6 +114,8 @@ def run() -> None:
     clock = pygame.time.Clock()
     overlay = DebugOverlay()
 
+    sky_smoke = SkySmokeSystem()
+
     helicopter = Helicopter.spawn(heli_settings)
     mission = MissionState.create_default(heli_settings)
 
@@ -129,6 +132,7 @@ def run() -> None:
         helicopter = Helicopter.spawn(heli_settings)
         mission = MissionState.create_default(heli_settings)
         accumulator = 0.0
+        sky_smoke.reset()
         prev_crashes = mission.crashes
         prev_lost_in_transit = mission.stats.lost_in_transit
         prev_saved = mission.stats.saved
@@ -302,8 +306,12 @@ def run() -> None:
             if toast_seconds <= 0.0:
                 toast_message = ""
 
+        # Visual-only sky particles.
+        sky_smoke.update(frame_dt, width=screen.get_width(), horizon_y=int(heli_settings.ground_y))
+
         # Render.
         screen.fill((135, 190, 235))
+        sky_smoke.draw(screen, horizon_y=int(heli_settings.ground_y))
         draw_ground(screen, heli_settings.ground_y)
         draw_mission(screen, mission)
         draw_helicopter(screen, helicopter)
