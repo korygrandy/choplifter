@@ -11,9 +11,9 @@ from .mission import EnemyKind, HostageState, MissionState, ProjectileKind
 _HUD_FONT: pygame.font.Font | None = None
 _TOAST_FONT: pygame.font.Font | None = None
 
-_MISSION1_BG_ORIG: pygame.Surface | None = None
-_MISSION1_BG_LOAD_FAILED: bool = False
-_MISSION1_BG_SCALED: dict[tuple[int, int], pygame.Surface] = {}
+_BG_ORIG: dict[str, pygame.Surface] = {}
+_BG_LOAD_FAILED: set[str] = set()
+_BG_SCALED: dict[tuple[str, int, int], pygame.Surface] = {}
 
 _CHOPPER_ORIG: dict[str, pygame.Surface] = {}
 _CHOPPER_LOAD_FAILED: set[str] = set()
@@ -22,7 +22,7 @@ _CHOPPER_SCALED: dict[tuple[str, int], pygame.Surface] = {}
 _BURN_SPRITE_CACHE: dict[tuple[str, int], pygame.Surface] = {}
 
 
-def draw_sky(screen: pygame.Surface, horizon_y: float) -> None:
+def draw_sky(screen: pygame.Surface, horizon_y: float, *, bg_asset: str = "mission1-bg.jpg") -> None:
     """Draws the mission sky background above the horizon line.
 
     Falls back to a solid sky color if the background image is missing/unloadable.
@@ -34,7 +34,7 @@ def draw_sky(screen: pygame.Surface, horizon_y: float) -> None:
     if horizon_h <= 0:
         return
 
-    bg = _get_mission1_bg_scaled(width, horizon_h)
+    bg = _get_bg_scaled(bg_asset, width, horizon_h)
     if bg is None:
         screen.fill((135, 190, 235), pygame.Rect(0, 0, width, horizon_h))
         return
@@ -42,33 +42,65 @@ def draw_sky(screen: pygame.Surface, horizon_y: float) -> None:
     screen.blit(bg, (0, 0))
 
 
-def _get_mission1_bg_scaled(width: int, height: int) -> pygame.Surface | None:
-    global _MISSION1_BG_ORIG, _MISSION1_BG_LOAD_FAILED
+def _resolve_bg_path(asset_filename: str) -> Path:
+    module_dir = Path(__file__).resolve().parent
+    repo_root = module_dir.parents[1]
 
-    if _MISSION1_BG_LOAD_FAILED:
+    # Be forgiving about a common typo for worship-center.
+    alternates: tuple[str, ...] = (asset_filename,)
+    if asset_filename == "worship-center-warfare.jpg":
+        alternates = (asset_filename, "woship-center-warfare.jpg", "mission3-bg.jpg")
+    if asset_filename == "airport-special-ops.jpg":
+        alternates = (asset_filename, "mission2-bg.jpg")
+    if asset_filename == "mission3-bg.jpg":
+        alternates = (asset_filename, "worship-center-warfare.jpg", "woship-center-warfare.jpg")
+    if asset_filename == "mission2-bg.jpg":
+        alternates = (asset_filename, "airport-special-ops.jpg")
+
+    for name in alternates:
+        candidate_paths = (
+            module_dir / "assets" / name,
+            repo_root / "asset" / name,
+        )
+        path = next((p for p in candidate_paths if p.exists()), None)
+        if path is not None:
+            return path
+
+    # Default location (even if missing).
+    return module_dir / "assets" / alternates[0]
+
+
+def bg_asset_exists(asset_filename: str) -> bool:
+    """Returns True if the background asset can be found on disk."""
+
+    try:
+        return _resolve_bg_path(asset_filename).exists()
+    except Exception:
+        return False
+
+
+def _get_bg_scaled(asset_filename: str, width: int, height: int) -> pygame.Surface | None:
+    asset_filename = asset_filename or "mission1-bg.jpg"
+    if asset_filename in _BG_LOAD_FAILED:
         return None
 
-    if _MISSION1_BG_ORIG is None:
-        module_dir = Path(__file__).resolve().parent
-        repo_root = module_dir.parents[1]
-        candidate_paths = (
-            module_dir / "assets" / "mission1-bg.jpg",
-            repo_root / "asset" / "mission1-bg.jpg",
-        )
-        path = next((p for p in candidate_paths if p.exists()), candidate_paths[0])
+    orig = _BG_ORIG.get(asset_filename)
+    if orig is None:
+        path = _resolve_bg_path(asset_filename)
         try:
-            _MISSION1_BG_ORIG = pygame.image.load(str(path)).convert()
+            orig = pygame.image.load(str(path)).convert()
         except Exception:
-            _MISSION1_BG_LOAD_FAILED = True
+            _BG_LOAD_FAILED.add(asset_filename)
             return None
+        _BG_ORIG[asset_filename] = orig
 
-    key = (width, height)
-    cached = _MISSION1_BG_SCALED.get(key)
+    key = (asset_filename, width, height)
+    cached = _BG_SCALED.get(key)
     if cached is not None:
         return cached
 
-    scaled = pygame.transform.smoothscale(_MISSION1_BG_ORIG, (width, height))
-    _MISSION1_BG_SCALED[key] = scaled
+    scaled = pygame.transform.smoothscale(orig, (width, height))
+    _BG_SCALED[key] = scaled
     return scaled
 
 
@@ -180,6 +212,8 @@ def draw_chopper_select_overlay(
     hint: str = "Left/Right (or D-pad) to choose • Enter/A to start",
     show_restart: bool = False,
     restart_selected: bool = False,
+    show_restart_game: bool = False,
+    restart_game_selected: bool = False,
 ) -> None:
     """Draw a simple chopper selection overlay.
 
@@ -264,6 +298,100 @@ def draw_chopper_select_overlay(
 
         text = hint_font.render("Restart Mission", True, (240, 240, 240) if restart_selected else (200, 200, 200))
         screen.blit(text, (btn.centerx - text.get_width() // 2, btn.centery - text.get_height() // 2))
+
+    if show_restart_game:
+        btn_w = min(320, w - 80)
+        btn_h = 52
+        btn_x = w // 2 - btn_w // 2
+
+        base_y = box_top + box_h + 22
+        if show_restart:
+            base_y += btn_h + 12
+
+        btn_y = base_y
+        btn = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+        panel = pygame.Surface((btn.width, btn.height), pygame.SRCALPHA)
+        panel.fill((20, 20, 20, 200) if restart_game_selected else (10, 10, 10, 180))
+        screen.blit(panel, btn.topleft)
+        pygame.draw.rect(
+            screen,
+            (240, 240, 240) if restart_game_selected else (160, 160, 160),
+            btn,
+            4 if restart_game_selected else 2,
+        )
+
+        text = hint_font.render("Restart Game", True, (240, 240, 240) if restart_game_selected else (200, 200, 200))
+        screen.blit(text, (btn.centerx - text.get_width() // 2, btn.centery - text.get_height() // 2))
+
+
+def draw_mission_select_overlay(
+    screen: pygame.Surface,
+    choices: list[tuple[str, str]],
+    selected_index: int,
+    *,
+    title: str = "Select a Mission",
+    hint: str = "Left/Right (or D-pad) to choose • Enter/A to continue",
+) -> None:
+    """Draw a simple mission selection overlay.
+
+    choices: list of (mission_id, display_name)
+    """
+
+    global _TOAST_FONT
+    if _TOAST_FONT is None:
+        pygame.font.init()
+        _TOAST_FONT = pygame.font.SysFont("consolas", 26)
+    title_font = _TOAST_FONT
+
+    w = screen.get_width()
+    h = screen.get_height()
+
+    # Dim the game view.
+    dim = pygame.Surface((w, h), pygame.SRCALPHA)
+    dim.fill((0, 0, 0, 160))
+    screen.blit(dim, (0, 0))
+
+    title_surf = title_font.render(title, True, (240, 240, 240))
+    screen.blit(title_surf, (w // 2 - title_surf.get_width() // 2, 44))
+
+    hint_font = pygame.font.SysFont("consolas", 18)
+    hint_surf = hint_font.render(hint, True, (220, 220, 220))
+    screen.blit(hint_surf, (w // 2 - hint_surf.get_width() // 2, 80))
+
+    n = max(1, len(choices))
+    selected_index = max(0, min(int(selected_index), n - 1))
+
+    margin_x = 26
+    gap = 14
+    box_top = 150
+    box_h = min(190, h - box_top - 40)
+    available_w = w - margin_x * 2
+    box_w = int((available_w - gap * (n - 1)) / float(n))
+    box_w = max(160, box_w)
+
+    row_w = box_w * n + gap * (n - 1)
+    start_x = max(margin_x, (w - row_w) // 2)
+
+    for i, (_mission_id, name) in enumerate(choices):
+        x = start_x + i * (box_w + gap)
+        rect = pygame.Rect(x, box_top, box_w, box_h)
+
+        is_selected = i == selected_index
+        border = 4 if is_selected else 2
+        bg = (20, 20, 20, 200) if is_selected else (10, 10, 10, 180)
+
+        panel = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        panel.fill(bg)
+        screen.blit(panel, rect.topleft)
+
+        pygame.draw.rect(screen, (240, 240, 240) if is_selected else (160, 160, 160), rect, border)
+
+        # Name (centered).
+        label = title_font.render(name, True, (240, 240, 240) if is_selected else (200, 200, 200))
+        lx = rect.centerx - label.get_width() // 2
+        ly = rect.centery - label.get_height() // 2
+        screen.blit(label, (lx, ly))
 
 
 def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0, enable_particles: bool = True) -> None:

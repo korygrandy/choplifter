@@ -10,12 +10,23 @@ from .game_logging import create_session_logger
 from .helicopter import Facing, Helicopter, HelicopterInput, update_helicopter
 from .mission import (
     MissionState,
+    get_mission_config_by_id,
     hostage_crush_check_logged,
     boarded_count,
     spawn_projectile_from_helicopter_logged,
     update_mission,
 )
-from .rendering import draw_chopper_select_overlay, draw_ground, draw_helicopter, draw_hud, draw_mission, draw_sky, draw_toast
+from .rendering import (
+    bg_asset_exists,
+    draw_chopper_select_overlay,
+    draw_ground,
+    draw_helicopter,
+    draw_hud,
+    draw_mission,
+    draw_mission_select_overlay,
+    draw_sky,
+    draw_toast,
+)
 from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, PhysicsSettings, WindowSettings
 from .sky_smoke import SkySmokeSystem
 
@@ -128,6 +139,15 @@ def run() -> None:
 
     sky_smoke = SkySmokeSystem()
 
+    # Pre-game mission selection overlay.
+    mission_choices: list[tuple[str, str]] = [
+        ("city", "City Center Seige"),
+        ("airport", "Airport Special Ops"),
+        ("worship", "Worship Center Warfare"),
+    ]
+    selected_mission_index = 0
+    selected_mission_id = mission_choices[selected_mission_index][0]
+
     # Pre-game chopper selection overlay.
     chopper_choices: list[tuple[str, str]] = [
         ("chopper-one.png", "Classic"),
@@ -138,12 +158,12 @@ def run() -> None:
     ]
     selected_chopper_index = 0
     selected_chopper_asset = chopper_choices[selected_chopper_index][0]
-    mode: str = "select_chopper"  # select_chopper | playing | paused
+    mode: str = "select_mission"  # select_mission | select_chopper | playing | paused
     prev_menu_dir = 0
     prev_menu_vert = 0
-    pause_focus: str = "choppers"  # choppers | restart
+    pause_focus: str = "choppers"  # choppers | restart_mission | restart_game
 
-    mission = MissionState.create_default(heli_settings)
+    mission = MissionState.create_from_level_config(heli_settings, get_mission_config_by_id(selected_mission_id))
     helicopter = Helicopter.spawn(
         heli_settings,
         start_x=mission.base.pos.x + mission.base.width * 0.5,
@@ -158,13 +178,38 @@ def run() -> None:
     prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
     prev_tanks_destroyed = mission.stats.tanks_destroyed
 
+    def apply_mission_preview() -> None:
+        nonlocal helicopter, mission, accumulator
+        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed
+
+        mission = MissionState.create_from_level_config(heli_settings, get_mission_config_by_id(selected_mission_id))
+        helicopter = Helicopter.spawn(
+            heli_settings,
+            start_x=mission.base.pos.x + mission.base.width * 0.5,
+            skin_asset=selected_chopper_asset,
+        )
+        helicopter.facing = Facing.LEFT
+        accumulator = 0.0
+        sky_smoke.reset()
+        prev_crashes = mission.crashes
+        prev_lost_in_transit = mission.stats.lost_in_transit
+        prev_saved = mission.stats.saved
+        prev_boarded = boarded_count(mission)
+        prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
+        prev_tanks_destroyed = mission.stats.tanks_destroyed
+
+        bg = getattr(mission, "bg_asset", "")
+        if bg and not bg_asset_exists(bg):
+            set_toast(f"Missing background: {bg}")
+
     def reset_game() -> None:
         nonlocal helicopter, mission, accumulator
         nonlocal selected_chopper_asset
+        nonlocal selected_mission_id
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed
 
-        mission = MissionState.create_default(heli_settings)
+        mission = MissionState.create_from_level_config(heli_settings, get_mission_config_by_id(selected_mission_id))
         helicopter = Helicopter.spawn(
             heli_settings,
             start_x=mission.base.pos.x + mission.base.width * 0.5,
@@ -248,6 +293,18 @@ def run() -> None:
                         mode = "playing"
                         set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
                         reset_game()
+                elif mode == "select_mission":
+                    if event.key in (pygame.K_LEFT, pygame.K_a):
+                        selected_mission_index = (selected_mission_index - 1) % len(mission_choices)
+                        selected_mission_id = mission_choices[selected_mission_index][0]
+                        apply_mission_preview()
+                    elif event.key in (pygame.K_RIGHT, pygame.K_d):
+                        selected_mission_index = (selected_mission_index + 1) % len(mission_choices)
+                        selected_mission_id = mission_choices[selected_mission_index][0]
+                        apply_mission_preview()
+                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                        mode = "select_chopper"
+                        set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")
                 elif mode == "paused":
                     if event.key == pygame.K_F2:
                         toggle_particles()
@@ -256,9 +313,15 @@ def run() -> None:
                     elif event.key == pygame.K_F4:
                         toggle_screenshake()
                     if event.key in (pygame.K_UP, pygame.K_w):
-                        pause_focus = "choppers"
+                        if pause_focus == "restart_game":
+                            pause_focus = "restart_mission"
+                        elif pause_focus == "restart_mission":
+                            pause_focus = "choppers"
                     elif event.key in (pygame.K_DOWN, pygame.K_s):
-                        pause_focus = "restart"
+                        if pause_focus == "choppers":
+                            pause_focus = "restart_mission"
+                        elif pause_focus == "restart_mission":
+                            pause_focus = "restart_game"
                     elif event.key in (pygame.K_LEFT, pygame.K_a) and pause_focus == "choppers":
                         selected_chopper_index = (selected_chopper_index - 1) % len(chopper_choices)
                         selected_chopper_asset = chopper_choices[selected_chopper_index][0]
@@ -268,9 +331,15 @@ def run() -> None:
                         selected_chopper_asset = chopper_choices[selected_chopper_index][0]
                         helicopter.skin_asset = selected_chopper_asset
                     elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                        if pause_focus == "restart":
+                        if pause_focus == "restart_mission":
                             reset_game()
-                        mode = "playing"
+                            mode = "playing"
+                        elif pause_focus == "restart_game":
+                            mode = "select_mission"
+                            pause_focus = "choppers"
+                            set_toast("Restart Game")
+                        else:
+                            mode = "playing"
                 elif matches_key(event.key, controls.restart) and mission.ended:
                     reset_game()
                 elif matches_key(event.key, controls.toggle_debug):
@@ -358,6 +427,14 @@ def run() -> None:
                     mode = "playing"
                     set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
                     reset_game()
+            elif mode == "select_mission":
+                if menu_dir != 0 and menu_dir != prev_menu_dir:
+                    selected_mission_index = (selected_mission_index + menu_dir) % len(mission_choices)
+                    selected_mission_id = mission_choices[selected_mission_index][0]
+                    apply_mission_preview()
+                if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
+                    mode = "select_chopper"
+                    set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")
             elif mode == "paused":
                 # Start/B resumes.
                 if (start_down and not prev_btn_start_down) or (b_down and not prev_btn_b_down):
@@ -373,7 +450,16 @@ def run() -> None:
 
                 # Up/Down selects section.
                 if menu_vert != 0 and menu_vert != prev_menu_vert:
-                    pause_focus = "choppers" if menu_vert < 0 else "restart"
+                    if menu_vert < 0:
+                        if pause_focus == "restart_game":
+                            pause_focus = "restart_mission"
+                        elif pause_focus == "restart_mission":
+                            pause_focus = "choppers"
+                    else:
+                        if pause_focus == "choppers":
+                            pause_focus = "restart_mission"
+                        elif pause_focus == "restart_mission":
+                            pause_focus = "restart_game"
 
                 # Left/Right changes chopper when focused.
                 if pause_focus == "choppers" and menu_dir != 0 and menu_dir != prev_menu_dir:
@@ -383,9 +469,15 @@ def run() -> None:
 
                 # A activates current focus.
                 if a_down and not prev_btn_a_down:
-                    if pause_focus == "restart":
+                    if pause_focus == "restart_mission":
                         reset_game()
-                    mode = "playing"
+                        mode = "playing"
+                    elif pause_focus == "restart_game":
+                        mode = "select_mission"
+                        pause_focus = "choppers"
+                        set_toast("Restart Game")
+                    else:
+                        mode = "playing"
             else:
                 # Start toggles pause while playing.
                 if start_down and not prev_btn_start_down and not mission.ended:
@@ -495,7 +587,7 @@ def run() -> None:
 
         # Render.
         # Background above the horizon.
-        draw_sky(screen, heli_settings.ground_y)
+        draw_sky(screen, heli_settings.ground_y, bg_asset=getattr(mission, "bg_asset", "mission1-bg.jpg"))
         if particles_enabled:
             sky_smoke.draw(screen, horizon_y=int(heli_settings.ground_y))
         draw_ground(screen, heli_settings.ground_y)
@@ -503,6 +595,8 @@ def run() -> None:
         draw_helicopter(screen, helicopter, camera_x=camera_x)
         if mode == "playing":
             draw_hud(screen, mission, helicopter)
+        elif mode == "select_mission":
+            draw_mission_select_overlay(screen, mission_choices, selected_mission_index)
         elif mode == "select_chopper":
             draw_chopper_select_overlay(screen, chopper_choices, selected_chopper_index)
         else:
@@ -513,7 +607,9 @@ def run() -> None:
                 title="Paused",
                 hint="Up/Down choose section • Left/Right chopper • Start/B resume • A select • X particles • Y flashes • RB shake",
                 show_restart=True,
-                restart_selected=(pause_focus == "restart"),
+                restart_selected=(pause_focus == "restart_mission"),
+                show_restart_game=True,
+                restart_game_selected=(pause_focus == "restart_game"),
             )
         if toast_message:
             draw_toast(screen, toast_message)
