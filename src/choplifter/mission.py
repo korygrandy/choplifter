@@ -202,6 +202,12 @@ def update_mission(
         mission.end_text = "THE END"
         if logger is not None:
             logger.info("WIN: saved=%d (THE END)", mission.stats.saved)
+            logger.info(
+                "END_STATS: saved=%d boarded=%d kia_by_player=%d",
+                mission.stats.saved,
+                boarded_count(mission),
+                mission.stats.kia_by_player,
+            )
 
 
 def _update_projectiles(

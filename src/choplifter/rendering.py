@@ -54,7 +54,8 @@ def draw_mission(screen: pygame.Surface, mission: MissionState) -> None:
     _draw_projectiles(screen, mission)
 
     if mission.ended and mission.end_text:
-        _draw_end(screen, mission.end_text)
+        boarded = sum(1 for h in mission.hostages if h.state is HostageState.BOARDED)
+        _draw_end(screen, mission.end_text, mission.stats.saved, boarded, mission.stats.kia_by_player)
 
 
 def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopter) -> None:
@@ -132,7 +133,7 @@ def _draw_projectiles(screen: pygame.Surface, mission: MissionState) -> None:
             pygame.draw.circle(screen, (35, 35, 35), (int(p.pos.x), int(p.pos.y)), 4)
 
 
-def _draw_end(screen: pygame.Surface, text: str) -> None:
+def _draw_end(screen: pygame.Surface, text: str, saved: int, boarded: int, kia_player: int) -> None:
     panel = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
     panel.fill((0, 0, 0, 120))
     screen.blit(panel, (0, 0))
@@ -142,3 +143,16 @@ def _draw_end(screen: pygame.Surface, text: str) -> None:
     surf = font.render(text, True, (255, 255, 255))
     rect = surf.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2))
     screen.blit(surf, rect)
+
+    small = pygame.font.SysFont("consolas", 22)
+    lines = [
+        f"Saved: {saved}",
+        f"Boarded (not yet unloaded): {boarded}",
+        f"KIA (player): {kia_player}",
+    ]
+    y = rect.bottom + 18
+    for line in lines:
+        s = small.render(line, True, (235, 235, 235))
+        r = s.get_rect(center=(screen.get_width() // 2, y))
+        screen.blit(s, r)
+        y += 28
