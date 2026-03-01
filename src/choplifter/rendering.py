@@ -65,6 +65,7 @@ def draw_mission(screen: pygame.Surface, mission: MissionState) -> None:
             boarded,
             mission.stats.kia_by_player,
             mission.stats.kia_by_enemy,
+            mission.stats.enemies_destroyed,
             mission.crashes,
         )
 
@@ -209,6 +210,7 @@ def _draw_end(
     boarded: int,
     kia_player: int,
     kia_enemy: int,
+    enemies_destroyed: int,
     crashes: int,
 ) -> None:
     panel = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
@@ -227,7 +229,8 @@ def _draw_end(
         f"Saved: {saved}",
         f"Boarded (not yet unloaded): {boarded}",
         f"KIA (player): {kia_player}",
-        f"KIA (enemy): {kia_enemy}",
+        f"KIA (by enemy): {kia_enemy}",
+        f"Enemies destroyed: {enemies_destroyed}",
         f"Crashes: {crashes}",
     ]
     y = rect.bottom + 18

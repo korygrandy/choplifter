@@ -96,6 +96,7 @@ class MissionStats:
     kia_by_player: int = 0
     kia_by_enemy: int = 0
     lost_in_transit: int = 0
+    enemies_destroyed: int = 0
 
 
 @dataclass
@@ -115,6 +116,8 @@ class MissionState:
     _last_logged_boarded: int = 0
     _last_logged_saved: int = 0
     _last_logged_kia_player: int = 0
+    _last_logged_kia_enemy: int = 0
+    _last_logged_enemies_destroyed: int = 0
 
     @staticmethod
     def create_default(heli: HelicopterSettings) -> "MissionState":
@@ -298,6 +301,7 @@ def _update_projectiles(
                         e.health -= 40.0
                     if e.health <= 0.0:
                         e.alive = False
+                        mission.stats.enemies_destroyed += 1
                         if logger is not None:
                             logger.info("ENEMY_DOWN: %s", e.kind.name)
                     p.alive = False
@@ -391,6 +395,7 @@ def _bomb_explode(mission: MissionState, pos: Vec2, logger: logging.Logger | Non
             e.health -= 55.0
             if e.health <= 0.0:
                 e.alive = False
+                mission.stats.enemies_destroyed += 1
                 if logger is not None:
                     logger.info("ENEMY_DOWN: %s", e.kind.name)
 
@@ -530,6 +535,16 @@ def _log_progress_if_changed(mission: MissionState, logger: logging.Logger | Non
         delta = mission.stats.kia_by_player - mission._last_logged_kia_player
         mission._last_logged_kia_player = mission.stats.kia_by_player
         logger.info("COLLATERAL: +%d KIA_by_player (total=%d)", delta, mission.stats.kia_by_player)
+
+    if mission.stats.kia_by_enemy != mission._last_logged_kia_enemy:
+        delta = mission.stats.kia_by_enemy - mission._last_logged_kia_enemy
+        mission._last_logged_kia_enemy = mission.stats.kia_by_enemy
+        logger.info("ENEMY_FIRE: +%d KIA_by_enemy (total=%d)", delta, mission.stats.kia_by_enemy)
+
+    if mission.stats.enemies_destroyed != mission._last_logged_enemies_destroyed:
+        delta = mission.stats.enemies_destroyed - mission._last_logged_enemies_destroyed
+        mission._last_logged_enemies_destroyed = mission.stats.enemies_destroyed
+        logger.info("ENEMIES: +%d destroyed (total=%d)", delta, mission.stats.enemies_destroyed)
 
 
 def _log_compound_health_if_needed(c: Compound, logger: logging.Logger | None, reason: str) -> None:
@@ -765,10 +780,11 @@ def _end_mission(mission: MissionState, end_text: str, reason: str, logger: logg
     if logger is not None:
         logger.info("END: %s", reason)
         logger.info(
-            "END_STATS: saved=%d boarded=%d kia_by_player=%d kia_by_enemy=%d crashes=%d",
+            "END_STATS: saved=%d boarded=%d kia_by_player=%d kia_by_enemy=%d enemies_destroyed=%d crashes=%d",
             mission.stats.saved,
             boarded_count(mission),
             mission.stats.kia_by_player,
             mission.stats.kia_by_enemy,
+            mission.stats.enemies_destroyed,
             mission.crashes,
         )
