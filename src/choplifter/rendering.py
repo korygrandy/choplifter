@@ -408,6 +408,7 @@ def _draw_projectiles(screen: pygame.Surface, mission: MissionState, *, camera_x
 
 def _draw_enemies(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
     ground_y = mission.base.pos.y + mission.base.height
+    t = float(getattr(mission, "elapsed_seconds", 0.0))
 
     for e in mission.enemies:
         if e.kind is EnemyKind.TANK:
@@ -430,8 +431,44 @@ def _draw_enemies(screen: pygame.Surface, mission: MissionState, *, camera_x: fl
             )
 
         elif e.kind is EnemyKind.AIR_MINE:
-            pygame.draw.circle(screen, (200, 40, 40), (int(e.pos.x - camera_x), int(e.pos.y)), 9)
-            pygame.draw.circle(screen, (25, 25, 25), (int(e.pos.x - camera_x), int(e.pos.y)), 9, 2)
+            x = int(e.pos.x - camera_x)
+            y = int(e.pos.y)
+            _draw_air_mine(screen, x, y, t)
+
+
+def _draw_air_mine(screen: pygame.Surface, x: int, y: int, t: float) -> None:
+    # Telegraph ring: pulsing outline.
+    pulse = 0.5 + 0.5 * math.sin(t * 6.0)
+    ring_radius = int(16 + pulse * 7)
+    ring_alpha = int(70 + pulse * 120)
+    ring_size = ring_radius * 2 + 8
+
+    ring = pygame.Surface((ring_size, ring_size), pygame.SRCALPHA)
+    cx = ring_size // 2
+    cy = ring_size // 2
+    pygame.draw.circle(ring, (240, 240, 240, ring_alpha), (cx, cy), ring_radius, 2)
+    screen.blit(ring, (x - cx, y - cy))
+
+    # "Sputnik" core: red orb with spikes.
+    core_r = 9
+    pygame.draw.circle(screen, (200, 40, 40), (x, y), core_r)
+    pygame.draw.circle(screen, (25, 25, 25), (x, y), core_r, 2)
+
+    spikes = 8
+    spin = t * 1.4
+    for i in range(spikes):
+        a = (i / float(spikes)) * (math.tau) + spin
+        sx = int(x + math.cos(a) * (core_r + 1))
+        sy = int(y + math.sin(a) * (core_r + 1))
+        ex = int(x + math.cos(a) * (core_r + 8))
+        ey = int(y + math.sin(a) * (core_r + 8))
+        pygame.draw.line(screen, (25, 25, 25), (sx, sy), (ex, ey), 2)
+
+    # Blinking inner dot.
+    if int(t * 5.0) % 2 == 0:
+        pygame.draw.circle(screen, (240, 240, 240), (x, y), 2)
+    else:
+        pygame.draw.circle(screen, (35, 35, 35), (x, y), 2)
 
 
 def _draw_burning_particles(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
