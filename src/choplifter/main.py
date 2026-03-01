@@ -160,7 +160,7 @@ def run() -> None:
     mode: str = "select_mission"  # select_mission | select_chopper | playing | paused
     prev_menu_dir = 0
     prev_menu_vert = 0
-    pause_focus: str = "choppers"  # choppers | restart
+    pause_focus: str = "choppers"  # choppers | restart_mission | restart_game
 
     mission = MissionState.create_from_level_config(heli_settings, get_mission_config_by_id(selected_mission_id))
     helicopter = Helicopter.spawn(
@@ -286,9 +286,15 @@ def run() -> None:
                     elif event.key == pygame.K_F4:
                         toggle_screenshake()
                     if event.key in (pygame.K_UP, pygame.K_w):
-                        pause_focus = "choppers"
+                        if pause_focus == "restart_game":
+                            pause_focus = "restart_mission"
+                        elif pause_focus == "restart_mission":
+                            pause_focus = "choppers"
                     elif event.key in (pygame.K_DOWN, pygame.K_s):
-                        pause_focus = "restart"
+                        if pause_focus == "choppers":
+                            pause_focus = "restart_mission"
+                        elif pause_focus == "restart_mission":
+                            pause_focus = "restart_game"
                     elif event.key in (pygame.K_LEFT, pygame.K_a) and pause_focus == "choppers":
                         selected_chopper_index = (selected_chopper_index - 1) % len(chopper_choices)
                         selected_chopper_asset = chopper_choices[selected_chopper_index][0]
@@ -298,9 +304,15 @@ def run() -> None:
                         selected_chopper_asset = chopper_choices[selected_chopper_index][0]
                         helicopter.skin_asset = selected_chopper_asset
                     elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                        if pause_focus == "restart":
+                        if pause_focus == "restart_mission":
                             reset_game()
-                        mode = "playing"
+                            mode = "playing"
+                        elif pause_focus == "restart_game":
+                            mode = "select_mission"
+                            pause_focus = "choppers"
+                            set_toast("Restart Game")
+                        else:
+                            mode = "playing"
                 elif matches_key(event.key, controls.restart) and mission.ended:
                     reset_game()
                 elif matches_key(event.key, controls.toggle_debug):
@@ -410,7 +422,16 @@ def run() -> None:
 
                 # Up/Down selects section.
                 if menu_vert != 0 and menu_vert != prev_menu_vert:
-                    pause_focus = "choppers" if menu_vert < 0 else "restart"
+                    if menu_vert < 0:
+                        if pause_focus == "restart_game":
+                            pause_focus = "restart_mission"
+                        elif pause_focus == "restart_mission":
+                            pause_focus = "choppers"
+                    else:
+                        if pause_focus == "choppers":
+                            pause_focus = "restart_mission"
+                        elif pause_focus == "restart_mission":
+                            pause_focus = "restart_game"
 
                 # Left/Right changes chopper when focused.
                 if pause_focus == "choppers" and menu_dir != 0 and menu_dir != prev_menu_dir:
@@ -420,9 +441,15 @@ def run() -> None:
 
                 # A activates current focus.
                 if a_down and not prev_btn_a_down:
-                    if pause_focus == "restart":
+                    if pause_focus == "restart_mission":
                         reset_game()
-                    mode = "playing"
+                        mode = "playing"
+                    elif pause_focus == "restart_game":
+                        mode = "select_mission"
+                        pause_focus = "choppers"
+                        set_toast("Restart Game")
+                    else:
+                        mode = "playing"
             else:
                 # Start toggles pause while playing.
                 if start_down and not prev_btn_start_down and not mission.ended:
@@ -552,7 +579,9 @@ def run() -> None:
                 title="Paused",
                 hint="Up/Down choose section • Left/Right chopper • Start/B resume • A select • X particles • Y flashes • RB shake",
                 show_restart=True,
-                restart_selected=(pause_focus == "restart"),
+                restart_selected=(pause_focus == "restart_mission"),
+                show_restart_game=True,
+                restart_game_selected=(pause_focus == "restart_game"),
             )
         if toast_message:
             draw_toast(screen, toast_message)

@@ -180,6 +180,8 @@ def draw_chopper_select_overlay(
     hint: str = "Left/Right (or D-pad) to choose • Enter/A to start",
     show_restart: bool = False,
     restart_selected: bool = False,
+    show_restart_game: bool = False,
+    restart_game_selected: bool = False,
 ) -> None:
     """Draw a simple chopper selection overlay.
 
@@ -263,6 +265,31 @@ def draw_chopper_select_overlay(
         pygame.draw.rect(screen, (240, 240, 240) if restart_selected else (160, 160, 160), btn, 4 if restart_selected else 2)
 
         text = hint_font.render("Restart Mission", True, (240, 240, 240) if restart_selected else (200, 200, 200))
+        screen.blit(text, (btn.centerx - text.get_width() // 2, btn.centery - text.get_height() // 2))
+
+    if show_restart_game:
+        btn_w = min(320, w - 80)
+        btn_h = 52
+        btn_x = w // 2 - btn_w // 2
+
+        base_y = box_top + box_h + 22
+        if show_restart:
+            base_y += btn_h + 12
+
+        btn_y = base_y
+        btn = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+        panel = pygame.Surface((btn.width, btn.height), pygame.SRCALPHA)
+        panel.fill((20, 20, 20, 200) if restart_game_selected else (10, 10, 10, 180))
+        screen.blit(panel, btn.topleft)
+        pygame.draw.rect(
+            screen,
+            (240, 240, 240) if restart_game_selected else (160, 160, 160),
+            btn,
+            4 if restart_game_selected else 2,
+        )
+
+        text = hint_font.render("Restart Game", True, (240, 240, 240) if restart_game_selected else (200, 200, 200))
         screen.blit(text, (btn.centerx - text.get_width() // 2, btn.centery - text.get_height() // 2))
 
 
