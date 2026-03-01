@@ -13,7 +13,7 @@ from .mission import (
     spawn_projectile_from_helicopter_logged,
     update_mission,
 )
-from .rendering import draw_ground, draw_helicopter, draw_hud, draw_mission, draw_toast
+from .rendering import draw_ground, draw_helicopter, draw_hud, draw_mission, draw_sky, draw_toast
 from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, PhysicsSettings, WindowSettings
 
 
@@ -303,7 +303,8 @@ def run() -> None:
                 toast_message = ""
 
         # Render.
-        screen.fill((135, 190, 235))
+        # Background above the horizon.
+        draw_sky(screen, heli_settings.ground_y)
         draw_ground(screen, heli_settings.ground_y)
         draw_mission(screen, mission)
         draw_helicopter(screen, helicopter)

@@ -19,6 +19,7 @@ class DebugOverlay:
 
         lines = [
             f"FPS: {fps:0.1f}",
+            f"t: {mission.elapsed_seconds:0.1f}s",
             f"pos: ({helicopter.pos.x:0.1f}, {helicopter.pos.y:0.1f})",
             f"vel: ({helicopter.vel.x:0.2f}, {helicopter.vel.y:0.2f})",
             f"tilt: {helicopter.tilt_deg:0.1f} deg",

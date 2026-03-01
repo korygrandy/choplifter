@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 import logging
 import math
@@ -94,21 +94,37 @@ class MissionTuning:
     tank_fire_min_cooldown_s: float = 0.9
     tank_fire_max_cooldown_s: float = 1.5
 
+    tank_health: float = 110.0
+    tank_initial_cooldown_s: float = 1.5
+    tank_ground_offset_y: float = 8.0
+    tank_fire_range_x: float = 360.0
+    tank_fire_min_altitude_clearance_y: float = 40.0
+
     jet_fire_base_cooldown_s: float = 0.35
     jet_fire_min_cooldown_s: float = 0.25
     jet_fire_max_cooldown_s: float = 0.45
 
+    jet_health: float = 30.0
+    jet_ttl_s: float = 6.0
+    jet_spawn_y: float = 150.0
+    jet_speed_x: float = 280.0
+    jet_spawn_margin_x: float = 80.0
+    jet_fire_range_x: float = 240.0
+    jet_collision_radius: float = 30.0
     jet_touch_damage: float = 18.0
 
     mine_base_speed: float = 110.0
     mine_min_speed: float = 90.0
     mine_max_speed: float = 130.0
+    mine_steer: float = 3.5
     mine_damage: float = 26.0
 
 
 @dataclass(frozen=True)
 class LevelConfig:
     compound_xs: tuple[float, ...]
+    compound_width: float
+    compound_height: float
     compound_health: float
     hostages_per_compound: int
     base_width: float
@@ -150,7 +166,8 @@ class MissionState:
     projectiles: list[Projectile]
     enemies: list[Enemy]
     base: BaseZone
-    stats: MissionStats
+    world_width: float = 1280.0
+    stats: MissionStats = field(default_factory=MissionStats)
     sentiment: float = 50.0
     tuning: MissionTuning = MissionTuning()
     elapsed_seconds: float = 0.0
@@ -181,8 +198,8 @@ class MissionState:
     def create_from_level_config(heli: HelicopterSettings, level: LevelConfig, world_width: float = 1280.0) -> "MissionState":
         compounds: list[Compound] = []
         hostage_index = 0
-        compound_w = 80.0
-        compound_h = 60.0
+        compound_w = level.compound_width
+        compound_h = level.compound_height
         compound_y = heli.ground_y - compound_h
 
         for x in level.compound_xs:
@@ -216,10 +233,10 @@ class MissionState:
             enemies.append(
                 Enemy(
                     kind=EnemyKind.TANK,
-                    pos=Vec2(c.pos.x + c.width * 0.5, heli.ground_y - 8.0),
+                    pos=Vec2(c.pos.x + c.width * 0.5, heli.ground_y - level.tuning.tank_ground_offset_y),
                     vel=Vec2(0.0, 0.0),
-                    health=110.0,
-                    cooldown=1.5,
+                    health=level.tuning.tank_health,
+                    cooldown=level.tuning.tank_initial_cooldown_s,
                 )
             )
 
@@ -245,6 +262,7 @@ class MissionState:
             projectiles=[],
             enemies=enemies,
             base=base,
+            world_width=world_width,
             stats=MissionStats(),
             tuning=level.tuning,
         )
@@ -258,6 +276,8 @@ class MissionState:
 def create_level_1_config() -> LevelConfig:
     return LevelConfig(
         compound_xs=(140.0, 360.0, 580.0, 800.0),
+        compound_width=80.0,
+        compound_height=60.0,
         compound_health=120.0,
         hostages_per_compound=16,
         base_width=170.0,
@@ -765,15 +785,22 @@ def _update_enemies(
         # Slight scaling based on sentiment.
         interval = (tuning.jet_spawn_base_interval_s / pressure) * (1.0 - 0.22 * difficulty)
         mission.jet_spawn_seconds = clamp(interval, tuning.jet_spawn_min_interval_s, tuning.jet_spawn_max_interval_s)
-        y = 150.0
-        if helicopter.pos.x > 640.0:
-            x = -80.0
-            vx = 280.0
+        y = tuning.jet_spawn_y
+        if helicopter.pos.x > mission.world_width * 0.5:
+            x = -tuning.jet_spawn_margin_x
+            vx = tuning.jet_speed_x
         else:
-            x = 1280.0 + 80.0
-            vx = -280.0
+            x = mission.world_width + tuning.jet_spawn_margin_x
+            vx = -tuning.jet_speed_x
         mission.enemies.append(
-            Enemy(kind=EnemyKind.JET, pos=Vec2(x, y), vel=Vec2(vx, 0.0), health=30.0, cooldown=0.6, ttl=6.0)
+            Enemy(
+                kind=EnemyKind.JET,
+                pos=Vec2(x, y),
+                vel=Vec2(vx, 0.0),
+                health=tuning.jet_health,
+                cooldown=0.6,
+                ttl=tuning.jet_ttl_s,
+            )
         )
         if logger is not None:
             logger.info("JET: spawned")
@@ -791,7 +818,11 @@ def _update_enemies(
 
         if e.kind is EnemyKind.TANK:
             dx = helicopter.pos.x - e.pos.x
-            if abs(dx) <= 360.0 and helicopter.pos.y <= heli.ground_y - 40.0 and e.cooldown <= 0.0:
+            if (
+                abs(dx) <= tuning.tank_fire_range_x
+                and helicopter.pos.y <= heli.ground_y - tuning.tank_fire_min_altitude_clearance_y
+                and e.cooldown <= 0.0
+            ):
                 tank_cd = (tuning.tank_fire_base_cooldown_s / pressure) * (1.0 - 0.12 * difficulty)
                 e.cooldown = clamp(tank_cd, tuning.tank_fire_min_cooldown_s, tuning.tank_fire_max_cooldown_s)
                 _spawn_enemy_bullet_toward(mission, e.pos, helicopter.pos)
@@ -802,12 +833,12 @@ def _update_enemies(
             e.pos.x += e.vel.x * dt
             e.pos.y += e.vel.y * dt
 
-            if abs(helicopter.pos.x - e.pos.x) <= 240.0 and e.cooldown <= 0.0:
+            if abs(helicopter.pos.x - e.pos.x) <= tuning.jet_fire_range_x and e.cooldown <= 0.0:
                 jet_cd = (tuning.jet_fire_base_cooldown_s / pressure) * (1.0 - 0.10 * difficulty)
                 e.cooldown = clamp(jet_cd, tuning.jet_fire_min_cooldown_s, tuning.jet_fire_max_cooldown_s)
                 _spawn_enemy_bullet_toward(mission, e.pos, helicopter.pos)
 
-            if _hits_circle(e.pos, helicopter.pos, radius=30.0):
+            if _hits_circle(e.pos, helicopter.pos, radius=tuning.jet_collision_radius):
                 _damage_helicopter(mission, helicopter, tuning.jet_touch_damage, logger, source="JET")
 
         elif e.kind is EnemyKind.AIR_MINE:
@@ -826,7 +857,7 @@ def _update_enemies(
             )
             desired_vx = nx * desired_speed
             desired_vy = ny * desired_speed
-            steer = 3.5
+            steer = tuning.mine_steer
             e.vel.x += (desired_vx - e.vel.x) * steer * dt
             e.vel.y += (desired_vy - e.vel.y) * steer * dt
 
