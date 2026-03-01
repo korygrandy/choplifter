@@ -114,13 +114,19 @@ def run() -> None:
     helicopter = Helicopter.spawn(heli_settings)
     mission = MissionState.create_default(heli_settings)
 
+    prev_crashes = mission.crashes
+    prev_lost_in_transit = mission.stats.lost_in_transit
+
     def reset_game() -> None:
         nonlocal helicopter, mission, accumulator
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
+        nonlocal prev_crashes, prev_lost_in_transit
 
         helicopter = Helicopter.spawn(heli_settings)
         mission = MissionState.create_default(heli_settings)
         accumulator = 0.0
+        prev_crashes = mission.crashes
+        prev_lost_in_transit = mission.stats.lost_in_transit
         prev_btn_a_down = False
         prev_btn_b_down = False
         prev_btn_x_down = False
@@ -251,6 +257,19 @@ def run() -> None:
             if not was_grounded and helicopter.grounded:
                 hostage_crush_check_logged(mission, helicopter, helicopter.last_landing_vy, logger)
             update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
+
+            if mission.crashes != prev_crashes:
+                if mission.ended:
+                    set_toast(f"THE END: {mission.end_reason} (Enter/Start)")
+                else:
+                    set_toast(f"CRASH {mission.crashes}/3 — respawn (invuln {mission.invuln_seconds:0.1f}s)")
+                prev_crashes = mission.crashes
+
+            lost_delta = mission.stats.lost_in_transit - prev_lost_in_transit
+            if lost_delta > 0:
+                set_toast(f"Passengers lost in crash: +{lost_delta}")
+                prev_lost_in_transit = mission.stats.lost_in_transit
+
             accumulator -= tick.dt
 
         if toast_seconds > 0.0:

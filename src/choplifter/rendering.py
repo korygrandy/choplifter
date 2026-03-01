@@ -68,6 +68,7 @@ def draw_mission(screen: pygame.Surface, mission: MissionState) -> None:
             mission.stats.lost_in_transit,
             mission.stats.enemies_destroyed,
             mission.crashes,
+            mission.sentiment,
         )
 
 
@@ -84,11 +85,14 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
 
     # Minimal always-on guidance so the rescue loop is discoverable.
     lines = [
-        f"Fuel {int(helicopter.fuel):3d}   Damage {int(helicopter.damage):3d}   Crashes {mission.crashes}/3",
+        f"Fuel {int(helicopter.fuel):3d}   Damage {int(helicopter.damage):3d}   Crashes {mission.crashes}/3   Sentiment {int(mission.sentiment):3d}",
         f"Objective: save 20 (saved {saved}/20)",
         f"Rescue: shoot compound (Space) → land near hostages → press E to open doors → load {boarded}/16",
         "Unload: land in base zone (flag) → press E to open doors",
     ]
+
+    if mission.invuln_seconds > 0.0:
+        lines.append(f"INVULN: {mission.invuln_seconds:0.1f}s")
 
     x = 12
     y = screen.get_height() - 12 - len(lines) * 20
@@ -214,6 +218,7 @@ def _draw_end(
     lost_in_transit: int,
     enemies_destroyed: int,
     crashes: int,
+    sentiment: float,
 ) -> None:
     panel = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
     panel.fill((0, 0, 0, 120))
@@ -235,6 +240,7 @@ def _draw_end(
         f"Lost in transit: {lost_in_transit}",
         f"Enemies destroyed: {enemies_destroyed}",
         f"Crashes: {crashes}",
+        f"Sentiment: {int(sentiment)}",
         "Press Enter (or Start) to restart",
     ]
     y = rect.bottom + 18

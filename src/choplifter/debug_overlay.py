@@ -27,9 +27,13 @@ class DebugOverlay:
             f"doors: {'OPEN' if helicopter.doors_open else 'closed'}",
             f"damage: {helicopter.damage:0.1f}",
             f"fuel: {helicopter.fuel:0.1f}",
+            f"invuln: {mission.invuln_seconds:0.1f}s",
             f"boarded: {boarded}/16",
             f"saved: {mission.stats.saved}",
             f"KIA(player): {mission.stats.kia_by_player}",
+            f"KIA(enemy): {mission.stats.kia_by_enemy}",
+            f"lost_in_transit: {mission.stats.lost_in_transit}",
+            f"sentiment: {mission.sentiment:0.1f}",
             f"compounds: {compound_states}",
         ]
 

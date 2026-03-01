@@ -107,17 +107,23 @@ class MissionState:
     enemies: list[Enemy]
     base: BaseZone
     stats: MissionStats
+    sentiment: float = 50.0
     ended: bool = False
     end_text: str = ""
     end_reason: str = ""
     crashes: int = 0
     invuln_seconds: float = 0.0
     jet_spawn_seconds: float = 4.0
+    _sentiment_last_saved: int = 0
+    _sentiment_last_kia_player: int = 0
+    _sentiment_last_kia_enemy: int = 0
+    _sentiment_last_lost_in_transit: int = 0
     _last_logged_boarded: int = 0
     _last_logged_saved: int = 0
     _last_logged_kia_player: int = 0
     _last_logged_kia_enemy: int = 0
     _last_logged_enemies_destroyed: int = 0
+    _last_logged_sentiment_bucket: int = -1
 
     @staticmethod
     def create_default(heli: HelicopterSettings) -> "MissionState":
@@ -258,6 +264,8 @@ def update_mission(
     _handle_crash_and_respawn(mission, helicopter, heli, logger)
     if mission.ended:
         return
+
+    _update_sentiment(mission)
 
     _log_progress_if_changed(mission, logger)
 
@@ -546,6 +554,46 @@ def _log_progress_if_changed(mission: MissionState, logger: logging.Logger | Non
         mission._last_logged_enemies_destroyed = mission.stats.enemies_destroyed
         logger.info("ENEMIES: +%d destroyed (total=%d)", delta, mission.stats.enemies_destroyed)
 
+    # Log sentiment as it crosses buckets (keeps logs readable).
+    bucket = int(clamp(mission.sentiment, 0.0, 100.0) // 10)
+    if bucket != mission._last_logged_sentiment_bucket:
+        mission._last_logged_sentiment_bucket = bucket
+        logger.info("SENTIMENT: %.0f", clamp(mission.sentiment, 0.0, 100.0))
+
+
+def _difficulty_scale(sentiment: float) -> float:
+    # Map sentiment 0..100 to a difficulty scalar -1..+1.
+    # Low sentiment => more pressure; high sentiment => slightly less.
+    return clamp((50.0 - clamp(sentiment, 0.0, 100.0)) / 50.0, -1.0, 1.0)
+
+
+def _update_sentiment(mission: MissionState) -> None:
+    # Minimal MVP interpretation:
+    # - Rescues increase sentiment
+    # - Any hostage deaths decrease sentiment (player-caused more severe)
+    # - Lost-in-transit decreases sentiment
+    saved = mission.stats.saved
+    kia_player = mission.stats.kia_by_player
+    kia_enemy = mission.stats.kia_by_enemy
+    lost = mission.stats.lost_in_transit
+
+    dsaved = saved - mission._sentiment_last_saved
+    dkia_player = kia_player - mission._sentiment_last_kia_player
+    dkia_enemy = kia_enemy - mission._sentiment_last_kia_enemy
+    dlost = lost - mission._sentiment_last_lost_in_transit
+
+    if dsaved or dkia_player or dkia_enemy or dlost:
+        mission.sentiment += dsaved * 2.5
+        mission.sentiment -= dkia_player * 4.0
+        mission.sentiment -= dkia_enemy * 2.5
+        mission.sentiment -= dlost * 3.5
+        mission.sentiment = clamp(mission.sentiment, 0.0, 100.0)
+
+    mission._sentiment_last_saved = saved
+    mission._sentiment_last_kia_player = kia_player
+    mission._sentiment_last_kia_enemy = kia_enemy
+    mission._sentiment_last_lost_in_transit = lost
+
 
 def _log_compound_health_if_needed(c: Compound, logger: logging.Logger | None, reason: str) -> None:
     if logger is None:
@@ -567,14 +615,23 @@ def _update_fuel(mission: MissionState, helicopter: Helicopter, dt: float, logge
         return
 
     # Minimal MVP-lite: fuel drains over time, refuels at base.
-    drain_per_s = 1.0
-    refuel_per_s = 18.0
+    # Tune: make hovering/landing feel less punishing, but fast flight costs.
+    drain_base_per_s = 0.55
+    drain_airborne_per_s = 0.30
+    drain_speed_per_s = 0.35
+    refuel_per_s = 16.0
 
     at_base = mission.base.contains_point(helicopter.pos) and helicopter.grounded
     if at_base:
         helicopter.fuel = min(100.0, helicopter.fuel + refuel_per_s * dt)
     else:
-        helicopter.fuel = max(0.0, helicopter.fuel - drain_per_s * dt)
+        speed = abs(helicopter.vel.x) + abs(helicopter.vel.y)
+        speed_factor = clamp(speed / 50.0, 0.0, 1.0)
+        drain = drain_base_per_s
+        if not helicopter.grounded:
+            drain += drain_airborne_per_s
+            drain += drain_speed_per_s * speed_factor
+        helicopter.fuel = max(0.0, helicopter.fuel - drain * dt)
 
     if logger is not None:
         fuel_int = int(helicopter.fuel)
@@ -589,10 +646,14 @@ def _update_enemies(
     heli: HelicopterSettings,
     logger: logging.Logger | None,
 ) -> None:
+    difficulty = _difficulty_scale(mission.sentiment)
+
     # Periodic jet spawns.
     mission.jet_spawn_seconds -= dt
     if mission.jet_spawn_seconds <= 0.0:
-        mission.jet_spawn_seconds = 6.5
+        # Slight scaling based on sentiment.
+        interval = 7.0 * (1.0 - 0.22 * difficulty)
+        mission.jet_spawn_seconds = clamp(interval, 5.2, 9.0)
         y = 150.0
         if helicopter.pos.x > 640.0:
             x = -80.0
@@ -620,7 +681,8 @@ def _update_enemies(
         if e.kind is EnemyKind.TANK:
             dx = helicopter.pos.x - e.pos.x
             if abs(dx) <= 360.0 and helicopter.pos.y <= heli.ground_y - 40.0 and e.cooldown <= 0.0:
-                e.cooldown = 1.25
+                tank_cd = 1.20 * (1.0 - 0.12 * difficulty)
+                e.cooldown = clamp(tank_cd, 0.9, 1.5)
                 _spawn_enemy_bullet_toward(mission, e.pos, helicopter.pos)
                 if logger is not None:
                     logger.info("TANK_FIRE")
@@ -630,11 +692,12 @@ def _update_enemies(
             e.pos.y += e.vel.y * dt
 
             if abs(helicopter.pos.x - e.pos.x) <= 240.0 and e.cooldown <= 0.0:
-                e.cooldown = 0.35
+                jet_cd = 0.35 * (1.0 - 0.10 * difficulty)
+                e.cooldown = clamp(jet_cd, 0.25, 0.45)
                 _spawn_enemy_bullet_toward(mission, e.pos, helicopter.pos)
 
             if _hits_circle(e.pos, helicopter.pos, radius=30.0):
-                _damage_helicopter(mission, helicopter, 22.0, logger, source="JET")
+                _damage_helicopter(mission, helicopter, 18.0, logger, source="JET")
 
         elif e.kind is EnemyKind.AIR_MINE:
             to_heli = Vec2(helicopter.pos.x - e.pos.x, helicopter.pos.y - e.pos.y)
@@ -645,7 +708,7 @@ def _update_enemies(
             else:
                 nx, ny = 0.0, 0.0
 
-            desired_speed = 120.0
+            desired_speed = clamp(110.0 * (1.0 + 0.15 * difficulty), 90.0, 130.0)
             desired_vx = nx * desired_speed
             desired_vy = ny * desired_speed
             steer = 3.5
@@ -671,7 +734,7 @@ def _mine_explode(
     if logger is not None:
         logger.info("MINE: detonate")
 
-    _damage_helicopter(mission, helicopter, 28.0, logger, source="AIR_MINE")
+    _damage_helicopter(mission, helicopter, 26.0, logger, source="AIR_MINE")
 
     radius = 40.0
     r2 = radius * radius
