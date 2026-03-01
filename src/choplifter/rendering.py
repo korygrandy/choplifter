@@ -11,9 +11,9 @@ from .mission import EnemyKind, HostageState, MissionState, ProjectileKind
 _HUD_FONT: pygame.font.Font | None = None
 _TOAST_FONT: pygame.font.Font | None = None
 
-_MISSION1_BG_ORIG: pygame.Surface | None = None
-_MISSION1_BG_LOAD_FAILED: bool = False
-_MISSION1_BG_SCALED: dict[tuple[int, int], pygame.Surface] = {}
+_BG_ORIG: dict[str, pygame.Surface] = {}
+_BG_LOAD_FAILED: set[str] = set()
+_BG_SCALED: dict[tuple[str, int, int], pygame.Surface] = {}
 
 _CHOPPER_ORIG: dict[str, pygame.Surface] = {}
 _CHOPPER_LOAD_FAILED: set[str] = set()
@@ -22,7 +22,7 @@ _CHOPPER_SCALED: dict[tuple[str, int], pygame.Surface] = {}
 _BURN_SPRITE_CACHE: dict[tuple[str, int], pygame.Surface] = {}
 
 
-def draw_sky(screen: pygame.Surface, horizon_y: float) -> None:
+def draw_sky(screen: pygame.Surface, horizon_y: float, *, bg_asset: str = "mission1-bg.jpg") -> None:
     """Draws the mission sky background above the horizon line.
 
     Falls back to a solid sky color if the background image is missing/unloadable.
@@ -34,7 +34,7 @@ def draw_sky(screen: pygame.Surface, horizon_y: float) -> None:
     if horizon_h <= 0:
         return
 
-    bg = _get_mission1_bg_scaled(width, horizon_h)
+    bg = _get_bg_scaled(bg_asset, width, horizon_h)
     if bg is None:
         screen.fill((135, 190, 235), pygame.Rect(0, 0, width, horizon_h))
         return
@@ -42,33 +42,50 @@ def draw_sky(screen: pygame.Surface, horizon_y: float) -> None:
     screen.blit(bg, (0, 0))
 
 
-def _get_mission1_bg_scaled(width: int, height: int) -> pygame.Surface | None:
-    global _MISSION1_BG_ORIG, _MISSION1_BG_LOAD_FAILED
+def _resolve_bg_path(asset_filename: str) -> Path:
+    module_dir = Path(__file__).resolve().parent
+    repo_root = module_dir.parents[1]
 
-    if _MISSION1_BG_LOAD_FAILED:
+    # Be forgiving about a common typo for worship-center.
+    alternates: tuple[str, ...] = (asset_filename,)
+    if asset_filename == "worship-center-warfare.jpg":
+        alternates = (asset_filename, "woship-center-warfare.jpg")
+
+    for name in alternates:
+        candidate_paths = (
+            module_dir / "assets" / name,
+            repo_root / "asset" / name,
+        )
+        path = next((p for p in candidate_paths if p.exists()), None)
+        if path is not None:
+            return path
+
+    # Default location (even if missing).
+    return module_dir / "assets" / alternates[0]
+
+
+def _get_bg_scaled(asset_filename: str, width: int, height: int) -> pygame.Surface | None:
+    asset_filename = asset_filename or "mission1-bg.jpg"
+    if asset_filename in _BG_LOAD_FAILED:
         return None
 
-    if _MISSION1_BG_ORIG is None:
-        module_dir = Path(__file__).resolve().parent
-        repo_root = module_dir.parents[1]
-        candidate_paths = (
-            module_dir / "assets" / "mission1-bg.jpg",
-            repo_root / "asset" / "mission1-bg.jpg",
-        )
-        path = next((p for p in candidate_paths if p.exists()), candidate_paths[0])
+    orig = _BG_ORIG.get(asset_filename)
+    if orig is None:
+        path = _resolve_bg_path(asset_filename)
         try:
-            _MISSION1_BG_ORIG = pygame.image.load(str(path)).convert()
+            orig = pygame.image.load(str(path)).convert()
         except Exception:
-            _MISSION1_BG_LOAD_FAILED = True
+            _BG_LOAD_FAILED.add(asset_filename)
             return None
+        _BG_ORIG[asset_filename] = orig
 
-    key = (width, height)
-    cached = _MISSION1_BG_SCALED.get(key)
+    key = (asset_filename, width, height)
+    cached = _BG_SCALED.get(key)
     if cached is not None:
         return cached
 
-    scaled = pygame.transform.smoothscale(_MISSION1_BG_ORIG, (width, height))
-    _MISSION1_BG_SCALED[key] = scaled
+    scaled = pygame.transform.smoothscale(orig, (width, height))
+    _BG_SCALED[key] = scaled
     return scaled
 
 

@@ -177,6 +177,26 @@ def run() -> None:
     prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
     prev_tanks_destroyed = mission.stats.tanks_destroyed
 
+    def apply_mission_preview() -> None:
+        nonlocal helicopter, mission, accumulator
+        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed
+
+        mission = MissionState.create_from_level_config(heli_settings, get_mission_config_by_id(selected_mission_id))
+        helicopter = Helicopter.spawn(
+            heli_settings,
+            start_x=mission.base.pos.x + mission.base.width * 0.5,
+            skin_asset=selected_chopper_asset,
+        )
+        helicopter.facing = Facing.LEFT
+        accumulator = 0.0
+        sky_smoke.reset()
+        prev_crashes = mission.crashes
+        prev_lost_in_transit = mission.stats.lost_in_transit
+        prev_saved = mission.stats.saved
+        prev_boarded = boarded_count(mission)
+        prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
+        prev_tanks_destroyed = mission.stats.tanks_destroyed
+
     def reset_game() -> None:
         nonlocal helicopter, mission, accumulator
         nonlocal selected_chopper_asset
@@ -272,9 +292,11 @@ def run() -> None:
                     if event.key in (pygame.K_LEFT, pygame.K_a):
                         selected_mission_index = (selected_mission_index - 1) % len(mission_choices)
                         selected_mission_id = mission_choices[selected_mission_index][0]
+                        apply_mission_preview()
                     elif event.key in (pygame.K_RIGHT, pygame.K_d):
                         selected_mission_index = (selected_mission_index + 1) % len(mission_choices)
                         selected_mission_id = mission_choices[selected_mission_index][0]
+                        apply_mission_preview()
                     elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
                         mode = "select_chopper"
                         set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")
@@ -404,6 +426,7 @@ def run() -> None:
                 if menu_dir != 0 and menu_dir != prev_menu_dir:
                     selected_mission_index = (selected_mission_index + menu_dir) % len(mission_choices)
                     selected_mission_id = mission_choices[selected_mission_index][0]
+                    apply_mission_preview()
                 if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
                     mode = "select_chopper"
                     set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")
@@ -559,7 +582,7 @@ def run() -> None:
 
         # Render.
         # Background above the horizon.
-        draw_sky(screen, heli_settings.ground_y)
+        draw_sky(screen, heli_settings.ground_y, bg_asset=getattr(mission, "bg_asset", "mission1-bg.jpg"))
         if particles_enabled:
             sky_smoke.draw(screen, horizon_y=int(heli_settings.ground_y))
         draw_ground(screen, heli_settings.ground_y)

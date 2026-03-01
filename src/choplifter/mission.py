@@ -145,6 +145,7 @@ class LevelConfig:
     base_height: float
     base_right_margin: float
     base_bottom_margin: float
+    bg_asset: str
     initial_air_mine_pos: Vec2 | None
     initial_air_mine_delay_s: float
     initial_jet_spawn_delay_s: float
@@ -182,6 +183,7 @@ class MissionState:
     enemies: list[Enemy]
     base: BaseZone
     world_width: float = 1280.0
+    bg_asset: str = "mission1-bg.jpg"
     stats: MissionStats = field(default_factory=MissionStats)
     sentiment: float = 50.0
     tuning: MissionTuning = MissionTuning()
@@ -289,6 +291,7 @@ class MissionState:
             enemies=enemies,
             base=base,
             world_width=world_width,
+            bg_asset=level.bg_asset,
             stats=MissionStats(),
             tuning=level.tuning,
         )
@@ -317,6 +320,7 @@ def create_level_1_config() -> LevelConfig:
         base_height=90.0,
         base_right_margin=20.0,
         base_bottom_margin=0.0,
+        bg_asset="mission1-bg.jpg",
         initial_air_mine_pos=Vec2(1250.0, 180.0),
         initial_air_mine_delay_s=60.0,
         initial_jet_spawn_delay_s=18.0,
@@ -351,6 +355,7 @@ def create_airport_special_ops_config() -> LevelConfig:
         base_height=90.0,
         base_right_margin=30.0,
         base_bottom_margin=0.0,
+        bg_asset="airport-special-ops.jpg",
         initial_air_mine_pos=Vec2(1450.0, 170.0),
         initial_air_mine_delay_s=40.0,
         initial_jet_spawn_delay_s=14.0,
@@ -383,6 +388,7 @@ def create_worship_center_warfare_config() -> LevelConfig:
         base_height=90.0,
         base_right_margin=20.0,
         base_bottom_margin=0.0,
+        bg_asset="worship-center-warfare.jpg",
         initial_air_mine_pos=Vec2(1180.0, 175.0),
         initial_air_mine_delay_s=25.0,
         initial_jet_spawn_delay_s=10.0,
