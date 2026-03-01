@@ -140,7 +140,7 @@ def run() -> None:
 
     # Pre-game mission selection overlay.
     mission_choices: list[tuple[str, str]] = [
-        ("city", "City Center"),
+        ("city", "City Center Seige"),
         ("airport", "Airport Special Ops"),
         ("worship", "Worship Center Warfare"),
     ]
