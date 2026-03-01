@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import logging
 import math
 
 from .helicopter import Facing, Helicopter
@@ -87,6 +88,9 @@ class MissionState:
     stats: MissionStats
     ended: bool = False
     end_text: str = ""
+    _last_logged_boarded: int = 0
+    _last_logged_saved: int = 0
+    _last_logged_kia_player: int = 0
 
     @staticmethod
     def create_default(heli: HelicopterSettings) -> "MissionState":
@@ -161,18 +165,42 @@ def spawn_projectile_from_helicopter(mission: MissionState, helicopter: Helicopt
     )
 
 
-def update_mission(mission: MissionState, helicopter: Helicopter, dt: float, heli: HelicopterSettings) -> None:
+def spawn_projectile_from_helicopter_logged(
+    mission: MissionState,
+    helicopter: Helicopter,
+    logger: logging.Logger | None,
+) -> None:
+    spawn_projectile_from_helicopter(mission, helicopter)
+    if logger is None:
+        return
+    if helicopter.facing is Facing.FORWARD:
+        logger.info("Fire: BOMB")
+    else:
+        logger.info("Fire: BULLET")
+
+
+def update_mission(
+    mission: MissionState,
+    helicopter: Helicopter,
+    dt: float,
+    heli: HelicopterSettings,
+    logger: logging.Logger | None = None,
+) -> None:
     if mission.ended:
         return
 
     _update_projectiles(mission, dt, heli)
-    _update_compounds_and_release(mission, heli)
+    _update_compounds_and_release(mission, heli, logger)
     _update_hostages(mission, helicopter, dt, heli)
     _handle_unload(mission, helicopter, heli)
+
+    _log_progress_if_changed(mission, logger)
 
     if mission.stats.saved >= 20:
         mission.ended = True
         mission.end_text = "THE END"
+        if logger is not None:
+            logger.info("WIN: saved=%d (THE END)", mission.stats.saved)
 
 
 def _update_projectiles(mission: MissionState, dt: float, heli: HelicopterSettings) -> None:
@@ -256,7 +284,7 @@ def _bomb_explode(mission: MissionState, pos: Vec2) -> None:
             mission.stats.kia_by_player += 1
 
 
-def _update_compounds_and_release(mission: MissionState, heli: HelicopterSettings) -> None:
+def _update_compounds_and_release(mission: MissionState, heli: HelicopterSettings, logger: logging.Logger | None) -> None:
     for c in mission.compounds:
         if c.is_open:
             continue
@@ -264,6 +292,13 @@ def _update_compounds_and_release(mission: MissionState, heli: HelicopterSetting
             continue
 
         c.is_open = True
+        if logger is not None:
+            logger.info(
+                "Compound opened: x=%.0f hostages=%d..%d",
+                c.pos.x,
+                c.hostage_start,
+                c.hostage_start + c.hostage_count - 1,
+            )
         # Spawn hostages at the compound entrance area.
         start = c.hostage_start
         end = start + c.hostage_count
@@ -350,3 +385,37 @@ def hostage_crush_check(mission: MissionState, helicopter: Helicopter, last_land
         if dx * dx + dy * dy <= r2:
             h.state = HostageState.KIA
             mission.stats.kia_by_player += 1
+
+
+def hostage_crush_check_logged(
+    mission: MissionState,
+    helicopter: Helicopter,
+    last_landing_vy: float,
+    logger: logging.Logger | None,
+) -> None:
+    before = mission.stats.kia_by_player
+    hostage_crush_check(mission, helicopter, last_landing_vy)
+    if logger is None:
+        return
+    if mission.stats.kia_by_player != before:
+        logger.info("CRUSH: hard landing killed %d hostage(s)", mission.stats.kia_by_player - before)
+
+
+def _log_progress_if_changed(mission: MissionState, logger: logging.Logger | None) -> None:
+    if logger is None:
+        return
+
+    boarded = boarded_count(mission)
+    if boarded != mission._last_logged_boarded:
+        mission._last_logged_boarded = boarded
+        logger.info("BOARDING: boarded=%d", boarded)
+
+    if mission.stats.saved != mission._last_logged_saved:
+        delta = mission.stats.saved - mission._last_logged_saved
+        mission._last_logged_saved = mission.stats.saved
+        logger.info("UNLOAD: +%d saved (total=%d)", delta, mission.stats.saved)
+
+    if mission.stats.kia_by_player != mission._last_logged_kia_player:
+        delta = mission.stats.kia_by_player - mission._last_logged_kia_player
+        mission._last_logged_kia_player = mission.stats.kia_by_player
+        logger.info("COLLATERAL: +%d KIA_by_player (total=%d)", delta, mission.stats.kia_by_player)

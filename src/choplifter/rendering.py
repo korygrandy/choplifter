@@ -7,6 +7,9 @@ from .helicopter import Facing, Helicopter
 from .mission import HostageState, MissionState, ProjectileKind
 
 
+_HUD_FONT: pygame.font.Font | None = None
+
+
 def draw_ground(screen: pygame.Surface, ground_y: float) -> None:
     pygame.draw.rect(screen, (40, 40, 40), pygame.Rect(0, int(ground_y), screen.get_width(), screen.get_height() - int(ground_y)))
     pygame.draw.line(screen, (90, 90, 90), (0, int(ground_y)), (screen.get_width(), int(ground_y)), 2)
@@ -52,6 +55,34 @@ def draw_mission(screen: pygame.Surface, mission: MissionState) -> None:
 
     if mission.ended and mission.end_text:
         _draw_end(screen, mission.end_text)
+
+
+def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopter) -> None:
+    global _HUD_FONT
+    if _HUD_FONT is None:
+        pygame.font.init()
+        _HUD_FONT = pygame.font.SysFont("consolas", 18)
+
+    font = _HUD_FONT
+
+    boarded = sum(1 for h in mission.hostages if h.state is HostageState.BOARDED)
+    saved = mission.stats.saved
+
+    # Minimal always-on guidance so the rescue loop is discoverable.
+    lines = [
+        f"Objective: save 20 (saved {saved}/20)",
+        f"Rescue: shoot compound (Space) → land near hostages → press E to open doors → load {boarded}/16",
+        "Unload: land in base zone (flag) → press E to open doors",
+    ]
+
+    x = 12
+    y = screen.get_height() - 12 - len(lines) * 20
+    for i, line in enumerate(lines):
+        surf = font.render(line, True, (10, 10, 10))
+        # Shadow for readability.
+        shadow = font.render(line, True, (255, 255, 255))
+        screen.blit(shadow, (x + 1, y + i * 20 + 1))
+        screen.blit(surf, (x, y + i * 20))
 
 
 def _draw_base(screen: pygame.Surface, mission: MissionState) -> None:

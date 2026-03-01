@@ -8,6 +8,9 @@ venv/
 # VS Code
 .vscode/
 
+# Runtime logs
+logs/
+
 # OS
 .DS_Store
 Thumbs.db

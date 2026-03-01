@@ -3,9 +3,15 @@ from __future__ import annotations
 import pygame
 
 from .debug_overlay import DebugOverlay
+from .game_logging import create_session_logger
 from .helicopter import Helicopter, HelicopterInput, update_helicopter
-from .mission import MissionState, hostage_crush_check, spawn_projectile_from_helicopter, update_mission
-from .rendering import draw_ground, draw_helicopter, draw_mission
+from .mission import (
+    MissionState,
+    hostage_crush_check_logged,
+    spawn_projectile_from_helicopter_logged,
+    update_mission,
+)
+from .rendering import draw_ground, draw_helicopter, draw_hud, draw_mission
 from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, PhysicsSettings, WindowSettings
 
 
@@ -17,6 +23,10 @@ def run() -> None:
     debug = DebugSettings()
 
     pygame.init()
+
+    logger = create_session_logger()
+    logger.info("Controls: SPACE fire | E doors (grounded) | TAB facing | R reverse | F1 debug")
+    logger.info("Rescue: open compound, land near hostages, E doors to load; land at base and E to unload")
 
     flags = 0
     if window.vsync:
@@ -54,7 +64,7 @@ def run() -> None:
                 elif event.key == pygame.K_e:
                     helicopter.toggle_doors()
                 elif event.key == pygame.K_SPACE:
-                    spawn_projectile_from_helicopter(mission, helicopter)
+                    spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
 
         keys = pygame.key.get_pressed()
         helicopter_input = HelicopterInput(
@@ -74,8 +84,8 @@ def run() -> None:
             was_grounded = helicopter.grounded
             update_helicopter(helicopter, helicopter_input, tick.dt, physics, heli_settings, world_width=float(window.width))
             if not was_grounded and helicopter.grounded:
-                hostage_crush_check(mission, helicopter, helicopter.last_landing_vy)
-            update_mission(mission, helicopter, tick.dt, heli_settings)
+                hostage_crush_check_logged(mission, helicopter, helicopter.last_landing_vy, logger)
+            update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
             accumulator -= tick.dt
 
         # Render.
@@ -83,6 +93,7 @@ def run() -> None:
         draw_ground(screen, heli_settings.ground_y)
         draw_mission(screen, mission)
         draw_helicopter(screen, helicopter)
+        draw_hud(screen, mission, helicopter)
 
         if debug.show_overlay:
             overlay.draw(screen, helicopter, mission, clock.get_fps())

@@ -47,6 +47,8 @@ The C64 version was ported by Dane Bigham and published by Brøderbund. It is of
 
 This repo now contains a small Python/Pygame prototype scaffold (Milestone A).
 
+Milestone B adds a basic rescue loop (compounds → hostages → boarding → unload at base → “THE END” at 20 saved).
+
 ### Run
 
 1. Create/activate the venv and install dependencies:
@@ -64,4 +66,15 @@ This repo now contains a small Python/Pygame prototype scaffold (Milestone A).
 - Fire: Space (side-facing = bullet, forward-facing = bomb)
 - Toggle doors (only when grounded): E
 - Toggle debug overlay: F1
+
+### How to rescue (prototype)
+
+1. **Open a compound:** shoot it with `Space` until it opens.
+2. **Land near hostages** and press `E` to open doors (doors only work when grounded).
+3. Hostages will run to you and **board** (up to 16).
+4. Fly to the **base zone** on the far right (flag), land, press `E` to open doors, and they **unload**.
+
+### Logs
+
+Each run writes a session log to `logs/session-*.log` (compound opens, boarding/unload counts, collateral, win).
 
