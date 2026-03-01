@@ -33,8 +33,9 @@ if ($Mode -eq 'onefile') { $modeFlag = @('--onefile') }
 
 # Bundle assets next to the packaged python modules.
 # NOTE: On Windows, PyInstaller uses ';' as the add-data separator.
+$assetsSrc = Join-Path $repoRoot 'src\choplifter\assets'
 $addData = @(
-    '--add-data', 'src\\choplifter\\assets;src\\choplifter\\assets'
+    '--add-data', "$assetsSrc;src\\choplifter\\assets"
 )
 
 & $python -m PyInstaller `
