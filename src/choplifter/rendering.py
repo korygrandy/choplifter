@@ -4,7 +4,7 @@ import math
 import pygame
 
 from .helicopter import Facing, Helicopter
-from .mission import HostageState, MissionState, ProjectileKind
+from .mission import EnemyKind, HostageState, MissionState, ProjectileKind
 
 
 _HUD_FONT: pygame.font.Font | None = None
@@ -52,11 +52,22 @@ def draw_mission(screen: pygame.Surface, mission: MissionState) -> None:
     _draw_base(screen, mission)
     _draw_compounds(screen, mission)
     _draw_hostages(screen, mission)
+    _draw_enemies(screen, mission)
     _draw_projectiles(screen, mission)
 
     if mission.ended and mission.end_text:
         boarded = sum(1 for h in mission.hostages if h.state is HostageState.BOARDED)
-        _draw_end(screen, mission.end_text, mission.stats.saved, boarded, mission.stats.kia_by_player)
+        _draw_end(
+            screen,
+            mission.end_text,
+            mission.end_reason,
+            mission.stats.saved,
+            boarded,
+            mission.stats.kia_by_player,
+            mission.stats.kia_by_enemy,
+            mission.stats.enemies_destroyed,
+            mission.crashes,
+        )
 
 
 def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopter) -> None:
@@ -72,6 +83,7 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
 
     # Minimal always-on guidance so the rescue loop is discoverable.
     lines = [
+        f"Fuel {int(helicopter.fuel):3d}   Damage {int(helicopter.damage):3d}   Crashes {mission.crashes}/3",
         f"Objective: save 20 (saved {saved}/20)",
         f"Rescue: shoot compound (Space) → land near hostages → press E to open doors → load {boarded}/16",
         "Unload: land in base zone (flag) → press E to open doors",
@@ -156,11 +168,51 @@ def _draw_projectiles(screen: pygame.Surface, mission: MissionState) -> None:
     for p in mission.projectiles:
         if p.kind is ProjectileKind.BULLET:
             pygame.draw.circle(screen, (240, 240, 240), (int(p.pos.x), int(p.pos.y)), 2)
+        elif p.kind is ProjectileKind.ENEMY_BULLET:
+            pygame.draw.circle(screen, (200, 40, 40), (int(p.pos.x), int(p.pos.y)), 2)
         else:
             pygame.draw.circle(screen, (35, 35, 35), (int(p.pos.x), int(p.pos.y)), 4)
 
 
-def _draw_end(screen: pygame.Surface, text: str, saved: int, boarded: int, kia_player: int) -> None:
+def _draw_enemies(screen: pygame.Surface, mission: MissionState) -> None:
+    ground_y = mission.base.pos.y + mission.base.height
+
+    for e in mission.enemies:
+        if e.kind is EnemyKind.TANK:
+            # Simple tank block near ground.
+            w, h = 44, 18
+            r = pygame.Rect(int(e.pos.x - w / 2), int(ground_y - h), w, h)
+            pygame.draw.rect(screen, (70, 70, 70), r)
+            pygame.draw.rect(screen, (25, 25, 25), r, 2)
+            # Turret marker.
+            pygame.draw.line(screen, (25, 25, 25), (r.centerx, r.top + 3), (r.centerx + 10, r.top - 6), 3)
+
+        elif e.kind is EnemyKind.JET:
+            x = int(e.pos.x)
+            y = int(e.pos.y)
+            direction = 1 if e.vel.x >= 0 else -1
+            pygame.draw.polygon(
+                screen,
+                (35, 35, 35),
+                [(x, y), (x - 20 * direction, y - 8), (x - 20 * direction, y + 8)],
+            )
+
+        elif e.kind is EnemyKind.AIR_MINE:
+            pygame.draw.circle(screen, (200, 40, 40), (int(e.pos.x), int(e.pos.y)), 9)
+            pygame.draw.circle(screen, (25, 25, 25), (int(e.pos.x), int(e.pos.y)), 9, 2)
+
+
+def _draw_end(
+    screen: pygame.Surface,
+    text: str,
+    reason: str,
+    saved: int,
+    boarded: int,
+    kia_player: int,
+    kia_enemy: int,
+    enemies_destroyed: int,
+    crashes: int,
+) -> None:
     panel = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
     panel.fill((0, 0, 0, 120))
     screen.blit(panel, (0, 0))
@@ -173,9 +225,13 @@ def _draw_end(screen: pygame.Surface, text: str, saved: int, boarded: int, kia_p
 
     small = pygame.font.SysFont("consolas", 22)
     lines = [
+        f"Result: {reason}",
         f"Saved: {saved}",
         f"Boarded (not yet unloaded): {boarded}",
         f"KIA (player): {kia_player}",
+        f"KIA (by enemy): {kia_enemy}",
+        f"Enemies destroyed: {enemies_destroyed}",
+        f"Crashes: {crashes}",
     ]
     y = rect.bottom + 18
     for line in lines:
