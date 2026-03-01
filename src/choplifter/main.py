@@ -40,6 +40,7 @@ def run() -> None:
     prev_btn_b_down = False
     prev_btn_x_down = False
     prev_btn_y_down = False
+    prev_btn_start_down = False
 
     def set_toast(message: str) -> None:
         nonlocal toast_message, toast_seconds
@@ -113,6 +114,26 @@ def run() -> None:
     helicopter = Helicopter.spawn(heli_settings)
     mission = MissionState.create_default(heli_settings)
 
+    prev_crashes = mission.crashes
+    prev_lost_in_transit = mission.stats.lost_in_transit
+
+    def reset_game() -> None:
+        nonlocal helicopter, mission, accumulator
+        nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
+        nonlocal prev_crashes, prev_lost_in_transit
+
+        helicopter = Helicopter.spawn(heli_settings)
+        mission = MissionState.create_default(heli_settings)
+        accumulator = 0.0
+        prev_crashes = mission.crashes
+        prev_lost_in_transit = mission.stats.lost_in_transit
+        prev_btn_a_down = False
+        prev_btn_b_down = False
+        prev_btn_x_down = False
+        prev_btn_y_down = False
+        prev_btn_start_down = False
+        logger.info("RESET: mission restarted")
+
     running = True
     accumulator = 0.0
 
@@ -143,6 +164,8 @@ def run() -> None:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
+                elif event.key == pygame.K_RETURN and mission.ended:
+                    reset_game()
                 elif event.key == pygame.K_F1:
                     debug = DebugSettings(show_overlay=not debug.show_overlay)
                 elif event.key == pygame.K_TAB:
@@ -195,6 +218,10 @@ def run() -> None:
             b_down = bool(active_js.get_numbuttons() > 1 and active_js.get_button(1))
             x_down = bool(active_js.get_numbuttons() > 2 and active_js.get_button(2))
             y_down = bool(active_js.get_numbuttons() > 3 and active_js.get_button(3))
+            start_down = bool(active_js.get_numbuttons() > 7 and active_js.get_button(7))
+
+            if start_down and not prev_btn_start_down and mission.ended:
+                reset_game()
 
             if a_down and not prev_btn_a_down:
                 toggle_doors_with_logging()
@@ -209,6 +236,7 @@ def run() -> None:
             prev_btn_b_down = b_down
             prev_btn_x_down = x_down
             prev_btn_y_down = y_down
+            prev_btn_start_down = start_down
 
         helicopter_input = HelicopterInput(
             tilt_left=kb_tilt_left or gp_tilt_left,
@@ -229,6 +257,19 @@ def run() -> None:
             if not was_grounded and helicopter.grounded:
                 hostage_crush_check_logged(mission, helicopter, helicopter.last_landing_vy, logger)
             update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
+
+            if mission.crashes != prev_crashes:
+                if mission.ended:
+                    set_toast(f"THE END: {mission.end_reason} (Enter/Start)")
+                else:
+                    set_toast(f"CRASH {mission.crashes}/3 — respawn (invuln {mission.invuln_seconds:0.1f}s)")
+                prev_crashes = mission.crashes
+
+            lost_delta = mission.stats.lost_in_transit - prev_lost_in_transit
+            if lost_delta > 0:
+                set_toast(f"Passengers lost in crash: +{lost_delta}")
+                prev_lost_in_transit = mission.stats.lost_in_transit
+
             accumulator -= tick.dt
 
         if toast_seconds > 0.0:
