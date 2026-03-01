@@ -49,7 +49,13 @@ def _resolve_bg_path(asset_filename: str) -> Path:
     # Be forgiving about a common typo for worship-center.
     alternates: tuple[str, ...] = (asset_filename,)
     if asset_filename == "worship-center-warfare.jpg":
-        alternates = (asset_filename, "woship-center-warfare.jpg")
+        alternates = (asset_filename, "woship-center-warfare.jpg", "mission3-bg.jpg")
+    if asset_filename == "airport-special-ops.jpg":
+        alternates = (asset_filename, "mission2-bg.jpg")
+    if asset_filename == "mission3-bg.jpg":
+        alternates = (asset_filename, "worship-center-warfare.jpg", "woship-center-warfare.jpg")
+    if asset_filename == "mission2-bg.jpg":
+        alternates = (asset_filename, "airport-special-ops.jpg")
 
     for name in alternates:
         candidate_paths = (
@@ -62,6 +68,15 @@ def _resolve_bg_path(asset_filename: str) -> Path:
 
     # Default location (even if missing).
     return module_dir / "assets" / alternates[0]
+
+
+def bg_asset_exists(asset_filename: str) -> bool:
+    """Returns True if the background asset can be found on disk."""
+
+    try:
+        return _resolve_bg_path(asset_filename).exists()
+    except Exception:
+        return False
 
 
 def _get_bg_scaled(asset_filename: str, width: int, height: int) -> pygame.Surface | None:

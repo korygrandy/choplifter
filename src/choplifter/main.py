@@ -17,6 +17,7 @@ from .mission import (
     update_mission,
 )
 from .rendering import (
+    bg_asset_exists,
     draw_chopper_select_overlay,
     draw_ground,
     draw_helicopter,
@@ -196,6 +197,10 @@ def run() -> None:
         prev_boarded = boarded_count(mission)
         prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
         prev_tanks_destroyed = mission.stats.tanks_destroyed
+
+        bg = getattr(mission, "bg_asset", "")
+        if bg and not bg_asset_exists(bg):
+            set_toast(f"Missing background: {bg}")
 
     def reset_game() -> None:
         nonlocal helicopter, mission, accumulator
