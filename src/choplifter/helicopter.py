@@ -85,6 +85,9 @@ def update_helicopter(
     heli: HelicopterSettings,
     world_width: float = 1280.0,
 ) -> None:
+    ground_contact_y = heli.ground_y - heli.rotor_clearance
+    on_ground_now = helicopter.pos.y >= ground_contact_y
+
     # Tilt control.
     tilt_target = 0.0
     if helicopter_input.tilt_left:
@@ -115,6 +118,10 @@ def update_helicopter(
 
     # Horizontal acceleration from tilt (fudged physics).
     ax = math.sin(deg_to_rad(helicopter.tilt_deg)) * physics.engine_power
+    # While grounded, require lift to translate horizontally. This prevents the
+    # helicopter from "sliding" left/right along the ground via stick tilt.
+    if on_ground_now and not helicopter_input.lift_up:
+        ax = 0.0
 
     # Apply accelerations.
     helicopter.vel.x += ax * dt
@@ -138,7 +145,6 @@ def update_helicopter(
     helicopter.pos.y += helicopter.vel.y * dt * 10.0
 
     # Ground / landing.
-    ground_contact_y = heli.ground_y - heli.rotor_clearance
     if helicopter.pos.y >= ground_contact_y:
         if not helicopter.grounded:
             # Landing event.
@@ -149,6 +155,11 @@ def update_helicopter(
         helicopter.grounded = True
         helicopter.pos.y = ground_contact_y
         helicopter.vel.y = 0.0
+        if not helicopter_input.lift_up:
+            # Extra ground friction so we don't drift/slide after landing.
+            helicopter.vel.x *= 0.65
+            if abs(helicopter.vel.x) < 0.02:
+                helicopter.vel.x = 0.0
     else:
         helicopter.grounded = False
 
