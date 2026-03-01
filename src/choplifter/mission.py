@@ -36,6 +36,7 @@ class Compound:
     is_open: bool
     hostage_start: int
     hostage_count: int
+    log_bucket: int = -1
 
     def contains_point(self, p: Vec2) -> bool:
         return (
@@ -189,7 +190,7 @@ def update_mission(
     if mission.ended:
         return
 
-    _update_projectiles(mission, dt, heli)
+    _update_projectiles(mission, dt, heli, logger)
     _update_compounds_and_release(mission, heli, logger)
     _update_hostages(mission, helicopter, dt, heli)
     _handle_unload(mission, helicopter, heli)
@@ -203,7 +204,12 @@ def update_mission(
             logger.info("WIN: saved=%d (THE END)", mission.stats.saved)
 
 
-def _update_projectiles(mission: MissionState, dt: float, heli: HelicopterSettings) -> None:
+def _update_projectiles(
+    mission: MissionState,
+    dt: float,
+    heli: HelicopterSettings,
+    logger: logging.Logger | None,
+) -> None:
     gravity = 28.0
 
     for p in mission.projectiles:
@@ -224,7 +230,7 @@ def _update_projectiles(mission: MissionState, dt: float, heli: HelicopterSettin
         # Ground collision.
         if p.pos.y >= heli.ground_y - 6.0:
             if p.kind is ProjectileKind.BOMB:
-                _bomb_explode(mission, p.pos)
+                _bomb_explode(mission, p.pos, logger)
             p.alive = False
             continue
 
@@ -237,6 +243,7 @@ def _update_projectiles(mission: MissionState, dt: float, heli: HelicopterSettin
                     c.health -= 12.0
                 else:
                     c.health -= 40.0
+                _log_compound_health_if_needed(c, logger, reason="hit")
                 p.alive = False
                 break
 
@@ -259,7 +266,7 @@ def _update_projectiles(mission: MissionState, dt: float, heli: HelicopterSettin
     mission.projectiles = [p for p in mission.projectiles if p.alive]
 
 
-def _bomb_explode(mission: MissionState, pos: Vec2) -> None:
+def _bomb_explode(mission: MissionState, pos: Vec2, logger: logging.Logger | None) -> None:
     # Small AoE for collateral + compound damage.
     radius = 42.0
     r2 = radius * radius
@@ -273,6 +280,7 @@ def _bomb_explode(mission: MissionState, pos: Vec2) -> None:
         dy = pos.y - cy
         if dx * dx + dy * dy <= r2:
             c.health -= 30.0
+            _log_compound_health_if_needed(c, logger, reason="blast")
 
     for h in mission.hostages:
         if not on_foot(h):
@@ -419,3 +427,18 @@ def _log_progress_if_changed(mission: MissionState, logger: logging.Logger | Non
         delta = mission.stats.kia_by_player - mission._last_logged_kia_player
         mission._last_logged_kia_player = mission.stats.kia_by_player
         logger.info("COLLATERAL: +%d KIA_by_player (total=%d)", delta, mission.stats.kia_by_player)
+
+
+def _log_compound_health_if_needed(c: Compound, logger: logging.Logger | None, reason: str) -> None:
+    if logger is None:
+        return
+
+    health = max(0.0, c.health)
+
+    # Log only when health crosses buckets of 20 (avoids log spam).
+    bucket = int(health // 20.0)
+    if bucket == c.log_bucket:
+        return
+
+    c.log_bucket = bucket
+    logger.info("Compound %s: x=%.0f health=%.0f", reason, c.pos.x, health)
