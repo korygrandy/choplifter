@@ -192,6 +192,7 @@ def run() -> None:
         helicopter.facing = Facing.LEFT
         accumulator = 0.0
         sky_smoke.reset()
+        audio.stop_flying()
         prev_crashes = mission.crashes
         prev_lost_in_transit = mission.stats.lost_in_transit
         prev_saved = mission.stats.saved
@@ -219,6 +220,7 @@ def run() -> None:
         helicopter.facing = Facing.LEFT
         accumulator = 0.0
         sky_smoke.reset()
+        audio.stop_flying()
         prev_crashes = mission.crashes
         prev_lost_in_transit = mission.stats.lost_in_transit
         prev_saved = mission.stats.saved
@@ -536,8 +538,11 @@ def run() -> None:
             if mode == "playing":
                 was_grounded = helicopter.grounded
                 update_helicopter(helicopter, helicopter_input, tick.dt, physics, heli_settings, world_width=float(mission.world_width))
+                if was_grounded and not helicopter.grounded:
+                    audio.start_flying()
                 if not was_grounded and helicopter.grounded:
                     hostage_crush_check_logged(mission, helicopter, helicopter.last_landing_vy, logger)
+                    audio.stop_flying()
                 update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
 
                 saved_delta = mission.stats.saved - prev_saved
