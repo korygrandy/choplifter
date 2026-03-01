@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from array import array
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 from pathlib import Path
 from typing import Literal
@@ -89,6 +89,7 @@ class AudioMixer:
     """
 
     buses: dict[BusName, list[pygame.mixer.Channel]]
+    active_loops: dict[str, pygame.mixer.Channel] = field(default_factory=dict)
 
     @staticmethod
     def try_create(*, num_channels: int = 24) -> "AudioMixer | None":
@@ -125,6 +126,33 @@ class AudioMixer:
         else:
             sound.play()
 
+    def play_loop(self, sound: pygame.mixer.Sound, *, key: str, bus: BusName = "music", fade_in_ms: int = 500) -> None:
+        if key in self.active_loops:
+            ch = self.active_loops[key]
+            if ch.get_busy():
+                return
+
+        channels = self.buses.get(bus, [])
+        if not channels:
+            sound.play(loops=-1, fade_ms=fade_in_ms)
+            return
+
+        ch = channels[0]
+        ch.play(sound, loops=-1, fade_ms=fade_in_ms)
+        self.active_loops[key] = ch
+
+    def stop_loop(self, *, key: str, fade_out_ms: int = 650) -> None:
+        ch = self.active_loops.pop(key, None)
+        if ch is None:
+            return
+        try:
+            ch.fadeout(max(0, int(fade_out_ms)))
+        except Exception:
+            try:
+                ch.stop()
+            except Exception:
+                pass
+
 
 @dataclass
 class AudioBank:
@@ -139,6 +167,8 @@ class AudioBank:
     board: pygame.mixer.Sound | None
     rescue: pygame.mixer.Sound | None
     crash: pygame.mixer.Sound | None
+    flying_loop: pygame.mixer.Sound | None
+    _flying_active: bool = field(default=False, init=False, repr=False)
 
     @staticmethod
     def try_create() -> "AudioBank":
@@ -159,6 +189,7 @@ class AudioBank:
                 board=None,
                 rescue=None,
                 crash=None,
+                flying_loop=None,
             )
 
         try:
@@ -221,6 +252,7 @@ class AudioBank:
             doors_open = _try_load_asset_sound(asset_dir / "doors_open.wav") or doors_open
             doors_close = _try_load_asset_sound(asset_dir / "doors_close.wav") or doors_close
             board = _try_load_asset_sound(asset_dir / "board.wav") or board
+            flying_loop = _try_load_asset_sound(asset_dir / "chopper-flying.wav")
 
             # Keep levels conservative.
             shoot.set_volume(0.35)
@@ -234,6 +266,8 @@ class AudioBank:
             board.set_volume(0.22)
             rescue.set_volume(0.40)
             crash.set_volume(0.55)
+            if flying_loop is not None:
+                flying_loop.set_volume(0.28)
 
             return AudioBank(
                 mixer=mixer,
@@ -247,6 +281,7 @@ class AudioBank:
                 board=board,
                 rescue=rescue,
                 crash=crash,
+                flying_loop=flying_loop,
             )
         except Exception:
             return AudioBank(
@@ -261,7 +296,34 @@ class AudioBank:
                 board=None,
                 rescue=None,
                 crash=None,
+                flying_loop=None,
             )
+
+    def start_flying(self) -> None:
+        if self._flying_active:
+            return
+        if self.flying_loop is None:
+            return
+        self._flying_active = True
+
+        if self.mixer is not None:
+            self.mixer.play_loop(self.flying_loop, key="chopper_flying", bus="music", fade_in_ms=500)
+        else:
+            self.flying_loop.play(loops=-1, fade_ms=500)
+
+    def stop_flying(self) -> None:
+        if not self._flying_active:
+            return
+        self._flying_active = False
+
+        if self.mixer is not None:
+            self.mixer.stop_loop(key="chopper_flying", fade_out_ms=650)
+        else:
+            # Best-effort: fade out all channels.
+            try:
+                pygame.mixer.fadeout(650)
+            except Exception:
+                pass
 
     def _play(self, sound: pygame.mixer.Sound | None, *, bus: BusName) -> None:
         if sound is None:
