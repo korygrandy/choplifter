@@ -17,3 +17,9 @@ Thumbs.db
 
 # Source art files
 *.xcf
+
+# Build artifacts
+/build/
+/pyinstaller-build/
+/pyinstaller-dist/
+/*.spec
