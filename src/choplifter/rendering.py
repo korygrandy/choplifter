@@ -65,6 +65,7 @@ def draw_mission(screen: pygame.Surface, mission: MissionState) -> None:
             boarded,
             mission.stats.kia_by_player,
             mission.stats.kia_by_enemy,
+            mission.stats.lost_in_transit,
             mission.stats.enemies_destroyed,
             mission.crashes,
         )
@@ -210,6 +211,7 @@ def _draw_end(
     boarded: int,
     kia_player: int,
     kia_enemy: int,
+    lost_in_transit: int,
     enemies_destroyed: int,
     crashes: int,
 ) -> None:
@@ -230,6 +232,7 @@ def _draw_end(
         f"Boarded (not yet unloaded): {boarded}",
         f"KIA (player): {kia_player}",
         f"KIA (by enemy): {kia_enemy}",
+        f"Lost in transit: {lost_in_transit}",
         f"Enemies destroyed: {enemies_destroyed}",
         f"Crashes: {crashes}",
     ]

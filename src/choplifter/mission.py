@@ -752,6 +752,17 @@ def _handle_crash_and_respawn(
     if logger is not None:
         logger.info("CRASH: count=%d", mission.crashes)
 
+    # Consequence: any boarded hostages are lost when the aircraft goes down.
+    lost_this_crash = 0
+    for h in mission.hostages:
+        if h.state is HostageState.BOARDED:
+            h.state = HostageState.KIA
+            lost_this_crash += 1
+    if lost_this_crash:
+        mission.stats.lost_in_transit += lost_this_crash
+        if logger is not None:
+            logger.info("LOST_IN_TRANSIT: +%d (total=%d)", lost_this_crash, mission.stats.lost_in_transit)
+
     if mission.crashes >= 3:
         _end_mission(mission, "THE END", "AIRCRAFT LOST", logger)
         return
@@ -780,11 +791,12 @@ def _end_mission(mission: MissionState, end_text: str, reason: str, logger: logg
     if logger is not None:
         logger.info("END: %s", reason)
         logger.info(
-            "END_STATS: saved=%d boarded=%d kia_by_player=%d kia_by_enemy=%d enemies_destroyed=%d crashes=%d",
+            "END_STATS: saved=%d boarded=%d kia_by_player=%d kia_by_enemy=%d lost_in_transit=%d enemies_destroyed=%d crashes=%d",
             mission.stats.saved,
             boarded_count(mission),
             mission.stats.kia_by_player,
             mission.stats.kia_by_enemy,
+            mission.stats.lost_in_transit,
             mission.stats.enemies_destroyed,
             mission.crashes,
         )
