@@ -159,6 +159,7 @@ class MissionStats:
     kia_by_enemy: int = 0
     lost_in_transit: int = 0
     enemies_destroyed: int = 0
+    tanks_destroyed: int = 0
 
 
 @dataclass
@@ -432,6 +433,7 @@ def _update_projectiles(
                         e.alive = False
                         mission.stats.enemies_destroyed += 1
                         if e.kind is EnemyKind.TANK:
+                            mission.stats.tanks_destroyed += 1
                             # Persist a burning effect at the destroyed cannon/tank location.
                             mission.burning.add_site(e.pos, intensity=1.0)
                         if logger is not None:
@@ -529,6 +531,7 @@ def _bomb_explode(mission: MissionState, pos: Vec2, logger: logging.Logger | Non
                 e.alive = False
                 mission.stats.enemies_destroyed += 1
                 if e.kind is EnemyKind.TANK:
+                    mission.stats.tanks_destroyed += 1
                     mission.burning.add_site(e.pos, intensity=1.0)
                 if logger is not None:
                     logger.info("ENEMY_DOWN: %s", e.kind.name)

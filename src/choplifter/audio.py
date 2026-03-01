@@ -71,6 +71,11 @@ class AudioBank:
     shoot: pygame.mixer.Sound | None
     bomb: pygame.mixer.Sound | None
     explosion: pygame.mixer.Sound | None
+    explosion_small: pygame.mixer.Sound | None
+    explosion_big: pygame.mixer.Sound | None
+    doors_open: pygame.mixer.Sound | None
+    doors_close: pygame.mixer.Sound | None
+    board: pygame.mixer.Sound | None
     rescue: pygame.mixer.Sound | None
     crash: pygame.mixer.Sound | None
 
@@ -81,7 +86,7 @@ class AudioBank:
             if not pygame.mixer.get_init():
                 pygame.mixer.init()
         except Exception:
-            return AudioBank(None, None, None, None, None)
+            return AudioBank(None, None, None, None, None, None, None, None, None, None)
 
         try:
             sample_rate = 22050
@@ -93,9 +98,28 @@ class AudioBank:
             bomb_b = _sine_pcm16(freq_hz=55.0, duration_s=0.22, volume=0.25, sample_rate=sample_rate, fade_out_s=0.10)
             bomb = pygame.mixer.Sound(buffer=_mix_pcm16([bomb_a, bomb_b], volume=0.75))
 
-            exp_a = _sine_pcm16(freq_hz=70.0, duration_s=0.32, volume=0.35, sample_rate=sample_rate, fade_out_s=0.18)
-            exp_b = _sine_pcm16(freq_hz=140.0, duration_s=0.18, volume=0.20, sample_rate=sample_rate, fade_out_s=0.10)
-            explosion = pygame.mixer.Sound(buffer=_mix_pcm16([exp_a, exp_b], volume=0.75))
+            # Two distinct explosion flavors:
+            # - small: compound opening / light blast
+            # - big: tank destroyed / heavier boom
+            exp_s_a = _sine_pcm16(freq_hz=110.0, duration_s=0.22, volume=0.28, sample_rate=sample_rate, fade_out_s=0.10)
+            exp_s_b = _sine_pcm16(freq_hz=220.0, duration_s=0.14, volume=0.16, sample_rate=sample_rate, fade_out_s=0.08)
+            explosion_small = pygame.mixer.Sound(buffer=_mix_pcm16([exp_s_a, exp_s_b], volume=0.80))
+
+            exp_b_a = _sine_pcm16(freq_hz=55.0, duration_s=0.42, volume=0.38, sample_rate=sample_rate, fade_out_s=0.22)
+            exp_b_b = _sine_pcm16(freq_hz=110.0, duration_s=0.26, volume=0.22, sample_rate=sample_rate, fade_out_s=0.16)
+            explosion_big = pygame.mixer.Sound(buffer=_mix_pcm16([exp_b_a, exp_b_b], volume=0.80))
+
+            # Backward compatible alias.
+            explosion = explosion_big
+
+            door_o = _sine_pcm16(freq_hz=392.0, duration_s=0.06, volume=0.22, sample_rate=sample_rate)
+            door_c = _sine_pcm16(freq_hz=294.0, duration_s=0.06, volume=0.22, sample_rate=sample_rate)
+            doors_open = pygame.mixer.Sound(buffer=door_o)
+            doors_close = pygame.mixer.Sound(buffer=door_c)
+
+            b1 = _sine_pcm16(freq_hz=660.0, duration_s=0.05, volume=0.18, sample_rate=sample_rate)
+            b2 = _sine_pcm16(freq_hz=880.0, duration_s=0.05, volume=0.14, sample_rate=sample_rate)
+            board = pygame.mixer.Sound(buffer=_mix_pcm16([b1, b2], volume=0.90))
 
             r1 = _sine_pcm16(freq_hz=784.0, duration_s=0.08, volume=0.25, sample_rate=sample_rate)
             r2 = _sine_pcm16(freq_hz=988.0, duration_s=0.10, volume=0.22, sample_rate=sample_rate)
@@ -108,12 +132,28 @@ class AudioBank:
             shoot.set_volume(0.35)
             bomb.set_volume(0.45)
             explosion.set_volume(0.55)
+            explosion_small.set_volume(0.45)
+            explosion_big.set_volume(0.60)
+            doors_open.set_volume(0.25)
+            doors_close.set_volume(0.25)
+            board.set_volume(0.22)
             rescue.set_volume(0.40)
             crash.set_volume(0.55)
 
-            return AudioBank(shoot=shoot, bomb=bomb, explosion=explosion, rescue=rescue, crash=crash)
+            return AudioBank(
+                shoot=shoot,
+                bomb=bomb,
+                explosion=explosion,
+                explosion_small=explosion_small,
+                explosion_big=explosion_big,
+                doors_open=doors_open,
+                doors_close=doors_close,
+                board=board,
+                rescue=rescue,
+                crash=crash,
+            )
         except Exception:
-            return AudioBank(None, None, None, None, None)
+            return AudioBank(None, None, None, None, None, None, None, None, None, None)
 
     def play_shoot(self) -> None:
         if self.shoot is not None:
@@ -126,6 +166,26 @@ class AudioBank:
     def play_explosion(self) -> None:
         if self.explosion is not None:
             self.explosion.play()
+
+    def play_explosion_small(self) -> None:
+        if self.explosion_small is not None:
+            self.explosion_small.play()
+
+    def play_explosion_big(self) -> None:
+        if self.explosion_big is not None:
+            self.explosion_big.play()
+
+    def play_doors_open(self) -> None:
+        if self.doors_open is not None:
+            self.doors_open.play()
+
+    def play_doors_close(self) -> None:
+        if self.doors_close is not None:
+            self.doors_close.play()
+
+    def play_board(self) -> None:
+        if self.board is not None:
+            self.board.play()
 
     def play_rescue(self) -> None:
         if self.rescue is not None:

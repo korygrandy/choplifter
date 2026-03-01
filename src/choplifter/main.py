@@ -92,6 +92,10 @@ def run() -> None:
         helicopter.toggle_doors()
         after = helicopter.doors_open
         if before != after:
+            if after:
+                audio.play_doors_open()
+            else:
+                audio.play_doors_close()
             logger.info(
                 "DOORS: %s at_base=%s boarded=%d",
                 "OPEN" if after else "closed",
@@ -124,12 +128,14 @@ def run() -> None:
     prev_crashes = mission.crashes
     prev_lost_in_transit = mission.stats.lost_in_transit
     prev_saved = mission.stats.saved
+    prev_boarded = boarded_count(mission)
     prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
+    prev_tanks_destroyed = mission.stats.tanks_destroyed
 
     def reset_game() -> None:
         nonlocal helicopter, mission, accumulator
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
-        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_open_compounds
+        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed
 
         mission = MissionState.create_default(heli_settings)
         helicopter = Helicopter.spawn(heli_settings, start_x=mission.base.pos.x + mission.base.width * 0.5)
@@ -139,7 +145,9 @@ def run() -> None:
         prev_crashes = mission.crashes
         prev_lost_in_transit = mission.stats.lost_in_transit
         prev_saved = mission.stats.saved
+        prev_boarded = boarded_count(mission)
         prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
+        prev_tanks_destroyed = mission.stats.tanks_destroyed
         prev_btn_a_down = False
         prev_btn_b_down = False
         prev_btn_x_down = False
@@ -284,10 +292,21 @@ def run() -> None:
                 audio.play_rescue()
                 prev_saved = mission.stats.saved
 
+            boarded_now = boarded_count(mission)
+            boarded_delta = boarded_now - prev_boarded
+            if boarded_delta > 0:
+                audio.play_board()
+                prev_boarded = boarded_now
+
             open_compounds = sum(1 for c in mission.compounds if c.is_open)
             if open_compounds > prev_open_compounds:
-                audio.play_explosion()
+                audio.play_explosion_small()
                 prev_open_compounds = open_compounds
+
+            tank_delta = mission.stats.tanks_destroyed - prev_tanks_destroyed
+            if tank_delta > 0:
+                audio.play_explosion_big()
+                prev_tanks_destroyed = mission.stats.tanks_destroyed
 
             if mission.crashes != prev_crashes:
                 if mission.ended:
