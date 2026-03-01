@@ -24,6 +24,7 @@ class Helicopter:
     grounded: bool
     damage: float
     fuel: float
+    last_landing_vy: float
 
     @staticmethod
     def spawn(settings: HelicopterSettings) -> "Helicopter":
@@ -36,6 +37,7 @@ class Helicopter:
             grounded=False,
             damage=0.0,
             fuel=100.0,
+            last_landing_vy=0.0,
         )
 
     def toggle_doors(self) -> None:
@@ -74,6 +76,7 @@ def update_helicopter(
     dt: float,
     physics: PhysicsSettings,
     heli: HelicopterSettings,
+    world_width: float = 1280.0,
 ) -> None:
     # Tilt control.
     tilt_target = 0.0
@@ -132,6 +135,7 @@ def update_helicopter(
     if helicopter.pos.y >= ground_contact_y:
         if not helicopter.grounded:
             # Landing event.
+            helicopter.last_landing_vy = helicopter.vel.y
             if abs(helicopter.vel.y) > physics.safe_landing_vy:
                 helicopter.damage = min(100.0, helicopter.damage + 12.5)
             helicopter.doors_open = False
@@ -142,5 +146,5 @@ def update_helicopter(
         helicopter.grounded = False
 
     # Keep within screen bounds for prototype.
-    helicopter.pos.x = clamp(helicopter.pos.x, 0.0, 1280.0)
+    helicopter.pos.x = clamp(helicopter.pos.x, 0.0, world_width)
     helicopter.pos.y = clamp(helicopter.pos.y, 0.0, heli.ground_y - heli.rotor_clearance)

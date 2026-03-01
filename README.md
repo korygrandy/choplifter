@@ -61,6 +61,7 @@ This repo now contains a small Python/Pygame prototype scaffold (Milestone A).
 - Brake/hover assist: Shift
 - Cycle facing: Tab
 - Reverse flip: R
+- Fire: Space (side-facing = bullet, forward-facing = bomb)
 - Toggle doors (only when grounded): E
 - Toggle debug overlay: F1
 

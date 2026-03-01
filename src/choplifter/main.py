@@ -4,7 +4,8 @@ import pygame
 
 from .debug_overlay import DebugOverlay
 from .helicopter import Helicopter, HelicopterInput, update_helicopter
-from .rendering import draw_ground, draw_helicopter
+from .mission import MissionState, hostage_crush_check, spawn_projectile_from_helicopter, update_mission
+from .rendering import draw_ground, draw_helicopter, draw_mission
 from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, PhysicsSettings, WindowSettings
 
 
@@ -29,6 +30,7 @@ def run() -> None:
     overlay = DebugOverlay()
 
     helicopter = Helicopter.spawn(heli_settings)
+    mission = MissionState.create_default(heli_settings)
 
     running = True
     accumulator = 0.0
@@ -51,6 +53,8 @@ def run() -> None:
                     helicopter.reverse_flip()
                 elif event.key == pygame.K_e:
                     helicopter.toggle_doors()
+                elif event.key == pygame.K_SPACE:
+                    spawn_projectile_from_helicopter(mission, helicopter)
 
         keys = pygame.key.get_pressed()
         helicopter_input = HelicopterInput(
@@ -67,16 +71,21 @@ def run() -> None:
             accumulator = 0.25
 
         while accumulator >= tick.dt:
-            update_helicopter(helicopter, helicopter_input, tick.dt, physics, heli_settings)
+            was_grounded = helicopter.grounded
+            update_helicopter(helicopter, helicopter_input, tick.dt, physics, heli_settings, world_width=float(window.width))
+            if not was_grounded and helicopter.grounded:
+                hostage_crush_check(mission, helicopter, helicopter.last_landing_vy)
+            update_mission(mission, helicopter, tick.dt, heli_settings)
             accumulator -= tick.dt
 
         # Render.
         screen.fill((135, 190, 235))
         draw_ground(screen, heli_settings.ground_y)
+        draw_mission(screen, mission)
         draw_helicopter(screen, helicopter)
 
         if debug.show_overlay:
-            overlay.draw(screen, helicopter, clock.get_fps())
+            overlay.draw(screen, helicopter, mission, clock.get_fps())
 
         pygame.display.flip()
 

@@ -4,6 +4,7 @@ import math
 import pygame
 
 from .helicopter import Facing, Helicopter
+from .mission import HostageState, MissionState, ProjectileKind
 
 
 def draw_ground(screen: pygame.Surface, ground_y: float) -> None:
@@ -41,3 +42,72 @@ def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter) -> None:
     dx = math.cos(angle_rad) * (rotor_len / 2)
     dy = math.sin(angle_rad) * (rotor_len / 2)
     pygame.draw.line(screen, (30, 30, 30), (cx - dx, cy - dy), (cx + dx, cy + dy), 4)
+
+
+def draw_mission(screen: pygame.Surface, mission: MissionState) -> None:
+    _draw_base(screen, mission)
+    _draw_compounds(screen, mission)
+    _draw_hostages(screen, mission)
+    _draw_projectiles(screen, mission)
+
+    if mission.ended and mission.end_text:
+        _draw_end(screen, mission.end_text)
+
+
+def _draw_base(screen: pygame.Surface, mission: MissionState) -> None:
+    r = pygame.Rect(int(mission.base.pos.x), int(mission.base.pos.y), int(mission.base.width), int(mission.base.height))
+    pygame.draw.rect(screen, (60, 60, 75), r, border_radius=8)
+    pygame.draw.rect(screen, (210, 210, 210), r, 2, border_radius=8)
+
+    # Simple flag pole marker.
+    pole_x = r.right - 26
+    pygame.draw.line(screen, (230, 230, 230), (pole_x, r.top + 10), (pole_x, r.bottom - 10), 3)
+    pygame.draw.polygon(
+        screen,
+        (200, 40, 40),
+        [(pole_x, r.top + 14), (pole_x + 22, r.top + 22), (pole_x, r.top + 30)],
+    )
+
+
+def _draw_compounds(screen: pygame.Surface, mission: MissionState) -> None:
+    for c in mission.compounds:
+        r = pygame.Rect(int(c.pos.x), int(c.pos.y), int(c.width), int(c.height))
+        color = (160, 120, 70) if not c.is_open else (120, 95, 60)
+        pygame.draw.rect(screen, color, r)
+        pygame.draw.rect(screen, (30, 30, 30), r, 2)
+        if c.is_open:
+            gap = pygame.Rect(r.centerx - 10, r.bottom - 14, 20, 14)
+            pygame.draw.rect(screen, (35, 35, 35), gap)
+
+
+def _draw_hostages(screen: pygame.Surface, mission: MissionState) -> None:
+    for h in mission.hostages:
+        if h.state in (HostageState.IDLE, HostageState.BOARDED, HostageState.SAVED):
+            continue
+
+        if h.state is HostageState.KIA:
+            pygame.draw.circle(screen, (120, 10, 10), (int(h.pos.x), int(h.pos.y)), 4)
+            continue
+
+        pygame.draw.circle(screen, (245, 235, 210), (int(h.pos.x), int(h.pos.y)), 5)
+        pygame.draw.circle(screen, (25, 25, 25), (int(h.pos.x), int(h.pos.y)), 5, 1)
+
+
+def _draw_projectiles(screen: pygame.Surface, mission: MissionState) -> None:
+    for p in mission.projectiles:
+        if p.kind is ProjectileKind.BULLET:
+            pygame.draw.circle(screen, (240, 240, 240), (int(p.pos.x), int(p.pos.y)), 2)
+        else:
+            pygame.draw.circle(screen, (35, 35, 35), (int(p.pos.x), int(p.pos.y)), 4)
+
+
+def _draw_end(screen: pygame.Surface, text: str) -> None:
+    panel = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
+    panel.fill((0, 0, 0, 120))
+    screen.blit(panel, (0, 0))
+
+    pygame.font.init()
+    font = pygame.font.SysFont("consolas", 72, bold=True)
+    surf = font.render(text, True, (255, 255, 255))
+    rect = surf.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2))
+    screen.blit(surf, rect)

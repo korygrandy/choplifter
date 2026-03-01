@@ -3,6 +3,7 @@ from __future__ import annotations
 import pygame
 
 from .helicopter import Helicopter
+from .mission import MissionState, boarded_count
 
 
 class DebugOverlay:
@@ -10,7 +11,12 @@ class DebugOverlay:
         pygame.font.init()
         self._font = pygame.font.SysFont("consolas", 18)
 
-    def draw(self, screen: pygame.Surface, helicopter: Helicopter, fps: float) -> None:
+    def draw(self, screen: pygame.Surface, helicopter: Helicopter, mission: MissionState, fps: float) -> None:
+        boarded = boarded_count(mission)
+        compound_states = " ".join(
+            f"{max(0, int(c.health))}{'O' if c.is_open else 'S'}" for c in mission.compounds
+        )
+
         lines = [
             f"FPS: {fps:0.1f}",
             f"pos: ({helicopter.pos.x:0.1f}, {helicopter.pos.y:0.1f})",
@@ -21,6 +27,10 @@ class DebugOverlay:
             f"doors: {'OPEN' if helicopter.doors_open else 'closed'}",
             f"damage: {helicopter.damage:0.1f}",
             f"fuel: {helicopter.fuel:0.1f}",
+            f"boarded: {boarded}/16",
+            f"saved: {mission.stats.saved}",
+            f"KIA(player): {mission.stats.kia_by_player}",
+            f"compounds: {compound_states}",
         ]
 
         x, y = 12, 10
