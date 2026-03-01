@@ -3,6 +3,7 @@ from __future__ import annotations
 import pygame
 
 from .audio import AudioBank
+from .controls import load_controls, matches_key, pressed
 from .debug_overlay import DebugOverlay
 from .game_logging import create_session_logger
 from .helicopter import Facing, Helicopter, HelicopterInput, update_helicopter
@@ -27,6 +28,8 @@ def run() -> None:
 
     pygame.init()
     audio = AudioBank.try_create()
+
+    controls = load_controls(logger=logger)
 
     logger = create_session_logger()
     logger.info("Controls: SPACE fire | E doors (grounded) | TAB facing | R reverse | F1 debug")
@@ -174,19 +177,19 @@ def run() -> None:
                 prev_btn_x_down = False
                 prev_btn_y_down = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
+                if matches_key(event.key, controls.quit):
                     running = False
-                elif event.key == pygame.K_RETURN and mission.ended:
+                elif matches_key(event.key, controls.restart) and mission.ended:
                     reset_game()
-                elif event.key == pygame.K_F1:
+                elif matches_key(event.key, controls.toggle_debug):
                     debug = DebugSettings(show_overlay=not debug.show_overlay)
-                elif event.key == pygame.K_TAB:
+                elif matches_key(event.key, controls.cycle_facing):
                     helicopter.cycle_facing()
-                elif event.key == pygame.K_r:
+                elif matches_key(event.key, controls.reverse_flip):
                     helicopter.reverse_flip()
-                elif event.key == pygame.K_e:
+                elif matches_key(event.key, controls.doors):
                     toggle_doors_with_logging()
-                elif event.key == pygame.K_SPACE:
+                elif matches_key(event.key, controls.fire):
                     spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
                     if helicopter.facing is Facing.FORWARD:
                         audio.play_bomb()
@@ -194,11 +197,11 @@ def run() -> None:
                         audio.play_shoot()
 
         keys = pygame.key.get_pressed()
-        kb_tilt_left = keys[pygame.K_LEFT] or keys[pygame.K_a]
-        kb_tilt_right = keys[pygame.K_RIGHT] or keys[pygame.K_d]
-        kb_lift_up = keys[pygame.K_UP] or keys[pygame.K_w]
-        kb_lift_down = keys[pygame.K_DOWN] or keys[pygame.K_s]
-        kb_brake = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+        kb_tilt_left = pressed(keys, controls.tilt_left)
+        kb_tilt_right = pressed(keys, controls.tilt_right)
+        kb_lift_up = pressed(keys, controls.lift_up)
+        kb_lift_down = pressed(keys, controls.lift_down)
+        kb_brake = pressed(keys, controls.brake)
 
         gp_tilt_left = False
         gp_tilt_right = False

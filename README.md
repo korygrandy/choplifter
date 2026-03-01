@@ -67,6 +67,11 @@ Milestone B adds a basic rescue loop (compounds → hostages → boarding → un
 - Toggle doors (only when grounded): E
 - Toggle debug overlay: F1
 
+### Optional: key rebinding (no UI)
+
+- Copy `controls.example.json` to `controls.json` in the repo root and edit key names.
+- If `controls.json` is missing or invalid, defaults are used.
+
 ### Gamepad (prototype)
 
 If you connect an Xbox-style controller, the game will show an on-screen toast when it connects/disconnects.
