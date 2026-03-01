@@ -131,8 +131,10 @@ def run() -> None:
     ]
     selected_chopper_index = 0
     selected_chopper_asset = chopper_choices[selected_chopper_index][0]
-    mode: str = "select_chopper"
+    mode: str = "select_chopper"  # select_chopper | playing | paused
     prev_menu_dir = 0
+    prev_menu_vert = 0
+    pause_focus: str = "choppers"  # choppers | restart
 
     mission = MissionState.create_default(heli_settings)
     helicopter = Helicopter.spawn(
@@ -207,6 +209,11 @@ def run() -> None:
             elif event.type == pygame.KEYDOWN:
                 if matches_key(event.key, controls.quit):
                     running = False
+                elif mode == "playing" and event.key == pygame.K_ESCAPE:
+                    mode = "paused"
+                    pause_focus = "choppers"
+                elif mode == "paused" and event.key == pygame.K_ESCAPE:
+                    mode = "playing"
                 elif mode == "select_chopper":
                     if event.key in (pygame.K_LEFT, pygame.K_a) or matches_key(event.key, controls.tilt_left):
                         selected_chopper_index = (selected_chopper_index - 1) % len(chopper_choices)
@@ -218,6 +225,23 @@ def run() -> None:
                         mode = "playing"
                         set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
                         reset_game()
+                elif mode == "paused":
+                    if event.key in (pygame.K_UP, pygame.K_w):
+                        pause_focus = "choppers"
+                    elif event.key in (pygame.K_DOWN, pygame.K_s):
+                        pause_focus = "restart"
+                    elif event.key in (pygame.K_LEFT, pygame.K_a) and pause_focus == "choppers":
+                        selected_chopper_index = (selected_chopper_index - 1) % len(chopper_choices)
+                        selected_chopper_asset = chopper_choices[selected_chopper_index][0]
+                        helicopter.skin_asset = selected_chopper_asset
+                    elif event.key in (pygame.K_RIGHT, pygame.K_d) and pause_focus == "choppers":
+                        selected_chopper_index = (selected_chopper_index + 1) % len(chopper_choices)
+                        selected_chopper_asset = chopper_choices[selected_chopper_index][0]
+                        helicopter.skin_asset = selected_chopper_asset
+                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                        if pause_focus == "restart":
+                            reset_game()
+                        mode = "playing"
                 elif matches_key(event.key, controls.restart) and mission.ended:
                     reset_game()
                 elif matches_key(event.key, controls.toggle_debug):
@@ -255,6 +279,7 @@ def run() -> None:
             gp_tilt_right = x_axis >= deadzone
 
             menu_dir = -1 if gp_tilt_left else (1 if gp_tilt_right else 0)
+            menu_vert = 0
 
             if active_js.get_numhats() > 0:
                 hat_x, hat_y = active_js.get_hat(0)
@@ -266,6 +291,17 @@ def run() -> None:
                     menu_dir = -1
                 elif hat_x >= 1:
                     menu_dir = 1
+                if hat_y >= 1:
+                    menu_vert = -1
+                elif hat_y <= -1:
+                    menu_vert = 1
+            else:
+                # Fallback: use left stick Y for menu up/down.
+                y_axis = axis_value(active_js, 1)
+                if y_axis <= -deadzone:
+                    menu_vert = -1
+                elif y_axis >= deadzone:
+                    menu_vert = 1
 
             axes = active_js.get_numaxes()
             if axes >= 6:
@@ -292,7 +328,32 @@ def run() -> None:
                     mode = "playing"
                     set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
                     reset_game()
+            elif mode == "paused":
+                # Start/B resumes.
+                if (start_down and not prev_btn_start_down) or (b_down and not prev_btn_b_down):
+                    mode = "playing"
+
+                # Up/Down selects section.
+                if menu_vert != 0 and menu_vert != prev_menu_vert:
+                    pause_focus = "choppers" if menu_vert < 0 else "restart"
+
+                # Left/Right changes chopper when focused.
+                if pause_focus == "choppers" and menu_dir != 0 and menu_dir != prev_menu_dir:
+                    selected_chopper_index = (selected_chopper_index + menu_dir) % len(chopper_choices)
+                    selected_chopper_asset = chopper_choices[selected_chopper_index][0]
+                    helicopter.skin_asset = selected_chopper_asset
+
+                # A activates current focus.
+                if a_down and not prev_btn_a_down:
+                    if pause_focus == "restart":
+                        reset_game()
+                    mode = "playing"
             else:
+                # Start toggles pause while playing.
+                if start_down and not prev_btn_start_down and not mission.ended:
+                    mode = "paused"
+                    pause_focus = "choppers"
+
                 if start_down and not prev_btn_start_down and mission.ended:
                     reset_game()
 
@@ -315,6 +376,7 @@ def run() -> None:
             prev_btn_y_down = y_down
             prev_btn_start_down = start_down
             prev_menu_dir = menu_dir
+            prev_menu_vert = menu_vert
 
         helicopter_input = HelicopterInput(
             tilt_left=(kb_tilt_left or gp_tilt_left) if mode == "playing" else False,
@@ -400,12 +462,22 @@ def run() -> None:
         draw_helicopter(screen, helicopter, camera_x=camera_x)
         if mode == "playing":
             draw_hud(screen, mission, helicopter)
-        else:
+        elif mode == "select_chopper":
             draw_chopper_select_overlay(screen, chopper_choices, selected_chopper_index)
+        else:
+            draw_chopper_select_overlay(
+                screen,
+                chopper_choices,
+                selected_chopper_index,
+                title="Paused",
+                hint="Up/Down choose section • Left/Right choose chopper • Start/B resume • A select",
+                show_restart=True,
+                restart_selected=(pause_focus == "restart"),
+            )
         if toast_message:
             draw_toast(screen, toast_message)
 
-        if debug.show_overlay:
+        if debug.show_overlay and mode == "playing":
             overlay.draw(screen, helicopter, mission, clock.get_fps())
 
         pygame.display.flip()

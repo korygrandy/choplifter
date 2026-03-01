@@ -175,6 +175,11 @@ def draw_chopper_select_overlay(
     screen: pygame.Surface,
     choices: list[tuple[str, str]],
     selected_index: int,
+    *,
+    title: str = "Select a Chopper",
+    hint: str = "Left/Right (or D-pad) to choose • Enter/A to start",
+    show_restart: bool = False,
+    restart_selected: bool = False,
 ) -> None:
     """Draw a simple chopper selection overlay.
 
@@ -195,12 +200,12 @@ def draw_chopper_select_overlay(
     dim.fill((0, 0, 0, 160))
     screen.blit(dim, (0, 0))
 
-    title = title_font.render("Select a Chopper", True, (240, 240, 240))
-    screen.blit(title, (w // 2 - title.get_width() // 2, 44))
+    title_surf = title_font.render(title, True, (240, 240, 240))
+    screen.blit(title_surf, (w // 2 - title_surf.get_width() // 2, 44))
 
     hint_font = pygame.font.SysFont("consolas", 18)
-    hint = hint_font.render("Left/Right (or D-pad) to choose • Enter/A to start", True, (220, 220, 220))
-    screen.blit(hint, (w // 2 - hint.get_width() // 2, 80))
+    hint_surf = hint_font.render(hint, True, (220, 220, 220))
+    screen.blit(hint_surf, (w // 2 - hint_surf.get_width() // 2, 80))
 
     n = max(1, len(choices))
     selected_index = max(0, min(int(selected_index), n - 1))
@@ -244,6 +249,21 @@ def draw_chopper_select_overlay(
         lx = rect.centerx - label.get_width() // 2
         ly = rect.bottom - label.get_height() - 14
         screen.blit(label, (lx, ly))
+
+    if show_restart:
+        btn_w = min(320, w - 80)
+        btn_h = 52
+        btn_x = w // 2 - btn_w // 2
+        btn_y = box_top + box_h + 22
+        btn = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+        panel = pygame.Surface((btn.width, btn.height), pygame.SRCALPHA)
+        panel.fill((20, 20, 20, 200) if restart_selected else (10, 10, 10, 180))
+        screen.blit(panel, btn.topleft)
+        pygame.draw.rect(screen, (240, 240, 240) if restart_selected else (160, 160, 160), btn, 4 if restart_selected else 2)
+
+        text = hint_font.render("Restart Mission", True, (240, 240, 240) if restart_selected else (200, 200, 200))
+        screen.blit(text, (btn.centerx - text.get_width() // 2, btn.centery - text.get_height() // 2))
 
 
 def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0) -> None:
