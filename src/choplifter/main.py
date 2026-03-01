@@ -118,6 +118,7 @@ def run() -> None:
 
     mission = MissionState.create_default(heli_settings)
     helicopter = Helicopter.spawn(heli_settings, start_x=mission.base.pos.x + mission.base.width * 0.5)
+    helicopter.facing = Facing.LEFT
 
     prev_crashes = mission.crashes
     prev_lost_in_transit = mission.stats.lost_in_transit
@@ -131,6 +132,7 @@ def run() -> None:
 
         mission = MissionState.create_default(heli_settings)
         helicopter = Helicopter.spawn(heli_settings, start_x=mission.base.pos.x + mission.base.width * 0.5)
+        helicopter.facing = Facing.LEFT
         accumulator = 0.0
         sky_smoke.reset()
         prev_crashes = mission.crashes

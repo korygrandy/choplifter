@@ -992,7 +992,7 @@ def _handle_crash_and_respawn(
     helicopter.vel = Vec2(0.0, 0.0)
     helicopter.tilt_deg = 0.0
     helicopter.doors_open = False
-    helicopter.facing = Facing.RIGHT
+    helicopter.facing = Facing.LEFT
     helicopter.pos = Vec2(mission.base.pos.x + mission.base.width * 0.5, heli.ground_y - 120.0)
     mission.invuln_seconds = 2.0
 
