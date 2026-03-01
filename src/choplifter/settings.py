@@ -7,7 +7,7 @@ from dataclasses import dataclass
 class WindowSettings:
     width: int = 1280
     height: int = 720
-    title: str = "Choplifter Returns - Middleast Rescue"
+    title: str = "Choplifter Returns - Middl East Rescue"
     vsync: bool = True
 
 
