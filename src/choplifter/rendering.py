@@ -19,6 +19,8 @@ _CHOPPER1_ORIG: pygame.Surface | None = None
 _CHOPPER1_LOAD_FAILED: bool = False
 _CHOPPER1_SCALED: dict[int, pygame.Surface] = {}
 
+_BURN_SPRITE_CACHE: dict[tuple[str, int], pygame.Surface] = {}
+
 
 def draw_sky(screen: pygame.Surface, horizon_y: float) -> None:
     """Draws the mission sky background above the horizon line.
@@ -178,6 +180,7 @@ def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: flo
     _draw_compounds(screen, mission, camera_x=camera_x)
     _draw_hostages(screen, mission, camera_x=camera_x)
     _draw_enemies(screen, mission, camera_x=camera_x)
+    _draw_burning_particles(screen, mission, camera_x=camera_x)
     _draw_projectiles(screen, mission, camera_x=camera_x)
 
     if mission.ended and mission.end_text:
@@ -337,6 +340,56 @@ def _draw_enemies(screen: pygame.Surface, mission: MissionState, *, camera_x: fl
         elif e.kind is EnemyKind.AIR_MINE:
             pygame.draw.circle(screen, (200, 40, 40), (int(e.pos.x - camera_x), int(e.pos.y)), 9)
             pygame.draw.circle(screen, (25, 25, 25), (int(e.pos.x - camera_x), int(e.pos.y)), 9, 2)
+
+
+def _draw_burning_particles(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+    # Particles are in world-space; apply camera offset.
+    for p in getattr(mission, "burning").particles:
+        x = int(p.pos.x - camera_x)
+        y = int(p.pos.y)
+
+        t = p.age / max(0.001, p.ttl)
+        if p.kind == "ember":
+            alpha = int(220 * (1.0 - t))
+            radius = int(max(1.0, p.radius))
+            sprite = _get_burn_sprite("ember", radius)
+        else:
+            # Smoke: fades slower and expands a little.
+            alpha = int(160 * (1.0 - t) * (1.0 - t))
+            radius = int(max(1.0, p.radius * (1.0 + 0.35 * t)))
+            sprite = _get_burn_sprite("smoke", radius)
+
+        if alpha <= 0:
+            continue
+
+        sprite.set_alpha(alpha)
+        screen.blit(sprite, (x - sprite.get_width() // 2, y - sprite.get_height() // 2))
+
+
+def _get_burn_sprite(kind: str, radius: int) -> pygame.Surface:
+    radius = max(1, int(radius))
+    key = (kind, radius)
+    cached = _BURN_SPRITE_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    size = radius * 2 + 6
+    s = pygame.Surface((size, size), pygame.SRCALPHA)
+    cx = size // 2
+    cy = size // 2
+
+    if kind == "ember":
+        # Small hot spark with bright core.
+        pygame.draw.circle(s, (255, 210, 80, 220), (cx, cy), radius)
+        pygame.draw.circle(s, (255, 245, 220, 235), (cx, cy), max(1, radius // 2))
+    else:
+        # Soft smoke puff.
+        pygame.draw.circle(s, (55, 55, 55, 46), (cx, cy), radius)
+        pygame.draw.circle(s, (75, 75, 75, 62), (cx - max(1, radius // 5), cy), max(1, int(radius * 0.75)))
+        pygame.draw.circle(s, (35, 35, 35, 40), (cx + max(1, radius // 6), cy + max(1, radius // 8)), max(1, int(radius * 0.60)))
+
+    _BURN_SPRITE_CACHE[key] = s
+    return s
 
 
 def _draw_end(
