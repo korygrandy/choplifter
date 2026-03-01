@@ -21,8 +21,20 @@ _CHOPPER_SCALED: dict[tuple[str, int], pygame.Surface] = {}
 
 _BURN_SPRITE_CACHE: dict[tuple[str, int], pygame.Surface] = {}
 
+_SKY_FADE_PREV_ASSET: str | None = None
+_SKY_FADE_CUR_ASSET: str | None = None
+_SKY_FADE_T: float = 999.0
 
-def draw_sky(screen: pygame.Surface, horizon_y: float, *, bg_asset: str = "mission1-bg.jpg") -> None:
+
+def draw_sky(
+    screen: pygame.Surface,
+    horizon_y: float,
+    *,
+    bg_asset: str = "mission1-bg.jpg",
+    dt: float = 0.0,
+    enable_fade: bool = False,
+    fade_seconds: float = 0.35,
+) -> None:
     """Draws the mission sky background above the horizon line.
 
     Falls back to a solid sky color if the background image is missing/unloadable.
@@ -34,12 +46,58 @@ def draw_sky(screen: pygame.Surface, horizon_y: float, *, bg_asset: str = "missi
     if horizon_h <= 0:
         return
 
-    bg = _get_bg_scaled(bg_asset, width, horizon_h)
-    if bg is None:
-        screen.fill((135, 190, 235), pygame.Rect(0, 0, width, horizon_h))
+    global _SKY_FADE_PREV_ASSET, _SKY_FADE_CUR_ASSET, _SKY_FADE_T
+
+    bg_asset = bg_asset or "mission1-bg.jpg"
+
+    if not enable_fade:
+        _SKY_FADE_PREV_ASSET = None
+        _SKY_FADE_CUR_ASSET = bg_asset
+        _SKY_FADE_T = fade_seconds
+    else:
+        if _SKY_FADE_CUR_ASSET is None:
+            _SKY_FADE_CUR_ASSET = bg_asset
+            _SKY_FADE_T = fade_seconds
+        elif bg_asset != _SKY_FADE_CUR_ASSET:
+            _SKY_FADE_PREV_ASSET = _SKY_FADE_CUR_ASSET
+            _SKY_FADE_CUR_ASSET = bg_asset
+            _SKY_FADE_T = 0.0
+
+        if dt > 0.0:
+            _SKY_FADE_T = min(fade_seconds, _SKY_FADE_T + dt)
+
+    prev_asset = _SKY_FADE_PREV_ASSET
+    cur_asset = _SKY_FADE_CUR_ASSET or bg_asset
+
+    # If there's no fade in progress, render the current background directly.
+    if not enable_fade or prev_asset is None or fade_seconds <= 0.0 or _SKY_FADE_T >= fade_seconds:
+        bg = _get_bg_scaled(cur_asset, width, horizon_h)
+        if bg is None:
+            screen.fill((135, 190, 235), pygame.Rect(0, 0, width, horizon_h))
+        else:
+            screen.blit(bg, (0, 0))
         return
 
-    screen.blit(bg, (0, 0))
+    # Cross-fade from prev -> current.
+    t01 = max(0.0, min(1.0, _SKY_FADE_T / fade_seconds))
+    prev = _get_bg_scaled(prev_asset, width, horizon_h)
+    cur = _get_bg_scaled(cur_asset, width, horizon_h)
+
+    if prev is None:
+        screen.fill((135, 190, 235), pygame.Rect(0, 0, width, horizon_h))
+    else:
+        screen.blit(prev, (0, 0))
+
+    cur_alpha = int(255 * t01)
+    if cur is None:
+        overlay = pygame.Surface((width, horizon_h), pygame.SRCALPHA)
+        overlay.fill((135, 190, 235, cur_alpha))
+        screen.blit(overlay, (0, 0))
+    else:
+        old_alpha = cur.get_alpha()
+        cur.set_alpha(cur_alpha)
+        screen.blit(cur, (0, 0))
+        cur.set_alpha(old_alpha)
 
 
 def _resolve_bg_path(asset_filename: str) -> Path:
@@ -511,15 +569,23 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
 
 def _draw_hostages(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
     for h in mission.hostages:
-        if h.state in (HostageState.IDLE, HostageState.BOARDED, HostageState.SAVED):
+        if h.state in (HostageState.IDLE, HostageState.BOARDED):
             continue
 
         if h.state is HostageState.KIA:
             pygame.draw.circle(screen, (120, 10, 10), (int(h.pos.x - camera_x), int(h.pos.y)), 4)
             continue
 
-        pygame.draw.circle(screen, (245, 235, 210), (int(h.pos.x - camera_x), int(h.pos.y)), 5)
-        pygame.draw.circle(screen, (25, 25, 25), (int(h.pos.x - camera_x), int(h.pos.y)), 5, 1)
+        x = int(h.pos.x - camera_x)
+        y = int(h.pos.y)
+
+        # Simple person dot.
+        pygame.draw.circle(screen, (245, 235, 210), (x, y), 5)
+        pygame.draw.circle(screen, (25, 25, 25), (x, y), 5, 1)
+
+        # Tiny accent for EXITING so it's visually distinct.
+        if h.state is HostageState.EXITING:
+            pygame.draw.circle(screen, (255, 255, 255), (x, y - 1), 1)
 
 
 def _draw_projectiles(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:

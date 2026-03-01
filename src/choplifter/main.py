@@ -587,7 +587,13 @@ def run() -> None:
 
         # Render.
         # Background above the horizon.
-        draw_sky(screen, heli_settings.ground_y, bg_asset=getattr(mission, "bg_asset", "mission1-bg.jpg"))
+        draw_sky(
+            screen,
+            heli_settings.ground_y,
+            bg_asset=getattr(mission, "bg_asset", "mission1-bg.jpg"),
+            dt=frame_dt,
+            enable_fade=(mode == "select_mission"),
+        )
         if particles_enabled:
             sky_smoke.draw(screen, horizon_y=int(heli_settings.ground_y))
         draw_ground(screen, heli_settings.ground_y)

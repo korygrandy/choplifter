@@ -17,8 +17,9 @@ class HostageState(Enum):
     MOVING_TO_LZ = 2
     WAITING = 3
     BOARDED = 4
-    SAVED = 5
-    KIA = 6
+    EXITING = 5
+    SAVED = 6
+    KIA = 7
 
 
 @dataclass
@@ -26,6 +27,7 @@ class Hostage:
     state: HostageState
     pos: Vec2
     health: float = 100.0
+    saved_slot: int = -1
 
 
 @dataclass
@@ -198,6 +200,8 @@ class MissionState:
     invuln_seconds: float = 0.0
     jet_spawn_seconds: float = 4.0
     mine_spawn_seconds: float = 24.0
+    unload_release_seconds: float = 0.0
+    next_saved_slot: int = 0
     _sentiment_last_saved: int = 0
     _sentiment_last_kia_player: int = 0
     _sentiment_last_kia_enemy: int = 0
@@ -413,7 +417,7 @@ def boarded_count(mission: MissionState) -> int:
 
 
 def on_foot(hostage: Hostage) -> bool:
-    return hostage.state in (HostageState.PANIC, HostageState.MOVING_TO_LZ, HostageState.WAITING)
+    return hostage.state in (HostageState.PANIC, HostageState.MOVING_TO_LZ, HostageState.WAITING, HostageState.EXITING)
 
 
 def spawn_projectile_from_helicopter(mission: MissionState, helicopter: Helicopter) -> None:
@@ -485,7 +489,7 @@ def update_mission(
     _update_projectiles(mission, dt, heli, logger, helicopter)
     _update_compounds_and_release(mission, heli, logger)
     _update_hostages(mission, helicopter, dt, heli)
-    _handle_unload(mission, helicopter, heli)
+    _handle_unload(mission, helicopter, heli, dt)
 
     _handle_crash_and_respawn(mission, helicopter, heli, logger)
     if mission.ended:
@@ -679,7 +683,46 @@ def _update_hostages(mission: MissionState, helicopter: Helicopter, dt: float, h
     # Hostage movement speed.
     speed = 42.0
 
+    def saved_slot_pos(slot: int) -> Vec2:
+        # Pack saved hostages inside the base zone.
+        slot = max(0, int(slot))
+        padding_x = 14.0
+        padding_y = 16.0
+        spacing_x = 14.0
+        spacing_y = 14.0
+
+        usable_w = max(1.0, mission.base.width - padding_x * 2.0)
+        cols = max(1, int(usable_w // spacing_x))
+        col = slot % cols
+        row = slot // cols
+
+        x = mission.base.pos.x + padding_x + col * spacing_x
+        floor_y = heli.ground_y - 6.0
+        y = max(mission.base.pos.y + padding_y, floor_y - row * spacing_y)
+        return Vec2(x, y)
+
     for h in mission.hostages:
+        if h.state is HostageState.SAVED:
+            if h.saved_slot >= 0:
+                h.pos = saved_slot_pos(h.saved_slot)
+            continue
+
+        if h.state is HostageState.EXITING:
+            if h.saved_slot < 0:
+                h.saved_slot = mission.next_saved_slot
+                mission.next_saved_slot += 1
+            target = saved_slot_pos(h.saved_slot)
+
+            h.pos.y = heli.ground_y - 6.0
+            direction = -1.0 if h.pos.x > target.x else 1.0
+            h.pos.x += direction * 62.0 * dt
+
+            if abs(h.pos.x - target.x) <= 2.0:
+                h.pos = target
+                h.state = HostageState.SAVED
+                mission.stats.saved += 1
+            continue
+
         if h.state is HostageState.PANIC:
             h.state = HostageState.WAITING
 
@@ -709,18 +752,37 @@ def _update_hostages(mission: MissionState, helicopter: Helicopter, dt: float, h
                     h.state = HostageState.WAITING
 
 
-def _handle_unload(mission: MissionState, helicopter: Helicopter, heli: HelicopterSettings) -> None:
+def _handle_unload(mission: MissionState, helicopter: Helicopter, heli: HelicopterSettings, dt: float) -> None:
     # Unload rule: must be grounded at base and doors open.
     if not helicopter.grounded or not helicopter.doors_open:
+        mission.unload_release_seconds = 0.0
         return
 
     if not mission.base.contains_point(helicopter.pos):
+        mission.unload_release_seconds = 0.0
         return
 
-    for h in mission.hostages:
-        if h.state is HostageState.BOARDED:
-            h.state = HostageState.SAVED
-            mission.stats.saved += 1
+    mission.unload_release_seconds = max(0.0, mission.unload_release_seconds - dt)
+    if mission.unload_release_seconds > 0.0:
+        return
+
+    # Release one passenger at a time so the player can see them exit.
+    boarded = next((h for h in mission.hostages if h.state is HostageState.BOARDED), None)
+    if boarded is None:
+        return
+
+    door_offset_x = 0.0
+    if helicopter.facing is Facing.LEFT:
+        door_offset_x = -18.0
+    elif helicopter.facing is Facing.RIGHT:
+        door_offset_x = 18.0
+
+    boarded.state = HostageState.EXITING
+    boarded.saved_slot = mission.next_saved_slot
+    mission.next_saved_slot += 1
+    boarded.pos = Vec2(helicopter.pos.x + door_offset_x, heli.ground_y - 6.0)
+
+    mission.unload_release_seconds = 0.22
 
 
 def hostage_crush_check(mission: MissionState, helicopter: Helicopter, last_landing_vy: float) -> None:
