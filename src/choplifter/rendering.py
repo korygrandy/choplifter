@@ -82,7 +82,8 @@ def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x:
     sprite = _get_chopper1_scaled(width_px=120)
     if sprite is not None:
         s = sprite
-        if helicopter.facing is Facing.LEFT:
+        # The base sprite is authored facing LEFT; flip for RIGHT-facing.
+        if helicopter.facing is Facing.RIGHT:
             s = pygame.transform.flip(s, True, False)
 
         rotated = pygame.transform.rotate(s, -helicopter.tilt_deg)
