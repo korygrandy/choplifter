@@ -15,6 +15,10 @@ _MISSION1_BG_ORIG: pygame.Surface | None = None
 _MISSION1_BG_LOAD_FAILED: bool = False
 _MISSION1_BG_SCALED: dict[tuple[int, int], pygame.Surface] = {}
 
+_CHOPPER1_ORIG: pygame.Surface | None = None
+_CHOPPER1_LOAD_FAILED: bool = False
+_CHOPPER1_SCALED: dict[int, pygame.Surface] = {}
+
 
 def draw_sky(screen: pygame.Surface, horizon_y: float) -> None:
     """Draws the mission sky background above the horizon line.
@@ -72,16 +76,26 @@ def draw_ground(screen: pygame.Surface, ground_y: float) -> None:
 
 
 def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x: float = 0.0) -> None:
-    # Minimal placeholder: a rotated body + rotor line.
-    body_w, body_h = 70, 22
     x = int(helicopter.pos.x - camera_x)
     y = int(helicopter.pos.y)
 
+    sprite = _get_chopper1_scaled(width_px=120)
+    if sprite is not None:
+        s = sprite
+        if helicopter.facing is Facing.LEFT:
+            s = pygame.transform.flip(s, True, False)
+
+        rotated = pygame.transform.rotate(s, -helicopter.tilt_deg)
+        rect = rotated.get_rect(center=(x, y))
+        screen.blit(rotated, rect)
+        return
+
+    # Fallback: minimal placeholder (kept for robustness if asset missing).
+    body_w, body_h = 70, 22
     body = pygame.Surface((body_w, body_h), pygame.SRCALPHA)
     body.fill((0, 0, 0, 0))
     pygame.draw.rect(body, (60, 190, 80), pygame.Rect(0, 0, body_w, body_h), border_radius=6)
 
-    # Nose marker depending on facing.
     if helicopter.facing is Facing.LEFT:
         pygame.draw.circle(body, (220, 220, 220), (8, body_h // 2), 4)
     elif helicopter.facing is Facing.RIGHT:
@@ -93,7 +107,6 @@ def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x:
     rect = rotated.get_rect(center=(x, y))
     screen.blit(rotated, rect)
 
-    # Rotor: draw a line above the body, rotated to match.
     rotor_len = 90
     rotor_offset = 18
     angle_rad = math.radians(-helicopter.tilt_deg)
@@ -101,6 +114,62 @@ def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x:
     dx = math.cos(angle_rad) * (rotor_len / 2)
     dy = math.sin(angle_rad) * (rotor_len / 2)
     pygame.draw.line(screen, (30, 30, 30), (cx - dx, cy - dy), (cx + dx, cy + dy), 4)
+
+
+def _get_chopper1_scaled(*, width_px: int) -> pygame.Surface | None:
+    global _CHOPPER1_ORIG, _CHOPPER1_LOAD_FAILED
+
+    if _CHOPPER1_LOAD_FAILED:
+        return None
+
+    if _CHOPPER1_ORIG is None:
+        module_dir = Path(__file__).resolve().parent
+        candidate_paths = (
+            module_dir / "assets" / "chopper-one.png",
+            module_dir / "assets" / "chopper-one.jpg",
+        )
+        path = next((p for p in candidate_paths if p.exists()), candidate_paths[0])
+        try:
+            loaded = pygame.image.load(str(path))
+            if pygame.display.get_surface() is not None:
+                loaded = loaded.convert_alpha()
+            _CHOPPER1_ORIG = loaded
+
+            # If the sprite has no transparency (common when saved as JPG),
+            # treat the top-left pixel as a background key color.
+            # This keeps the game playable even if the asset wasn't exported with alpha.
+            w = _CHOPPER1_ORIG.get_width()
+            h = _CHOPPER1_ORIG.get_height()
+            if w > 0 and h > 0:
+                corners = ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1))
+                if all(_CHOPPER1_ORIG.get_at(p).a == 255 for p in corners):
+                    key = _CHOPPER1_ORIG.get_at((0, 0))
+                    _CHOPPER1_ORIG.set_colorkey((key.r, key.g, key.b), pygame.RLEACCEL)
+        except Exception:
+            _CHOPPER1_LOAD_FAILED = True
+            return None
+
+    width_px = max(1, int(width_px))
+    cached = _CHOPPER1_SCALED.get(width_px)
+    if cached is not None:
+        return cached
+
+    ow, oh = _CHOPPER1_ORIG.get_width(), _CHOPPER1_ORIG.get_height()
+    if ow <= 0 or oh <= 0:
+        _CHOPPER1_LOAD_FAILED = True
+        return None
+
+    scale = width_px / float(ow)
+    h = max(1, int(oh * scale))
+    scaled = pygame.transform.smoothscale(_CHOPPER1_ORIG, (width_px, h))
+
+    # Preserve colorkey if we had to key out a background color.
+    key = _CHOPPER1_ORIG.get_colorkey()
+    if key is not None:
+        scaled.set_colorkey(key, pygame.RLEACCEL)
+
+    _CHOPPER1_SCALED[width_px] = scaled
+    return scaled
 
 
 def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0) -> None:
