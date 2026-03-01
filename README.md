@@ -41,3 +41,26 @@ The C64 version was ported by Dane Bigham and published by Brøderbund. It is of
 - **Reverse Engineering:** In 2024, the Blondihacks project performed a deep-dive reverse engineering of the code, revealing how Gorlin managed to squeeze complex physics and 64 independent AI "hostages" into just 48KB of RAM.
 - **2021 Enhanced Hack:** A "30th Anniversary" enhanced version by Holy Moses was released for the C64 in 2021, fixing several original bugs and further smoothing the scrolling for modern retro-enthusiasts.
 
+---
+
+## Prototype (WIP)
+
+This repo now contains a small Python/Pygame prototype scaffold (Milestone A).
+
+### Run
+
+1. Create/activate the venv and install dependencies:
+  - `pip install -r requirements.txt`
+2. Launch:
+  - `python run.py`
+
+### Controls (prototype)
+
+- Move/tilt: Arrow keys or WASD
+- Lift: Up/Down (or W/S)
+- Brake/hover assist: Shift
+- Cycle facing: Tab
+- Reverse flip: R
+- Toggle doors (only when grounded): E
+- Toggle debug overlay: F1
+
