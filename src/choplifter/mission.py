@@ -190,6 +190,7 @@ class MissionState:
     _last_logged_kia_enemy: int = 0
     _last_logged_enemies_destroyed: int = 0
     _last_logged_sentiment_bucket: int = -1
+    _last_logged_fuel_int: int = -1
 
     @staticmethod
     def create_default(heli: HelicopterSettings) -> "MissionState":
@@ -283,8 +284,8 @@ class MissionState:
 
 def create_level_1_config() -> LevelConfig:
     return LevelConfig(
-        world_width=3200.0,
-        compound_xs=(140.0, 360.0, 580.0, 800.0),
+        world_width=2200.0,
+        compound_xs=(900.0, 1100.0, 1300.0, 1500.0),
         compound_width=80.0,
         compound_height=60.0,
         compound_health=120.0,
@@ -293,7 +294,7 @@ def create_level_1_config() -> LevelConfig:
         base_height=90.0,
         base_right_margin=20.0,
         base_bottom_margin=0.0,
-        initial_air_mine_pos=Vec2(520.0, 180.0),
+        initial_air_mine_pos=Vec2(1250.0, 180.0),
         initial_air_mine_delay_s=60.0,
         initial_jet_spawn_delay_s=18.0,
         tuning=MissionTuning(),
@@ -749,10 +750,11 @@ def _update_fuel(mission: MissionState, helicopter: Helicopter, dt: float, logge
             drain += drain_speed_per_s * speed_factor
         helicopter.fuel = max(0.0, helicopter.fuel - drain * dt)
 
-    if logger is not None:
-        fuel_int = int(helicopter.fuel)
+    fuel_int = int(helicopter.fuel)
+    if logger is not None and fuel_int != mission._last_logged_fuel_int:
         if fuel_int in (75, 50, 25, 10, 5, 0):
             logger.info("FUEL: %d", fuel_int)
+    mission._last_logged_fuel_int = fuel_int
 
 
 def _update_enemies(

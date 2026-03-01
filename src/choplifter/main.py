@@ -116,8 +116,8 @@ def run() -> None:
 
     sky_smoke = SkySmokeSystem()
 
-    helicopter = Helicopter.spawn(heli_settings)
     mission = MissionState.create_default(heli_settings)
+    helicopter = Helicopter.spawn(heli_settings, start_x=mission.base.pos.x + mission.base.width * 0.5)
 
     prev_crashes = mission.crashes
     prev_lost_in_transit = mission.stats.lost_in_transit
@@ -129,8 +129,8 @@ def run() -> None:
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_open_compounds
 
-        helicopter = Helicopter.spawn(heli_settings)
         mission = MissionState.create_default(heli_settings)
+        helicopter = Helicopter.spawn(heli_settings, start_x=mission.base.pos.x + mission.base.width * 0.5)
         accumulator = 0.0
         sky_smoke.reset()
         prev_crashes = mission.crashes

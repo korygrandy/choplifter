@@ -27,9 +27,9 @@ class Helicopter:
     last_landing_vy: float
 
     @staticmethod
-    def spawn(settings: HelicopterSettings) -> "Helicopter":
+    def spawn(settings: HelicopterSettings, *, start_x: float = 1080.0) -> "Helicopter":
         return Helicopter(
-            pos=Vec2(1080.0, settings.ground_y - 120.0),
+            pos=Vec2(start_x, settings.ground_y - 120.0),
             vel=Vec2(0.0, 0.0),
             tilt_deg=0.0,
             facing=Facing.RIGHT,
