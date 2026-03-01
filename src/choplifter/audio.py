@@ -4,6 +4,7 @@ from array import array
 from dataclasses import dataclass
 import math
 from pathlib import Path
+from typing import Literal
 
 import pygame
 
@@ -76,8 +77,58 @@ def _try_load_asset_sound(path: Path) -> pygame.mixer.Sound | None:
         return None
 
 
+BusName = Literal["sfx", "ui", "music"]
+
+
+@dataclass
+class AudioMixer:
+    """Simple audio bus routing built on pygame mixer channels.
+
+    Buses are implemented as pools of dedicated channels so different audio
+    categories can play concurrently and later be mixed/controlled separately.
+    """
+
+    buses: dict[BusName, list[pygame.mixer.Channel]]
+
+    @staticmethod
+    def try_create(*, num_channels: int = 24) -> "AudioMixer | None":
+        try:
+            pygame.mixer.set_num_channels(num_channels)
+
+            def _bus(start: int, count: int) -> list[pygame.mixer.Channel]:
+                return [pygame.mixer.Channel(i) for i in range(start, start + count)]
+
+            buses: dict[BusName, list[pygame.mixer.Channel]] = {
+                "sfx": _bus(0, 12),
+                "ui": _bus(12, 4),
+                "music": _bus(16, 8),
+            }
+            return AudioMixer(buses=buses)
+        except Exception:
+            return None
+
+    def set_bus_volume(self, bus: BusName, volume: float) -> None:
+        vol = _clamp(volume, 0.0, 1.0)
+        for ch in self.buses.get(bus, []):
+            ch.set_volume(vol)
+
+    def play(self, sound: pygame.mixer.Sound, *, bus: BusName = "sfx") -> None:
+        channels = self.buses.get(bus, [])
+        for ch in channels:
+            if not ch.get_busy():
+                ch.play(sound)
+                return
+
+        if channels:
+            # If the bus is saturated, steal the first channel.
+            channels[0].play(sound)
+        else:
+            sound.play()
+
+
 @dataclass
 class AudioBank:
+    mixer: AudioMixer | None
     shoot: pygame.mixer.Sound | None
     bomb: pygame.mixer.Sound | None
     explosion: pygame.mixer.Sound | None
@@ -96,9 +147,22 @@ class AudioBank:
             if not pygame.mixer.get_init():
                 pygame.mixer.init()
         except Exception:
-            return AudioBank(None, None, None, None, None, None, None, None, None, None)
+            return AudioBank(
+                mixer=None,
+                shoot=None,
+                bomb=None,
+                explosion=None,
+                explosion_small=None,
+                explosion_big=None,
+                doors_open=None,
+                doors_close=None,
+                board=None,
+                rescue=None,
+                crash=None,
+            )
 
         try:
+            mixer = AudioMixer.try_create()
             sample_rate = 22050
 
             # Optional external assets (preferred when present).
@@ -146,7 +210,11 @@ class AudioBank:
             # (These are optional: game stays playable without them.)
             explosion_big = _try_load_asset_sound(asset_dir / "explosion_big.wav") or explosion_big
             explosion_small = _try_load_asset_sound(asset_dir / "explosion_small.wav") or explosion_small
-            shoot = _try_load_asset_sound(asset_dir / "shoot.wav") or shoot
+            shoot = (
+                _try_load_asset_sound(asset_dir / "gunfire.wav")
+                or _try_load_asset_sound(asset_dir / "shoot.wav")
+                or shoot
+            )
             bomb = _try_load_asset_sound(asset_dir / "bomb.wav") or bomb
             rescue = _try_load_asset_sound(asset_dir / "rescue.wav") or rescue
             crash = _try_load_asset_sound(asset_dir / "crash.wav") or crash
@@ -168,6 +236,7 @@ class AudioBank:
             crash.set_volume(0.55)
 
             return AudioBank(
+                mixer=mixer,
                 shoot=shoot,
                 bomb=bomb,
                 explosion=explosion,
@@ -180,44 +249,54 @@ class AudioBank:
                 crash=crash,
             )
         except Exception:
-            return AudioBank(None, None, None, None, None, None, None, None, None, None)
+            return AudioBank(
+                mixer=None,
+                shoot=None,
+                bomb=None,
+                explosion=None,
+                explosion_small=None,
+                explosion_big=None,
+                doors_open=None,
+                doors_close=None,
+                board=None,
+                rescue=None,
+                crash=None,
+            )
+
+    def _play(self, sound: pygame.mixer.Sound | None, *, bus: BusName) -> None:
+        if sound is None:
+            return
+        if self.mixer is not None:
+            self.mixer.play(sound, bus=bus)
+        else:
+            sound.play()
 
     def play_shoot(self) -> None:
-        if self.shoot is not None:
-            self.shoot.play()
+        self._play(self.shoot, bus="sfx")
 
     def play_bomb(self) -> None:
-        if self.bomb is not None:
-            self.bomb.play()
+        self._play(self.bomb, bus="sfx")
 
     def play_explosion(self) -> None:
-        if self.explosion is not None:
-            self.explosion.play()
+        self._play(self.explosion, bus="sfx")
 
     def play_explosion_small(self) -> None:
-        if self.explosion_small is not None:
-            self.explosion_small.play()
+        self._play(self.explosion_small, bus="sfx")
 
     def play_explosion_big(self) -> None:
-        if self.explosion_big is not None:
-            self.explosion_big.play()
+        self._play(self.explosion_big, bus="sfx")
 
     def play_doors_open(self) -> None:
-        if self.doors_open is not None:
-            self.doors_open.play()
+        self._play(self.doors_open, bus="sfx")
 
     def play_doors_close(self) -> None:
-        if self.doors_close is not None:
-            self.doors_close.play()
+        self._play(self.doors_close, bus="sfx")
 
     def play_board(self) -> None:
-        if self.board is not None:
-            self.board.play()
+        self._play(self.board, bus="sfx")
 
     def play_rescue(self) -> None:
-        if self.rescue is not None:
-            self.rescue.play()
+        self._play(self.rescue, bus="sfx")
 
     def play_crash(self) -> None:
-        if self.crash is not None:
-            self.crash.play()
+        self._play(self.crash, bus="sfx")
