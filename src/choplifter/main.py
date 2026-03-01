@@ -28,7 +28,7 @@ def run() -> None:
     logger = create_session_logger()
     logger.info("Controls: SPACE fire | E doors (grounded) | TAB facing | R reverse | F1 debug")
     logger.info("Rescue: open compound, land near hostages, E doors to load; land at base and E to unload")
-    logger.info("Gamepad: Left stick tilt | Triggers lift | A doors | X fire")
+    logger.info("Gamepad: Left stick tilt | Triggers lift | A doors | X fire | Y facing | B reverse | D-pad optional")
 
     # Gamepad detection (connect/disconnect notifications).
     pygame.joystick.init()
@@ -37,7 +37,9 @@ def run() -> None:
     toast_seconds = 0.0
 
     prev_btn_a_down = False
+    prev_btn_b_down = False
     prev_btn_x_down = False
+    prev_btn_y_down = False
 
     def set_toast(message: str) -> None:
         nonlocal toast_message, toast_seconds
@@ -50,6 +52,7 @@ def run() -> None:
         joysticks[js.get_instance_id()] = js
         name = js.get_name() or "Gamepad"
         logger.info("GAMEPAD_CONNECTED: %s", name)
+        logger.info("GAMEPAD_INFO: axes=%d buttons=%d hats=%d", js.get_numaxes(), js.get_numbuttons(), js.get_numhats())
         set_toast(f"Gamepad connected: {name}")
 
     def get_active_joystick() -> pygame.joystick.Joystick | None:
@@ -126,6 +129,7 @@ def run() -> None:
                 joysticks[js.get_instance_id()] = js
                 name = js.get_name() or "Gamepad"
                 logger.info("GAMEPAD_CONNECTED: %s", name)
+                logger.info("GAMEPAD_INFO: axes=%d buttons=%d hats=%d", js.get_numaxes(), js.get_numbuttons(), js.get_numhats())
                 set_toast(f"Gamepad connected: {name}")
             elif event.type == pygame.JOYDEVICEREMOVED:
                 removed = joysticks.pop(event.instance_id, None)
@@ -133,7 +137,9 @@ def run() -> None:
                 logger.info("GAMEPAD_DISCONNECTED: %s", name)
                 set_toast(f"Gamepad disconnected: {name}")
                 prev_btn_a_down = False
+                prev_btn_b_down = False
                 prev_btn_x_down = False
+                prev_btn_y_down = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
@@ -167,6 +173,13 @@ def run() -> None:
             gp_tilt_left = x_axis <= -deadzone
             gp_tilt_right = x_axis >= deadzone
 
+            if active_js.get_numhats() > 0:
+                hat_x, hat_y = active_js.get_hat(0)
+                gp_tilt_left = gp_tilt_left or hat_x <= -1
+                gp_tilt_right = gp_tilt_right or hat_x >= 1
+                gp_lift_up = gp_lift_up or hat_y >= 1
+                gp_lift_down = gp_lift_down or hat_y <= -1
+
             axes = active_js.get_numaxes()
             if axes >= 6:
                 gp_lift_down = trigger_pressed(axis_value(active_js, 4))
@@ -179,15 +192,23 @@ def run() -> None:
 
             # Edge-triggered actions.
             a_down = bool(active_js.get_numbuttons() > 0 and active_js.get_button(0))
+            b_down = bool(active_js.get_numbuttons() > 1 and active_js.get_button(1))
             x_down = bool(active_js.get_numbuttons() > 2 and active_js.get_button(2))
+            y_down = bool(active_js.get_numbuttons() > 3 and active_js.get_button(3))
 
             if a_down and not prev_btn_a_down:
                 toggle_doors_with_logging()
+            if b_down and not prev_btn_b_down:
+                helicopter.reverse_flip()
+            if y_down and not prev_btn_y_down:
+                helicopter.cycle_facing()
             if x_down and not prev_btn_x_down:
                 spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
 
             prev_btn_a_down = a_down
+            prev_btn_b_down = b_down
             prev_btn_x_down = x_down
+            prev_btn_y_down = y_down
 
         helicopter_input = HelicopterInput(
             tilt_left=kb_tilt_left or gp_tilt_left,

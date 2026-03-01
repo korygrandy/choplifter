@@ -67,6 +67,19 @@ Milestone B adds a basic rescue loop (compounds → hostages → boarding → un
 - Toggle doors (only when grounded): E
 - Toggle debug overlay: F1
 
+### Gamepad (prototype)
+
+If you connect an Xbox-style controller, the game will show an on-screen toast when it connects/disconnects.
+
+- Left stick X: tilt left/right
+- Right trigger: lift up
+- Left trigger: lift down
+- A: toggle doors (only when grounded)
+- X: fire
+- Y: cycle facing
+- B: reverse flip
+- D-pad: optional discrete tilt/lift
+
 ### How to rescue (prototype)
 
 1. **Open a compound:** shoot it with `Space` until it opens.
