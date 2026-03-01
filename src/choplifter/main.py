@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import pygame
 
+from .audio import AudioBank
 from .debug_overlay import DebugOverlay
 from .game_logging import create_session_logger
-from .helicopter import Helicopter, HelicopterInput, update_helicopter
+from .helicopter import Facing, Helicopter, HelicopterInput, update_helicopter
 from .mission import (
     MissionState,
     hostage_crush_check_logged,
@@ -24,6 +25,7 @@ def run() -> None:
     debug = DebugSettings()
 
     pygame.init()
+    audio = AudioBank.try_create()
 
     logger = create_session_logger()
     logger.info("Controls: SPACE fire | E doors (grounded) | TAB facing | R reverse | F1 debug")
@@ -116,17 +118,21 @@ def run() -> None:
 
     prev_crashes = mission.crashes
     prev_lost_in_transit = mission.stats.lost_in_transit
+    prev_saved = mission.stats.saved
+    prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
 
     def reset_game() -> None:
         nonlocal helicopter, mission, accumulator
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
-        nonlocal prev_crashes, prev_lost_in_transit
+        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_open_compounds
 
         helicopter = Helicopter.spawn(heli_settings)
         mission = MissionState.create_default(heli_settings)
         accumulator = 0.0
         prev_crashes = mission.crashes
         prev_lost_in_transit = mission.stats.lost_in_transit
+        prev_saved = mission.stats.saved
+        prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
         prev_btn_a_down = False
         prev_btn_b_down = False
         prev_btn_x_down = False
@@ -176,6 +182,10 @@ def run() -> None:
                     toggle_doors_with_logging()
                 elif event.key == pygame.K_SPACE:
                     spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
+                    if helicopter.facing is Facing.FORWARD:
+                        audio.play_bomb()
+                    else:
+                        audio.play_shoot()
 
         keys = pygame.key.get_pressed()
         kb_tilt_left = keys[pygame.K_LEFT] or keys[pygame.K_a]
@@ -231,6 +241,10 @@ def run() -> None:
                 helicopter.cycle_facing()
             if x_down and not prev_btn_x_down:
                 spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
+                if helicopter.facing is Facing.FORWARD:
+                    audio.play_bomb()
+                else:
+                    audio.play_shoot()
 
             prev_btn_a_down = a_down
             prev_btn_b_down = b_down
@@ -258,11 +272,22 @@ def run() -> None:
                 hostage_crush_check_logged(mission, helicopter, helicopter.last_landing_vy, logger)
             update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
 
+            saved_delta = mission.stats.saved - prev_saved
+            if saved_delta > 0:
+                audio.play_rescue()
+                prev_saved = mission.stats.saved
+
+            open_compounds = sum(1 for c in mission.compounds if c.is_open)
+            if open_compounds > prev_open_compounds:
+                audio.play_explosion()
+                prev_open_compounds = open_compounds
+
             if mission.crashes != prev_crashes:
                 if mission.ended:
                     set_toast(f"THE END: {mission.end_reason} (Enter/Start)")
                 else:
                     set_toast(f"CRASH {mission.crashes}/3 — respawn (invuln {mission.invuln_seconds:0.1f}s)")
+                    audio.play_crash()
                 prev_crashes = mission.crashes
 
             lost_delta = mission.stats.lost_in_transit - prev_lost_in_transit
