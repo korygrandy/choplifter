@@ -65,6 +65,16 @@ Also define:
 
 ## 5) Systems (MVP vs Later)
 
+### 5.0 Cutscenes / Intro Presentation
+
+**Near-term (MVP-friendly):** Add a short, skippable **intro cutscene** ("trailer feel") that plays **before Mission Select**, ending on black with:
+- `CHOPLIFTER`
+- `Mission: Middle East Rescue`
+
+Implementation bias: build as an in-engine timeline/state (not a video file) so it stays lightweight, resolution-independent, and easy to theme.
+
+**Later:** Add **mission-specific cutscenes** that play **after a mission is selected** (future TODO; implement in its own feature branch).
+
 ### 5.1 Helicopter Physics (MVP)
 - **Inertia / friction:** $v_{t+1} = v_t \times friction$
 - **Tilt-to-accelerate:** $a_x = \sin(\theta) \times engine\_power$
@@ -186,6 +196,7 @@ Implementation note: keep keyboard controls active even when a gamepad is connec
 - One polished mission with tuned pacing
 - Audio placeholders
 - Input rebinding + basic accessibility toggles (optional)
+- Skippable intro cutscene before Mission Select (in-engine timeline)
 
 ## 9) Open Decisions (Next)
 - How strict landing should be (arcade vs punishing)
