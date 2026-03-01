@@ -78,6 +78,48 @@ class Enemy:
 
 
 @dataclass(frozen=True)
+class MissionTuning:
+    # Fuel pacing.
+    fuel_drain_base_per_s: float = 0.55
+    fuel_drain_airborne_per_s: float = 0.30
+    fuel_drain_speed_per_s: float = 0.35
+    fuel_refuel_per_s: float = 16.0
+
+    # Enemy pressure.
+    jet_spawn_base_interval_s: float = 7.0
+    jet_spawn_min_interval_s: float = 5.2
+    jet_spawn_max_interval_s: float = 9.0
+
+    tank_fire_base_cooldown_s: float = 1.20
+    tank_fire_min_cooldown_s: float = 0.9
+    tank_fire_max_cooldown_s: float = 1.5
+
+    jet_fire_base_cooldown_s: float = 0.35
+    jet_fire_min_cooldown_s: float = 0.25
+    jet_fire_max_cooldown_s: float = 0.45
+
+    jet_touch_damage: float = 18.0
+
+    mine_base_speed: float = 110.0
+    mine_min_speed: float = 90.0
+    mine_max_speed: float = 130.0
+    mine_damage: float = 26.0
+
+
+@dataclass(frozen=True)
+class LevelConfig:
+    compound_xs: tuple[float, ...]
+    compound_health: float
+    hostages_per_compound: int
+    base_width: float
+    base_height: float
+    base_right_margin: float
+    base_bottom_margin: float
+    initial_air_mine_pos: Vec2 | None
+    tuning: MissionTuning
+
+
+@dataclass(frozen=True)
 class BaseZone:
     pos: Vec2
     width: float
@@ -108,6 +150,7 @@ class MissionState:
     base: BaseZone
     stats: MissionStats
     sentiment: float = 50.0
+    tuning: MissionTuning = MissionTuning()
     ended: bool = False
     end_text: str = ""
     end_reason: str = ""
@@ -127,32 +170,40 @@ class MissionState:
 
     @staticmethod
     def create_default(heli: HelicopterSettings) -> "MissionState":
-        # Four compounds, 16 hostages each, like the classic.
+        return MissionState.create_from_level_config(heli, create_level_1_config())
+
+    @staticmethod
+    def create_from_level_config(heli: HelicopterSettings, level: LevelConfig, world_width: float = 1280.0) -> "MissionState":
         compounds: list[Compound] = []
         hostage_index = 0
         compound_w = 80.0
         compound_h = 60.0
         compound_y = heli.ground_y - compound_h
 
-        for x in (140.0, 360.0, 580.0, 800.0):
+        for x in level.compound_xs:
             compounds.append(
                 Compound(
                     pos=Vec2(x, compound_y),
                     width=compound_w,
                     height=compound_h,
-                    health=120.0,
+                    health=level.compound_health,
                     is_open=False,
                     hostage_start=hostage_index,
-                    hostage_count=16,
+                    hostage_count=level.hostages_per_compound,
                 )
             )
-            hostage_index += 16
+            hostage_index += level.hostages_per_compound
 
-        hostages = [Hostage(state=HostageState.IDLE, pos=Vec2(-9999.0, -9999.0)) for _ in range(64)]
+        hostages_total = max(64, hostage_index)
+        hostages = [Hostage(state=HostageState.IDLE, pos=Vec2(-9999.0, -9999.0)) for _ in range(hostages_total)]
 
-        base_w = 170.0
-        base_h = 90.0
-        base = BaseZone(pos=Vec2(1280.0 - base_w - 20.0, heli.ground_y - base_h), width=base_w, height=base_h)
+        base_w = level.base_width
+        base_h = level.base_height
+        base = BaseZone(
+            pos=Vec2(world_width - base_w - level.base_right_margin, heli.ground_y - base_h - level.base_bottom_margin),
+            width=base_w,
+            height=base_h,
+        )
 
         enemies: list[Enemy] = []
         # Place a tank near each compound to create landing pressure.
@@ -167,15 +218,15 @@ class MissionState:
                 )
             )
 
-        # One air mine early to demo the archetype.
-        enemies.append(
-            Enemy(
-                kind=EnemyKind.AIR_MINE,
-                pos=Vec2(520.0, 180.0),
-                vel=Vec2(0.0, 0.0),
-                health=1.0,
+        if level.initial_air_mine_pos is not None:
+            enemies.append(
+                Enemy(
+                    kind=EnemyKind.AIR_MINE,
+                    pos=Vec2(level.initial_air_mine_pos.x, level.initial_air_mine_pos.y),
+                    vel=Vec2(0.0, 0.0),
+                    health=1.0,
+                )
             )
-        )
 
         return MissionState(
             compounds=compounds,
@@ -184,7 +235,22 @@ class MissionState:
             enemies=enemies,
             base=base,
             stats=MissionStats(),
+            tuning=level.tuning,
         )
+
+
+def create_level_1_config() -> LevelConfig:
+    return LevelConfig(
+        compound_xs=(140.0, 360.0, 580.0, 800.0),
+        compound_health=120.0,
+        hostages_per_compound=16,
+        base_width=170.0,
+        base_height=90.0,
+        base_right_margin=20.0,
+        base_bottom_margin=0.0,
+        initial_air_mine_pos=Vec2(520.0, 180.0),
+        tuning=MissionTuning(),
+    )
 
 
 def boarded_count(mission: MissionState) -> int:
@@ -615,11 +681,12 @@ def _update_fuel(mission: MissionState, helicopter: Helicopter, dt: float, logge
         return
 
     # Minimal MVP-lite: fuel drains over time, refuels at base.
+    tuning = mission.tuning
     # Tune: make hovering/landing feel less punishing, but fast flight costs.
-    drain_base_per_s = 0.55
-    drain_airborne_per_s = 0.30
-    drain_speed_per_s = 0.35
-    refuel_per_s = 16.0
+    drain_base_per_s = tuning.fuel_drain_base_per_s
+    drain_airborne_per_s = tuning.fuel_drain_airborne_per_s
+    drain_speed_per_s = tuning.fuel_drain_speed_per_s
+    refuel_per_s = tuning.fuel_refuel_per_s
 
     at_base = mission.base.contains_point(helicopter.pos) and helicopter.grounded
     if at_base:
@@ -647,13 +714,14 @@ def _update_enemies(
     logger: logging.Logger | None,
 ) -> None:
     difficulty = _difficulty_scale(mission.sentiment)
+    tuning = mission.tuning
 
     # Periodic jet spawns.
     mission.jet_spawn_seconds -= dt
     if mission.jet_spawn_seconds <= 0.0:
         # Slight scaling based on sentiment.
-        interval = 7.0 * (1.0 - 0.22 * difficulty)
-        mission.jet_spawn_seconds = clamp(interval, 5.2, 9.0)
+        interval = tuning.jet_spawn_base_interval_s * (1.0 - 0.22 * difficulty)
+        mission.jet_spawn_seconds = clamp(interval, tuning.jet_spawn_min_interval_s, tuning.jet_spawn_max_interval_s)
         y = 150.0
         if helicopter.pos.x > 640.0:
             x = -80.0
@@ -681,8 +749,8 @@ def _update_enemies(
         if e.kind is EnemyKind.TANK:
             dx = helicopter.pos.x - e.pos.x
             if abs(dx) <= 360.0 and helicopter.pos.y <= heli.ground_y - 40.0 and e.cooldown <= 0.0:
-                tank_cd = 1.20 * (1.0 - 0.12 * difficulty)
-                e.cooldown = clamp(tank_cd, 0.9, 1.5)
+                tank_cd = tuning.tank_fire_base_cooldown_s * (1.0 - 0.12 * difficulty)
+                e.cooldown = clamp(tank_cd, tuning.tank_fire_min_cooldown_s, tuning.tank_fire_max_cooldown_s)
                 _spawn_enemy_bullet_toward(mission, e.pos, helicopter.pos)
                 if logger is not None:
                     logger.info("TANK_FIRE")
@@ -692,12 +760,12 @@ def _update_enemies(
             e.pos.y += e.vel.y * dt
 
             if abs(helicopter.pos.x - e.pos.x) <= 240.0 and e.cooldown <= 0.0:
-                jet_cd = 0.35 * (1.0 - 0.10 * difficulty)
-                e.cooldown = clamp(jet_cd, 0.25, 0.45)
+                jet_cd = tuning.jet_fire_base_cooldown_s * (1.0 - 0.10 * difficulty)
+                e.cooldown = clamp(jet_cd, tuning.jet_fire_min_cooldown_s, tuning.jet_fire_max_cooldown_s)
                 _spawn_enemy_bullet_toward(mission, e.pos, helicopter.pos)
 
             if _hits_circle(e.pos, helicopter.pos, radius=30.0):
-                _damage_helicopter(mission, helicopter, 18.0, logger, source="JET")
+                _damage_helicopter(mission, helicopter, tuning.jet_touch_damage, logger, source="JET")
 
         elif e.kind is EnemyKind.AIR_MINE:
             to_heli = Vec2(helicopter.pos.x - e.pos.x, helicopter.pos.y - e.pos.y)
@@ -708,7 +776,11 @@ def _update_enemies(
             else:
                 nx, ny = 0.0, 0.0
 
-            desired_speed = clamp(110.0 * (1.0 + 0.15 * difficulty), 90.0, 130.0)
+            desired_speed = clamp(
+                tuning.mine_base_speed * (1.0 + 0.15 * difficulty),
+                tuning.mine_min_speed,
+                tuning.mine_max_speed,
+            )
             desired_vx = nx * desired_speed
             desired_vy = ny * desired_speed
             steer = 3.5
@@ -734,7 +806,7 @@ def _mine_explode(
     if logger is not None:
         logger.info("MINE: detonate")
 
-    _damage_helicopter(mission, helicopter, 26.0, logger, source="AIR_MINE")
+    _damage_helicopter(mission, helicopter, mission.tuning.mine_damage, logger, source="AIR_MINE")
 
     radius = 40.0
     r2 = radius * radius
