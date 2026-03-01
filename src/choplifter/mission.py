@@ -118,7 +118,19 @@ class MissionTuning:
     mine_min_speed: float = 90.0
     mine_max_speed: float = 130.0
     mine_steer: float = 3.5
+    mine_health: float = 1.0
+    mine_ttl_s: float = 22.0
+    mine_touch_radius: float = 26.0
+    mine_projectile_radius: float = 14.0
     mine_damage: float = 26.0
+
+    mine_spawn_base_interval_s: float = 28.0
+    mine_spawn_min_interval_s: float = 18.0
+    mine_spawn_max_interval_s: float = 40.0
+    mine_spawn_margin_x: float = 260.0
+    mine_spawn_y_min: float = 90.0
+    mine_spawn_y_max: float = 220.0
+    mine_max_alive: int = 2
 
 
 @dataclass(frozen=True)
@@ -183,6 +195,7 @@ class MissionState:
     crashes: int = 0
     invuln_seconds: float = 0.0
     jet_spawn_seconds: float = 4.0
+    mine_spawn_seconds: float = 24.0
     _sentiment_last_saved: int = 0
     _sentiment_last_kia_player: int = 0
     _sentiment_last_kia_enemy: int = 0
@@ -261,7 +274,8 @@ class MissionState:
                         kind=EnemyKind.AIR_MINE,
                         pos=Vec2(level.initial_air_mine_pos.x, level.initial_air_mine_pos.y),
                         vel=Vec2(0.0, 0.0),
-                        health=1.0,
+                        health=level.tuning.mine_health,
+                        ttl=level.tuning.mine_ttl_s,
                     )
                 )
             else:
@@ -280,6 +294,12 @@ class MissionState:
         )
 
         state.jet_spawn_seconds = level.initial_jet_spawn_delay_s
+        # Keep the first minute calmer: the level can schedule an initial mine via pending_air_mine_*.
+        # Periodic mine spawns start shortly after that initial delay.
+        state.mine_spawn_seconds = max(
+            level.tuning.mine_spawn_base_interval_s,
+            level.initial_air_mine_delay_s + 18.0,
+        )
         state.pending_air_mine_pos = pending_mine_pos
         state.pending_air_mine_seconds = pending_mine_seconds
         return state
@@ -424,7 +444,7 @@ def _update_projectiles(
             for e in mission.enemies:
                 if not e.alive:
                     continue
-                if _projectile_hits_enemy(p, e, heli):
+                if _projectile_hits_enemy(p, e, heli, mission.tuning):
                     if p.kind is ProjectileKind.BULLET:
                         e.health -= 10.0
                     else:
@@ -796,12 +816,52 @@ def _update_enemies(
                     kind=EnemyKind.AIR_MINE,
                     pos=Vec2(mission.pending_air_mine_pos.x, mission.pending_air_mine_pos.y),
                     vel=Vec2(0.0, 0.0),
-                    health=1.0,
+                    health=tuning.mine_health,
+                    ttl=tuning.mine_ttl_s,
                 )
             )
             if logger is not None:
                 logger.info("MINE: spawned")
             mission.pending_air_mine_pos = None
+
+    # Periodic air mine spawns.
+    mission.mine_spawn_seconds -= dt
+    if mission.mine_spawn_seconds <= 0.0:
+        alive_mines = sum(1 for e in mission.enemies if e.alive and e.kind is EnemyKind.AIR_MINE)
+        if alive_mines < max(0, int(tuning.mine_max_alive)):
+            interval = (tuning.mine_spawn_base_interval_s / pressure) * (1.0 - 0.10 * difficulty)
+            mission.mine_spawn_seconds = clamp(
+                interval,
+                tuning.mine_spawn_min_interval_s,
+                tuning.mine_spawn_max_interval_s,
+            )
+
+            # Deterministic pseudo-random spawn height (keeps behavior stable without adding RNG state).
+            # Uses elapsed time as input; returns value in [0, 1).
+            r01 = math.sin(mission.elapsed_seconds * 12.9898) * 43758.5453
+            r01 = r01 - math.floor(r01)
+            y = tuning.mine_spawn_y_min + (tuning.mine_spawn_y_max - tuning.mine_spawn_y_min) * r01
+            y = clamp(y, 60.0, heli.ground_y - 80.0)
+
+            # Spawn ahead of the helicopter's facing direction.
+            sign = 1.0 if helicopter.facing is Facing.RIGHT else -1.0
+            x = helicopter.pos.x + sign * tuning.mine_spawn_margin_x
+            x = clamp(x, 40.0, mission.world_width - 40.0)
+
+            mission.enemies.append(
+                Enemy(
+                    kind=EnemyKind.AIR_MINE,
+                    pos=Vec2(x, y),
+                    vel=Vec2(0.0, 0.0),
+                    health=tuning.mine_health,
+                    ttl=tuning.mine_ttl_s,
+                )
+            )
+            if logger is not None:
+                logger.info("MINE: spawned")
+        else:
+            # Try again soon once the mine count drops.
+            mission.mine_spawn_seconds = 1.0
 
     # Periodic jet spawns.
     mission.jet_spawn_seconds -= dt
@@ -888,7 +948,11 @@ def _update_enemies(
             e.pos.x += e.vel.x * dt
             e.pos.y += e.vel.y * dt
 
-            if _hits_circle(e.pos, helicopter.pos, radius=26.0):
+            # Keep mines in the playable air space.
+            e.pos.x = clamp(e.pos.x, 20.0, mission.world_width - 20.0)
+            e.pos.y = clamp(e.pos.y, 50.0, heli.ground_y - 60.0)
+
+            if _hits_circle(e.pos, helicopter.pos, radius=tuning.mine_touch_radius):
                 _mine_explode(mission, e.pos, helicopter, logger)
                 e.alive = False
 
@@ -938,7 +1002,7 @@ def _hits_circle(a: Vec2, b: Vec2, radius: float) -> bool:
     return dx * dx + dy * dy <= radius * radius
 
 
-def _projectile_hits_enemy(p: Projectile, e: Enemy, heli: HelicopterSettings) -> bool:
+def _projectile_hits_enemy(p: Projectile, e: Enemy, heli: HelicopterSettings, tuning: MissionTuning) -> bool:
     if e.kind is EnemyKind.TANK:
         w, h = 44.0, 18.0
         left = e.pos.x - w * 0.5
@@ -949,7 +1013,7 @@ def _projectile_hits_enemy(p: Projectile, e: Enemy, heli: HelicopterSettings) ->
         return _hits_circle(p.pos, e.pos, radius=20.0)
 
     if e.kind is EnemyKind.AIR_MINE:
-        return _hits_circle(p.pos, e.pos, radius=14.0)
+        return _hits_circle(p.pos, e.pos, radius=tuning.mine_projectile_radius)
 
     return False
 
