@@ -17,10 +17,9 @@ _MISSION1_BG_SCALED: dict[tuple[int, int], pygame.Surface] = {}
 
 
 def draw_sky(screen: pygame.Surface, horizon_y: float) -> None:
-    """Draw the sky area above the horizon.
+    """Draws the mission sky background above the horizon line.
 
-    If a background image is available, it is scaled to fit the sky area.
-    Falls back to a solid sky color if the image can't be loaded.
+    Falls back to a solid sky color if the background image is missing/unloadable.
     """
 
     width = screen.get_width()

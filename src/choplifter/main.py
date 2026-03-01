@@ -310,8 +310,8 @@ def run() -> None:
         sky_smoke.update(frame_dt, width=screen.get_width(), horizon_y=int(heli_settings.ground_y))
 
         # Render.
+        # Background above the horizon.
         draw_sky(screen, heli_settings.ground_y)
-        sky_smoke.draw(screen, horizon_y=int(heli_settings.ground_y))
         draw_ground(screen, heli_settings.ground_y)
         draw_mission(screen, mission)
         draw_helicopter(screen, helicopter)
