@@ -136,6 +136,23 @@ Weapon mapping (classic-inspired):
 - Side-facing: **machine gun** (best against jets)
 - Forward-facing: **bombs/rockets** (best against tanks)
 
+### 6.1 Gamepad Compatibility (Planned)
+
+Goal: allow an Xbox controller to be turned on mid-game and be usable without restarting.
+
+- **Connection UX:** show a small on-screen notification when a gamepad is connected or disconnected.
+- **Default mapping (proposal):**
+  - Left stick X: tilt left/right
+  - Right trigger: increase lift
+  - Left trigger: decrease lift
+  - A: door toggle
+  - X: fire
+  - Y: cycle facing
+  - B: reverse flip
+  - D-pad: optional discrete tilt/lift for precision
+
+Implementation note: keep keyboard controls active even when a gamepad is connected.
+
 ## 7) HUD / Feedback (Keep Minimal)
 - Fuel bar
 - Damage bar

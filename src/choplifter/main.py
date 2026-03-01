@@ -8,10 +8,11 @@ from .helicopter import Helicopter, HelicopterInput, update_helicopter
 from .mission import (
     MissionState,
     hostage_crush_check_logged,
+    boarded_count,
     spawn_projectile_from_helicopter_logged,
     update_mission,
 )
-from .rendering import draw_ground, draw_helicopter, draw_hud, draw_mission
+from .rendering import draw_ground, draw_helicopter, draw_hud, draw_mission, draw_toast
 from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, PhysicsSettings, WindowSettings
 
 
@@ -27,6 +28,25 @@ def run() -> None:
     logger = create_session_logger()
     logger.info("Controls: SPACE fire | E doors (grounded) | TAB facing | R reverse | F1 debug")
     logger.info("Rescue: open compound, land near hostages, E doors to load; land at base and E to unload")
+
+    # Gamepad detection (connect/disconnect notifications).
+    pygame.joystick.init()
+    joysticks: dict[int, pygame.joystick.Joystick] = {}
+    toast_message = ""
+    toast_seconds = 0.0
+
+    def set_toast(message: str) -> None:
+        nonlocal toast_message, toast_seconds
+        toast_message = message
+        toast_seconds = 3.0
+
+    for i in range(pygame.joystick.get_count()):
+        js = pygame.joystick.Joystick(i)
+        js.init()
+        joysticks[js.get_instance_id()] = js
+        name = js.get_name() or "Gamepad"
+        logger.info("GAMEPAD_CONNECTED: %s", name)
+        set_toast(f"Gamepad connected: {name}")
 
     flags = 0
     if window.vsync:
@@ -52,6 +72,18 @@ def run() -> None:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.JOYDEVICEADDED:
+                js = pygame.joystick.Joystick(event.device_index)
+                js.init()
+                joysticks[js.get_instance_id()] = js
+                name = js.get_name() or "Gamepad"
+                logger.info("GAMEPAD_CONNECTED: %s", name)
+                set_toast(f"Gamepad connected: {name}")
+            elif event.type == pygame.JOYDEVICEREMOVED:
+                removed = joysticks.pop(event.instance_id, None)
+                name = removed.get_name() if removed is not None else "Gamepad"
+                logger.info("GAMEPAD_DISCONNECTED: %s", name)
+                set_toast(f"Gamepad disconnected: {name}")
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
@@ -62,7 +94,24 @@ def run() -> None:
                 elif event.key == pygame.K_r:
                     helicopter.reverse_flip()
                 elif event.key == pygame.K_e:
-                    helicopter.toggle_doors()
+                    at_base = mission.base.contains_point(helicopter.pos)
+                    if not helicopter.grounded:
+                        logger.info("DOORS: toggle blocked (not grounded)")
+                    else:
+                        before = helicopter.doors_open
+                        helicopter.toggle_doors()
+                        after = helicopter.doors_open
+                        if before != after:
+                            logger.info(
+                                "DOORS: %s at_base=%s boarded=%d",
+                                "OPEN" if after else "closed",
+                                at_base,
+                                boarded_count(mission),
+                            )
+                        if after and not at_base and boarded_count(mission) > 0:
+                            logger.info("UNLOAD_BLOCKED: doors open but not in base zone")
+                        if after and at_base and boarded_count(mission) == 0:
+                            logger.info("UNLOAD: no boarded passengers")
                 elif event.key == pygame.K_SPACE:
                     spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
 
@@ -88,12 +137,19 @@ def run() -> None:
             update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
             accumulator -= tick.dt
 
+        if toast_seconds > 0.0:
+            toast_seconds -= frame_dt
+            if toast_seconds <= 0.0:
+                toast_message = ""
+
         # Render.
         screen.fill((135, 190, 235))
         draw_ground(screen, heli_settings.ground_y)
         draw_mission(screen, mission)
         draw_helicopter(screen, helicopter)
         draw_hud(screen, mission, helicopter)
+        if toast_message:
+            draw_toast(screen, toast_message)
 
         if debug.show_overlay:
             overlay.draw(screen, helicopter, mission, clock.get_fps())

@@ -8,6 +8,7 @@ from .mission import HostageState, MissionState, ProjectileKind
 
 
 _HUD_FONT: pygame.font.Font | None = None
+_TOAST_FONT: pygame.font.Font | None = None
 
 
 def draw_ground(screen: pygame.Surface, ground_y: float) -> None:
@@ -84,6 +85,32 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
         shadow = font.render(line, True, (255, 255, 255))
         screen.blit(shadow, (x + 1, y + i * 20 + 1))
         screen.blit(surf, (x, y + i * 20))
+
+
+def draw_toast(screen: pygame.Surface, message: str) -> None:
+    if not message:
+        return
+
+    global _TOAST_FONT
+    if _TOAST_FONT is None:
+        pygame.font.init()
+        _TOAST_FONT = pygame.font.SysFont("consolas", 20)
+
+    font = _TOAST_FONT
+
+    text = font.render(message, True, (240, 240, 240))
+    padding_x = 10
+    padding_y = 8
+    w = text.get_width() + padding_x * 2
+    h = text.get_height() + padding_y * 2
+
+    panel = pygame.Surface((w, h), pygame.SRCALPHA)
+    panel.fill((0, 0, 0, 160))
+    panel.blit(text, (padding_x, padding_y))
+
+    x = screen.get_width() - w - 12
+    y = 12
+    screen.blit(panel, (x, y))
 
 
 def _draw_base(screen: pygame.Surface, mission: MissionState) -> None:
