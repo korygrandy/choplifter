@@ -5,6 +5,7 @@ from enum import Enum
 import logging
 import math
 
+from .burning_particles import BurningParticleSystem
 from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
 from .settings import HelicopterSettings
@@ -171,6 +172,7 @@ class MissionState:
     stats: MissionStats = field(default_factory=MissionStats)
     sentiment: float = 50.0
     tuning: MissionTuning = MissionTuning()
+    burning: BurningParticleSystem = field(default_factory=BurningParticleSystem)
     elapsed_seconds: float = 0.0
     pending_air_mine_pos: Vec2 | None = None
     pending_air_mine_seconds: float = 0.0
@@ -372,6 +374,9 @@ def update_mission(
 
     _update_enemies(mission, helicopter, dt, heli, logger)
 
+    # Burning particle effects (e.g., destroyed ground cannon/tank).
+    mission.burning.update(dt)
+
     _update_projectiles(mission, dt, heli, logger, helicopter)
     _update_compounds_and_release(mission, heli, logger)
     _update_hostages(mission, helicopter, dt, heli)
@@ -426,6 +431,9 @@ def _update_projectiles(
                     if e.health <= 0.0:
                         e.alive = False
                         mission.stats.enemies_destroyed += 1
+                        if e.kind is EnemyKind.TANK:
+                            # Persist a burning effect at the destroyed cannon/tank location.
+                            mission.burning.add_site(e.pos, intensity=1.0)
                         if logger is not None:
                             logger.info("ENEMY_DOWN: %s", e.kind.name)
                     p.alive = False
@@ -520,6 +528,8 @@ def _bomb_explode(mission: MissionState, pos: Vec2, logger: logging.Logger | Non
             if e.health <= 0.0:
                 e.alive = False
                 mission.stats.enemies_destroyed += 1
+                if e.kind is EnemyKind.TANK:
+                    mission.burning.add_site(e.pos, intensity=1.0)
                 if logger is not None:
                     logger.info("ENEMY_DOWN: %s", e.kind.name)
 
