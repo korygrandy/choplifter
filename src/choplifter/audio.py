@@ -3,6 +3,7 @@ from __future__ import annotations
 from array import array
 from dataclasses import dataclass
 import math
+from pathlib import Path
 
 import pygame
 
@@ -66,6 +67,15 @@ def _mix_pcm16(buffers: list[bytes], *, volume: float) -> bytes:
     return out.tobytes()
 
 
+def _try_load_asset_sound(path: Path) -> pygame.mixer.Sound | None:
+    try:
+        if not path.exists():
+            return None
+        return pygame.mixer.Sound(str(path))
+    except Exception:
+        return None
+
+
 @dataclass
 class AudioBank:
     shoot: pygame.mixer.Sound | None
@@ -90,6 +100,10 @@ class AudioBank:
 
         try:
             sample_rate = 22050
+
+            # Optional external assets (preferred when present).
+            module_dir = Path(__file__).resolve().parent
+            asset_dir = module_dir / "assets"
 
             shoot_b = _sine_pcm16(freq_hz=880.0, duration_s=0.055, volume=0.30, sample_rate=sample_rate)
             shoot = pygame.mixer.Sound(buffer=shoot_b)
@@ -128,12 +142,25 @@ class AudioBank:
             crash_a = _sine_pcm16(freq_hz=48.0, duration_s=0.40, volume=0.42, sample_rate=sample_rate, fade_out_s=0.25)
             crash = pygame.mixer.Sound(buffer=crash_a)
 
+            # Override placeholders with external files if provided.
+            # (These are optional: game stays playable without them.)
+            explosion_big = _try_load_asset_sound(asset_dir / "explosion_big.wav") or explosion_big
+            explosion_small = _try_load_asset_sound(asset_dir / "explosion_small.wav") or explosion_small
+            shoot = _try_load_asset_sound(asset_dir / "shoot.wav") or shoot
+            bomb = _try_load_asset_sound(asset_dir / "bomb.wav") or bomb
+            rescue = _try_load_asset_sound(asset_dir / "rescue.wav") or rescue
+            crash = _try_load_asset_sound(asset_dir / "crash.wav") or crash
+            doors_open = _try_load_asset_sound(asset_dir / "doors_open.wav") or doors_open
+            doors_close = _try_load_asset_sound(asset_dir / "doors_close.wav") or doors_close
+            board = _try_load_asset_sound(asset_dir / "board.wav") or board
+
             # Keep levels conservative.
             shoot.set_volume(0.35)
             bomb.set_volume(0.45)
-            explosion.set_volume(0.55)
             explosion_small.set_volume(0.45)
             explosion_big.set_volume(0.60)
+            explosion = explosion_big
+            explosion.set_volume(0.60)
             doors_open.set_volume(0.25)
             doors_close.set_volume(0.25)
             board.set_volume(0.22)
