@@ -1,0 +1,16 @@
+{
+  "tilt_left": ["left", "a"],
+  "tilt_right": ["right", "d"],
+  "lift_up": ["up", "w"],
+  "lift_down": ["down", "s"],
+  "brake": ["left shift", "right shift"],
+
+  "fire": ["space"],
+  "doors": ["e"],
+  "cycle_facing": ["tab"],
+  "reverse_flip": ["r"],
+  "toggle_debug": ["f1"],
+
+  "quit": ["escape"],
+  "restart": ["return"]
+}
