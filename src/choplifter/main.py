@@ -10,12 +10,22 @@ from .game_logging import create_session_logger
 from .helicopter import Facing, Helicopter, HelicopterInput, update_helicopter
 from .mission import (
     MissionState,
+    get_mission_config_by_id,
     hostage_crush_check_logged,
     boarded_count,
     spawn_projectile_from_helicopter_logged,
     update_mission,
 )
-from .rendering import draw_chopper_select_overlay, draw_ground, draw_helicopter, draw_hud, draw_mission, draw_sky, draw_toast
+from .rendering import (
+    draw_chopper_select_overlay,
+    draw_ground,
+    draw_helicopter,
+    draw_hud,
+    draw_mission,
+    draw_mission_select_overlay,
+    draw_sky,
+    draw_toast,
+)
 from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, PhysicsSettings, WindowSettings
 from .sky_smoke import SkySmokeSystem
 
@@ -128,6 +138,15 @@ def run() -> None:
 
     sky_smoke = SkySmokeSystem()
 
+    # Pre-game mission selection overlay.
+    mission_choices: list[tuple[str, str]] = [
+        ("city", "City Center"),
+        ("airport", "Airport Special Ops"),
+        ("worship", "Worship Center Warfare"),
+    ]
+    selected_mission_index = 0
+    selected_mission_id = mission_choices[selected_mission_index][0]
+
     # Pre-game chopper selection overlay.
     chopper_choices: list[tuple[str, str]] = [
         ("chopper-one.png", "Classic"),
@@ -138,12 +157,12 @@ def run() -> None:
     ]
     selected_chopper_index = 0
     selected_chopper_asset = chopper_choices[selected_chopper_index][0]
-    mode: str = "select_chopper"  # select_chopper | playing | paused
+    mode: str = "select_mission"  # select_mission | select_chopper | playing | paused
     prev_menu_dir = 0
     prev_menu_vert = 0
     pause_focus: str = "choppers"  # choppers | restart
 
-    mission = MissionState.create_default(heli_settings)
+    mission = MissionState.create_from_level_config(heli_settings, get_mission_config_by_id(selected_mission_id))
     helicopter = Helicopter.spawn(
         heli_settings,
         start_x=mission.base.pos.x + mission.base.width * 0.5,
@@ -161,10 +180,11 @@ def run() -> None:
     def reset_game() -> None:
         nonlocal helicopter, mission, accumulator
         nonlocal selected_chopper_asset
+        nonlocal selected_mission_id
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed
 
-        mission = MissionState.create_default(heli_settings)
+        mission = MissionState.create_from_level_config(heli_settings, get_mission_config_by_id(selected_mission_id))
         helicopter = Helicopter.spawn(
             heli_settings,
             start_x=mission.base.pos.x + mission.base.width * 0.5,
@@ -248,6 +268,16 @@ def run() -> None:
                         mode = "playing"
                         set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
                         reset_game()
+                elif mode == "select_mission":
+                    if event.key in (pygame.K_LEFT, pygame.K_a):
+                        selected_mission_index = (selected_mission_index - 1) % len(mission_choices)
+                        selected_mission_id = mission_choices[selected_mission_index][0]
+                    elif event.key in (pygame.K_RIGHT, pygame.K_d):
+                        selected_mission_index = (selected_mission_index + 1) % len(mission_choices)
+                        selected_mission_id = mission_choices[selected_mission_index][0]
+                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                        mode = "select_chopper"
+                        set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")
                 elif mode == "paused":
                     if event.key == pygame.K_F2:
                         toggle_particles()
@@ -358,6 +388,13 @@ def run() -> None:
                     mode = "playing"
                     set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
                     reset_game()
+            elif mode == "select_mission":
+                if menu_dir != 0 and menu_dir != prev_menu_dir:
+                    selected_mission_index = (selected_mission_index + menu_dir) % len(mission_choices)
+                    selected_mission_id = mission_choices[selected_mission_index][0]
+                if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
+                    mode = "select_chopper"
+                    set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")
             elif mode == "paused":
                 # Start/B resumes.
                 if (start_down and not prev_btn_start_down) or (b_down and not prev_btn_b_down):
@@ -503,6 +540,8 @@ def run() -> None:
         draw_helicopter(screen, helicopter, camera_x=camera_x)
         if mode == "playing":
             draw_hud(screen, mission, helicopter)
+        elif mode == "select_mission":
+            draw_mission_select_overlay(screen, mission_choices, selected_mission_index)
         elif mode == "select_chopper":
             draw_chopper_select_overlay(screen, chopper_choices, selected_chopper_index)
         else:

@@ -324,6 +324,84 @@ def create_level_1_config() -> LevelConfig:
     )
 
 
+def create_city_center_config() -> LevelConfig:
+    # Current "Mission 1" content.
+    return create_level_1_config()
+
+
+def create_airport_special_ops_config() -> LevelConfig:
+    # Wider lanes and longer travel distances.
+    tuning = MissionTuning(
+        jet_spawn_base_interval_s=6.6,
+        jet_spawn_min_interval_s=5.0,
+        jet_spawn_max_interval_s=8.4,
+        mine_spawn_base_interval_s=24.0,
+        mine_spawn_min_interval_s=16.0,
+        mine_spawn_max_interval_s=34.0,
+        mine_spawn_margin_x=320.0,
+    )
+    return LevelConfig(
+        world_width=2800.0,
+        compound_xs=(1150.0, 1500.0, 1850.0),
+        compound_width=90.0,
+        compound_height=60.0,
+        compound_health=130.0,
+        hostages_per_compound=16,
+        base_width=180.0,
+        base_height=90.0,
+        base_right_margin=30.0,
+        base_bottom_margin=0.0,
+        initial_air_mine_pos=Vec2(1450.0, 170.0),
+        initial_air_mine_delay_s=40.0,
+        initial_jet_spawn_delay_s=14.0,
+        tuning=tuning,
+    )
+
+
+def create_worship_center_warfare_config() -> LevelConfig:
+    # Higher pressure and tighter pacing for a finale-style mission.
+    tuning = MissionTuning(
+        jet_spawn_base_interval_s=6.0,
+        jet_spawn_min_interval_s=4.7,
+        jet_spawn_max_interval_s=7.5,
+        tank_fire_base_cooldown_s=1.05,
+        tank_fire_min_cooldown_s=0.85,
+        tank_fire_max_cooldown_s=1.35,
+        mine_spawn_base_interval_s=20.0,
+        mine_spawn_min_interval_s=14.0,
+        mine_spawn_max_interval_s=28.0,
+        mine_max_alive=3,
+    )
+    return LevelConfig(
+        world_width=2400.0,
+        compound_xs=(950.0, 1120.0, 1290.0, 1460.0),
+        compound_width=80.0,
+        compound_height=60.0,
+        compound_health=120.0,
+        hostages_per_compound=16,
+        base_width=170.0,
+        base_height=90.0,
+        base_right_margin=20.0,
+        base_bottom_margin=0.0,
+        initial_air_mine_pos=Vec2(1180.0, 175.0),
+        initial_air_mine_delay_s=25.0,
+        initial_jet_spawn_delay_s=10.0,
+        tuning=tuning,
+    )
+
+
+def get_mission_config_by_id(mission_id: str) -> LevelConfig:
+    mission_id = (mission_id or "").strip().lower()
+    if mission_id in ("city", "city_center", "citycenter", "mission1", "m1"):
+        return create_city_center_config()
+    if mission_id in ("airport", "airport_special_ops", "airportspecialops", "mission2", "m2"):
+        return create_airport_special_ops_config()
+    if mission_id in ("worship", "worship_center", "worshipcenter", "mission3", "m3"):
+        return create_worship_center_warfare_config()
+    # Default to the current mission content.
+    return create_city_center_config()
+
+
 def boarded_count(mission: MissionState) -> int:
     return sum(1 for h in mission.hostages if h.state is HostageState.BOARDED)
 

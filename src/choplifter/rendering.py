@@ -266,6 +266,75 @@ def draw_chopper_select_overlay(
         screen.blit(text, (btn.centerx - text.get_width() // 2, btn.centery - text.get_height() // 2))
 
 
+def draw_mission_select_overlay(
+    screen: pygame.Surface,
+    choices: list[tuple[str, str]],
+    selected_index: int,
+    *,
+    title: str = "Select a Mission",
+    hint: str = "Left/Right (or D-pad) to choose • Enter/A to continue",
+) -> None:
+    """Draw a simple mission selection overlay.
+
+    choices: list of (mission_id, display_name)
+    """
+
+    global _TOAST_FONT
+    if _TOAST_FONT is None:
+        pygame.font.init()
+        _TOAST_FONT = pygame.font.SysFont("consolas", 26)
+    title_font = _TOAST_FONT
+
+    w = screen.get_width()
+    h = screen.get_height()
+
+    # Dim the game view.
+    dim = pygame.Surface((w, h), pygame.SRCALPHA)
+    dim.fill((0, 0, 0, 160))
+    screen.blit(dim, (0, 0))
+
+    title_surf = title_font.render(title, True, (240, 240, 240))
+    screen.blit(title_surf, (w // 2 - title_surf.get_width() // 2, 44))
+
+    hint_font = pygame.font.SysFont("consolas", 18)
+    hint_surf = hint_font.render(hint, True, (220, 220, 220))
+    screen.blit(hint_surf, (w // 2 - hint_surf.get_width() // 2, 80))
+
+    n = max(1, len(choices))
+    selected_index = max(0, min(int(selected_index), n - 1))
+
+    margin_x = 26
+    gap = 14
+    box_top = 150
+    box_h = min(190, h - box_top - 40)
+    available_w = w - margin_x * 2
+    box_w = int((available_w - gap * (n - 1)) / float(n))
+    box_w = max(160, box_w)
+
+    row_w = box_w * n + gap * (n - 1)
+    start_x = max(margin_x, (w - row_w) // 2)
+
+    for i, (_mission_id, name) in enumerate(choices):
+        x = start_x + i * (box_w + gap)
+        rect = pygame.Rect(x, box_top, box_w, box_h)
+
+        is_selected = i == selected_index
+        border = 4 if is_selected else 2
+        bg = (20, 20, 20, 200) if is_selected else (10, 10, 10, 180)
+
+        panel = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        panel.fill(bg)
+        screen.blit(panel, rect.topleft)
+
+        pygame.draw.rect(screen, (240, 240, 240) if is_selected else (160, 160, 160), rect, border)
+
+        # Name (centered).
+        label = title_font.render(name, True, (240, 240, 240) if is_selected else (200, 200, 200))
+        lx = rect.centerx - label.get_width() // 2
+        ly = rect.centery - label.get_height() // 2
+        screen.blit(label, (lx, ly))
+
+
 def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0, enable_particles: bool = True) -> None:
     _draw_base(screen, mission, camera_x=camera_x)
     _draw_compounds(screen, mission, camera_x=camera_x)
