@@ -738,10 +738,10 @@ def _update_enemies(
 
     # Time-based pressure ramp:
     # - First 60s: easier
-    # - Next 60s: ramp to normal/slightly harder
+    # - Next 60s: ramp back to normal
     # pressure > 1 => more frequent threats; < 1 => less.
     ramp_t = clamp((mission.elapsed_seconds - 60.0) / 60.0, 0.0, 1.0)
-    pressure = (0.75 * (1.0 - ramp_t)) + (1.10 * ramp_t)
+    pressure = (0.75 * (1.0 - ramp_t)) + (1.00 * ramp_t)
 
     # Spawn a delayed initial air mine (used to keep the first minute calmer).
     if mission.pending_air_mine_pos is not None:
