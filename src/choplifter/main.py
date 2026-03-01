@@ -28,12 +28,16 @@ def run() -> None:
     logger = create_session_logger()
     logger.info("Controls: SPACE fire | E doors (grounded) | TAB facing | R reverse | F1 debug")
     logger.info("Rescue: open compound, land near hostages, E doors to load; land at base and E to unload")
+    logger.info("Gamepad: Left stick tilt | Triggers lift | A doors | X fire")
 
     # Gamepad detection (connect/disconnect notifications).
     pygame.joystick.init()
     joysticks: dict[int, pygame.joystick.Joystick] = {}
     toast_message = ""
     toast_seconds = 0.0
+
+    prev_btn_a_down = False
+    prev_btn_x_down = False
 
     def set_toast(message: str) -> None:
         nonlocal toast_message, toast_seconds
@@ -47,6 +51,50 @@ def run() -> None:
         name = js.get_name() or "Gamepad"
         logger.info("GAMEPAD_CONNECTED: %s", name)
         set_toast(f"Gamepad connected: {name}")
+
+    def get_active_joystick() -> pygame.joystick.Joystick | None:
+        if not joysticks:
+            return None
+        # Prefer a stable order to avoid flipping between devices.
+        instance_id = sorted(joysticks.keys())[0]
+        return joysticks.get(instance_id)
+
+    def axis_value(js: pygame.joystick.Joystick, axis_index: int) -> float:
+        if axis_index < 0 or axis_index >= js.get_numaxes():
+            return 0.0
+        return float(js.get_axis(axis_index))
+
+    def trigger_pressed(raw: float, threshold01: float = 0.55) -> bool:
+        # Triggers are inconsistent across drivers:
+        # - Some report in [-1..1] (rest=-1, pressed=1)
+        # - Some report in [0..1] (rest=0, pressed=1)
+        if raw < -0.1:
+            value01 = (raw + 1.0) * 0.5
+        else:
+            value01 = raw
+        return value01 >= threshold01
+
+    def toggle_doors_with_logging() -> None:
+        at_base = mission.base.contains_point(helicopter.pos)
+        if not helicopter.grounded:
+            logger.info("DOORS: toggle blocked (not grounded)")
+            return
+
+        before = helicopter.doors_open
+        helicopter.toggle_doors()
+        after = helicopter.doors_open
+        if before != after:
+            logger.info(
+                "DOORS: %s at_base=%s boarded=%d",
+                "OPEN" if after else "closed",
+                at_base,
+                boarded_count(mission),
+            )
+
+        if after and not at_base and boarded_count(mission) > 0:
+            logger.info("UNLOAD_BLOCKED: doors open but not in base zone")
+        if after and at_base and boarded_count(mission) == 0:
+            logger.info("UNLOAD: no boarded passengers")
 
     flags = 0
     if window.vsync:
@@ -84,6 +132,8 @@ def run() -> None:
                 name = removed.get_name() if removed is not None else "Gamepad"
                 logger.info("GAMEPAD_DISCONNECTED: %s", name)
                 set_toast(f"Gamepad disconnected: {name}")
+                prev_btn_a_down = False
+                prev_btn_x_down = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
@@ -94,34 +144,57 @@ def run() -> None:
                 elif event.key == pygame.K_r:
                     helicopter.reverse_flip()
                 elif event.key == pygame.K_e:
-                    at_base = mission.base.contains_point(helicopter.pos)
-                    if not helicopter.grounded:
-                        logger.info("DOORS: toggle blocked (not grounded)")
-                    else:
-                        before = helicopter.doors_open
-                        helicopter.toggle_doors()
-                        after = helicopter.doors_open
-                        if before != after:
-                            logger.info(
-                                "DOORS: %s at_base=%s boarded=%d",
-                                "OPEN" if after else "closed",
-                                at_base,
-                                boarded_count(mission),
-                            )
-                        if after and not at_base and boarded_count(mission) > 0:
-                            logger.info("UNLOAD_BLOCKED: doors open but not in base zone")
-                        if after and at_base and boarded_count(mission) == 0:
-                            logger.info("UNLOAD: no boarded passengers")
+                    toggle_doors_with_logging()
                 elif event.key == pygame.K_SPACE:
                     spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
 
         keys = pygame.key.get_pressed()
+        kb_tilt_left = keys[pygame.K_LEFT] or keys[pygame.K_a]
+        kb_tilt_right = keys[pygame.K_RIGHT] or keys[pygame.K_d]
+        kb_lift_up = keys[pygame.K_UP] or keys[pygame.K_w]
+        kb_lift_down = keys[pygame.K_DOWN] or keys[pygame.K_s]
+        kb_brake = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+
+        gp_tilt_left = False
+        gp_tilt_right = False
+        gp_lift_up = False
+        gp_lift_down = False
+
+        active_js = get_active_joystick()
+        if active_js is not None:
+            x_axis = axis_value(active_js, 0)
+            deadzone = 0.35
+            gp_tilt_left = x_axis <= -deadzone
+            gp_tilt_right = x_axis >= deadzone
+
+            axes = active_js.get_numaxes()
+            if axes >= 6:
+                gp_lift_down = trigger_pressed(axis_value(active_js, 4))
+                gp_lift_up = trigger_pressed(axis_value(active_js, 5))
+            elif axes >= 3:
+                # Common fallback: a combined trigger axis.
+                trig = axis_value(active_js, 2)
+                gp_lift_down = trig <= -0.35
+                gp_lift_up = trig >= 0.35
+
+            # Edge-triggered actions.
+            a_down = bool(active_js.get_numbuttons() > 0 and active_js.get_button(0))
+            x_down = bool(active_js.get_numbuttons() > 2 and active_js.get_button(2))
+
+            if a_down and not prev_btn_a_down:
+                toggle_doors_with_logging()
+            if x_down and not prev_btn_x_down:
+                spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
+
+            prev_btn_a_down = a_down
+            prev_btn_x_down = x_down
+
         helicopter_input = HelicopterInput(
-            tilt_left=keys[pygame.K_LEFT] or keys[pygame.K_a],
-            tilt_right=keys[pygame.K_RIGHT] or keys[pygame.K_d],
-            lift_up=keys[pygame.K_UP] or keys[pygame.K_w],
-            lift_down=keys[pygame.K_DOWN] or keys[pygame.K_s],
-            brake=keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT],
+            tilt_left=kb_tilt_left or gp_tilt_left,
+            tilt_right=kb_tilt_right or gp_tilt_right,
+            lift_up=kb_lift_up or gp_lift_up,
+            lift_down=kb_lift_down or gp_lift_down,
+            brake=kb_brake,
         )
 
         # Fixed-timestep update.
