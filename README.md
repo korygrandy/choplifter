@@ -72,6 +72,24 @@ Milestone B adds a basic rescue loop (compounds → hostages → boarding → un
 - Copy `controls.example.json` to `controls.json` in the repo root and edit key names.
 - If `controls.json` is missing or invalid, defaults are used.
 
+### Optional: accessibility toggles (no UI)
+
+- Copy `accessibility.example.json` to `accessibility.json` in the repo root and edit values.
+- If `accessibility.json` is missing or invalid, defaults are used.
+
+Supported fields:
+- `particles_enabled` (bool): toggles sky smoke + burning embers/smoke
+- `flashes_enabled` (bool): reserved for future flash-heavy effects
+- `screenshake_enabled` (bool): reserved for future screenshake
+- `gamepad_deadzone` (0.0–0.95): left stick deadzone
+- `trigger_threshold` (0.05–0.95): trigger press threshold
+
+Pause menu shortcuts (prototype):
+- `X`: toggle particles
+- `Y`: toggle flashes
+- `RB`: toggle screenshake
+- `F2/F3/F4`: same toggles on keyboard
+
 ### Gamepad (prototype)
 
 If you connect an Xbox-style controller, the game will show an on-screen toast when it connects/disconnects.

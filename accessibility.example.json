@@ -1,0 +1,7 @@
+{
+  "particles_enabled": true,
+  "flashes_enabled": true,
+  "screenshake_enabled": true,
+  "gamepad_deadzone": 0.35,
+  "trigger_threshold": 0.55
+}

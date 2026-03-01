@@ -3,6 +3,7 @@ from __future__ import annotations
 import pygame
 
 from .audio import AudioBank
+from .accessibility import load_accessibility
 from .controls import load_controls, matches_key, pressed
 from .debug_overlay import DebugOverlay
 from .game_logging import create_session_logger
@@ -29,6 +30,7 @@ def run() -> None:
     pygame.init()
     logger = create_session_logger()
     controls = load_controls(logger=logger)
+    accessibility = load_accessibility(logger=logger)
     audio = AudioBank.try_create()
     logger.info("Controls: SPACE fire | E doors (grounded) | TAB facing | R reverse | F1 debug")
     logger.info("Rescue: open compound, land near hostages, E doors to load; land at base and E to unload")
@@ -45,6 +47,7 @@ def run() -> None:
     prev_btn_x_down = False
     prev_btn_y_down = False
     prev_btn_start_down = False
+    prev_btn_rb_down = False
 
     def set_toast(message: str) -> None:
         nonlocal toast_message, toast_seconds
@@ -72,7 +75,7 @@ def run() -> None:
             return 0.0
         return float(js.get_axis(axis_index))
 
-    def trigger_pressed(raw: float, threshold01: float = 0.55) -> bool:
+    def trigger_pressed(raw: float, threshold01: float) -> bool:
         # Triggers are inconsistent across drivers:
         # - Some report in [-1..1] (rest=-1, pressed=1)
         # - Some report in [0..1] (rest=0, pressed=1)
@@ -81,6 +84,10 @@ def run() -> None:
         else:
             value01 = raw
         return value01 >= threshold01
+
+    particles_enabled = accessibility.particles_enabled
+    flashes_enabled = accessibility.flashes_enabled
+    screenshake_enabled = accessibility.screenshake_enabled
 
     def toggle_doors_with_logging() -> None:
         at_base = mission.base.contains_point(helicopter.pos)
@@ -177,7 +184,23 @@ def run() -> None:
         prev_btn_x_down = False
         prev_btn_y_down = False
         prev_btn_start_down = False
+        prev_btn_rb_down = False
         logger.info("RESET: mission restarted")
+
+    def toggle_particles() -> None:
+        nonlocal particles_enabled
+        particles_enabled = not particles_enabled
+        set_toast(f"Particles: {'ON' if particles_enabled else 'OFF'}")
+
+    def toggle_flashes() -> None:
+        nonlocal flashes_enabled
+        flashes_enabled = not flashes_enabled
+        set_toast(f"Flashes: {'ON' if flashes_enabled else 'OFF'}")
+
+    def toggle_screenshake() -> None:
+        nonlocal screenshake_enabled
+        screenshake_enabled = not screenshake_enabled
+        set_toast(f"Screenshake: {'ON' if screenshake_enabled else 'OFF'}")
 
     running = True
     accumulator = 0.0
@@ -226,6 +249,12 @@ def run() -> None:
                         set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
                         reset_game()
                 elif mode == "paused":
+                    if event.key == pygame.K_F2:
+                        toggle_particles()
+                    elif event.key == pygame.K_F3:
+                        toggle_flashes()
+                    elif event.key == pygame.K_F4:
+                        toggle_screenshake()
                     if event.key in (pygame.K_UP, pygame.K_w):
                         pause_focus = "choppers"
                     elif event.key in (pygame.K_DOWN, pygame.K_s):
@@ -274,7 +303,7 @@ def run() -> None:
         active_js = get_active_joystick()
         if active_js is not None:
             x_axis = axis_value(active_js, 0)
-            deadzone = 0.35
+            deadzone = float(accessibility.gamepad_deadzone)
             gp_tilt_left = x_axis <= -deadzone
             gp_tilt_right = x_axis >= deadzone
 
@@ -305,8 +334,8 @@ def run() -> None:
 
             axes = active_js.get_numaxes()
             if axes >= 6:
-                gp_lift_down = trigger_pressed(axis_value(active_js, 4))
-                gp_lift_up = trigger_pressed(axis_value(active_js, 5))
+                gp_lift_down = trigger_pressed(axis_value(active_js, 4), threshold01=float(accessibility.trigger_threshold))
+                gp_lift_up = trigger_pressed(axis_value(active_js, 5), threshold01=float(accessibility.trigger_threshold))
             elif axes >= 3:
                 # Common fallback: a combined trigger axis.
                 trig = axis_value(active_js, 2)
@@ -319,6 +348,7 @@ def run() -> None:
             x_down = bool(active_js.get_numbuttons() > 2 and active_js.get_button(2))
             y_down = bool(active_js.get_numbuttons() > 3 and active_js.get_button(3))
             start_down = bool(active_js.get_numbuttons() > 7 and active_js.get_button(7))
+            rb_down = bool(active_js.get_numbuttons() > 5 and active_js.get_button(5))
 
             if mode == "select_chopper":
                 if menu_dir != 0 and menu_dir != prev_menu_dir:
@@ -332,6 +362,14 @@ def run() -> None:
                 # Start/B resumes.
                 if (start_down and not prev_btn_start_down) or (b_down and not prev_btn_b_down):
                     mode = "playing"
+
+                # Accessibility toggles.
+                if x_down and not prev_btn_x_down:
+                    toggle_particles()
+                if y_down and not prev_btn_y_down:
+                    toggle_flashes()
+                if rb_down and not prev_btn_rb_down:
+                    toggle_screenshake()
 
                 # Up/Down selects section.
                 if menu_vert != 0 and menu_vert != prev_menu_vert:
@@ -375,6 +413,7 @@ def run() -> None:
             prev_btn_x_down = x_down
             prev_btn_y_down = y_down
             prev_btn_start_down = start_down
+            prev_btn_rb_down = rb_down
             prev_menu_dir = menu_dir
             prev_menu_vert = menu_vert
 
@@ -441,7 +480,8 @@ def run() -> None:
                 toast_message = ""
 
         # Visual-only sky particles.
-        sky_smoke.update(frame_dt, width=screen.get_width(), horizon_y=int(heli_settings.ground_y))
+        if particles_enabled:
+            sky_smoke.update(frame_dt, width=screen.get_width(), horizon_y=int(heli_settings.ground_y))
 
         # Side-scrolling camera (world x -> screen x).
         world_w = float(mission.world_width)
@@ -456,9 +496,10 @@ def run() -> None:
         # Render.
         # Background above the horizon.
         draw_sky(screen, heli_settings.ground_y)
-        sky_smoke.draw(screen, horizon_y=int(heli_settings.ground_y))
+        if particles_enabled:
+            sky_smoke.draw(screen, horizon_y=int(heli_settings.ground_y))
         draw_ground(screen, heli_settings.ground_y)
-        draw_mission(screen, mission, camera_x=camera_x)
+        draw_mission(screen, mission, camera_x=camera_x, enable_particles=particles_enabled)
         draw_helicopter(screen, helicopter, camera_x=camera_x)
         if mode == "playing":
             draw_hud(screen, mission, helicopter)
@@ -470,7 +511,7 @@ def run() -> None:
                 chopper_choices,
                 selected_chopper_index,
                 title="Paused",
-                hint="Up/Down choose section • Left/Right choose chopper • Start/B resume • A select",
+                hint="Up/Down choose section • Left/Right chopper • Start/B resume • A select • X particles • Y flashes • RB shake",
                 show_restart=True,
                 restart_selected=(pause_focus == "restart"),
             )

@@ -266,12 +266,13 @@ def draw_chopper_select_overlay(
         screen.blit(text, (btn.centerx - text.get_width() // 2, btn.centery - text.get_height() // 2))
 
 
-def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0) -> None:
+def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0, enable_particles: bool = True) -> None:
     _draw_base(screen, mission, camera_x=camera_x)
     _draw_compounds(screen, mission, camera_x=camera_x)
     _draw_hostages(screen, mission, camera_x=camera_x)
     _draw_enemies(screen, mission, camera_x=camera_x)
-    _draw_burning_particles(screen, mission, camera_x=camera_x)
+    if enable_particles:
+        _draw_burning_particles(screen, mission, camera_x=camera_x)
     _draw_projectiles(screen, mission, camera_x=camera_x)
 
     if mission.ended and mission.end_text:
