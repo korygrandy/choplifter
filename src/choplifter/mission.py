@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 import logging
 import math
@@ -167,7 +167,7 @@ class MissionState:
     enemies: list[Enemy]
     base: BaseZone
     world_width: float = 1280.0
-    stats: MissionStats
+    stats: MissionStats = field(default_factory=MissionStats)
     sentiment: float = 50.0
     tuning: MissionTuning = MissionTuning()
     elapsed_seconds: float = 0.0
