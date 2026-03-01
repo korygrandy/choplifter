@@ -116,6 +116,8 @@ class LevelConfig:
     base_right_margin: float
     base_bottom_margin: float
     initial_air_mine_pos: Vec2 | None
+    initial_air_mine_delay_s: float
+    initial_jet_spawn_delay_s: float
     tuning: MissionTuning
 
 
@@ -151,6 +153,9 @@ class MissionState:
     stats: MissionStats
     sentiment: float = 50.0
     tuning: MissionTuning = MissionTuning()
+    elapsed_seconds: float = 0.0
+    pending_air_mine_pos: Vec2 | None = None
+    pending_air_mine_seconds: float = 0.0
     ended: bool = False
     end_text: str = ""
     end_reason: str = ""
@@ -218,17 +223,23 @@ class MissionState:
                 )
             )
 
+        pending_mine_pos: Vec2 | None = None
+        pending_mine_seconds = 0.0
         if level.initial_air_mine_pos is not None:
-            enemies.append(
-                Enemy(
-                    kind=EnemyKind.AIR_MINE,
-                    pos=Vec2(level.initial_air_mine_pos.x, level.initial_air_mine_pos.y),
-                    vel=Vec2(0.0, 0.0),
-                    health=1.0,
+            if level.initial_air_mine_delay_s <= 0.0:
+                enemies.append(
+                    Enemy(
+                        kind=EnemyKind.AIR_MINE,
+                        pos=Vec2(level.initial_air_mine_pos.x, level.initial_air_mine_pos.y),
+                        vel=Vec2(0.0, 0.0),
+                        health=1.0,
+                    )
                 )
-            )
+            else:
+                pending_mine_pos = level.initial_air_mine_pos
+                pending_mine_seconds = level.initial_air_mine_delay_s
 
-        return MissionState(
+        state = MissionState(
             compounds=compounds,
             hostages=hostages,
             projectiles=[],
@@ -237,6 +248,11 @@ class MissionState:
             stats=MissionStats(),
             tuning=level.tuning,
         )
+
+        state.jet_spawn_seconds = level.initial_jet_spawn_delay_s
+        state.pending_air_mine_pos = pending_mine_pos
+        state.pending_air_mine_seconds = pending_mine_seconds
+        return state
 
 
 def create_level_1_config() -> LevelConfig:
@@ -249,6 +265,8 @@ def create_level_1_config() -> LevelConfig:
         base_right_margin=20.0,
         base_bottom_margin=0.0,
         initial_air_mine_pos=Vec2(520.0, 180.0),
+        initial_air_mine_delay_s=60.0,
+        initial_jet_spawn_delay_s=18.0,
         tuning=MissionTuning(),
     )
 
@@ -311,6 +329,8 @@ def update_mission(
 ) -> None:
     if mission.ended:
         return
+
+    mission.elapsed_seconds += dt
 
     if mission.invuln_seconds > 0.0:
         mission.invuln_seconds = max(0.0, mission.invuln_seconds - dt)
@@ -716,11 +736,34 @@ def _update_enemies(
     difficulty = _difficulty_scale(mission.sentiment)
     tuning = mission.tuning
 
+    # Time-based pressure ramp:
+    # - First 60s: easier
+    # - Next 60s: ramp to normal/slightly harder
+    # pressure > 1 => more frequent threats; < 1 => less.
+    ramp_t = clamp((mission.elapsed_seconds - 60.0) / 60.0, 0.0, 1.0)
+    pressure = (0.75 * (1.0 - ramp_t)) + (1.10 * ramp_t)
+
+    # Spawn a delayed initial air mine (used to keep the first minute calmer).
+    if mission.pending_air_mine_pos is not None:
+        mission.pending_air_mine_seconds -= dt
+        if mission.pending_air_mine_seconds <= 0.0:
+            mission.enemies.append(
+                Enemy(
+                    kind=EnemyKind.AIR_MINE,
+                    pos=Vec2(mission.pending_air_mine_pos.x, mission.pending_air_mine_pos.y),
+                    vel=Vec2(0.0, 0.0),
+                    health=1.0,
+                )
+            )
+            if logger is not None:
+                logger.info("MINE: spawned")
+            mission.pending_air_mine_pos = None
+
     # Periodic jet spawns.
     mission.jet_spawn_seconds -= dt
     if mission.jet_spawn_seconds <= 0.0:
         # Slight scaling based on sentiment.
-        interval = tuning.jet_spawn_base_interval_s * (1.0 - 0.22 * difficulty)
+        interval = (tuning.jet_spawn_base_interval_s / pressure) * (1.0 - 0.22 * difficulty)
         mission.jet_spawn_seconds = clamp(interval, tuning.jet_spawn_min_interval_s, tuning.jet_spawn_max_interval_s)
         y = 150.0
         if helicopter.pos.x > 640.0:
@@ -749,7 +792,7 @@ def _update_enemies(
         if e.kind is EnemyKind.TANK:
             dx = helicopter.pos.x - e.pos.x
             if abs(dx) <= 360.0 and helicopter.pos.y <= heli.ground_y - 40.0 and e.cooldown <= 0.0:
-                tank_cd = tuning.tank_fire_base_cooldown_s * (1.0 - 0.12 * difficulty)
+                tank_cd = (tuning.tank_fire_base_cooldown_s / pressure) * (1.0 - 0.12 * difficulty)
                 e.cooldown = clamp(tank_cd, tuning.tank_fire_min_cooldown_s, tuning.tank_fire_max_cooldown_s)
                 _spawn_enemy_bullet_toward(mission, e.pos, helicopter.pos)
                 if logger is not None:
@@ -760,7 +803,7 @@ def _update_enemies(
             e.pos.y += e.vel.y * dt
 
             if abs(helicopter.pos.x - e.pos.x) <= 240.0 and e.cooldown <= 0.0:
-                jet_cd = tuning.jet_fire_base_cooldown_s * (1.0 - 0.10 * difficulty)
+                jet_cd = (tuning.jet_fire_base_cooldown_s / pressure) * (1.0 - 0.10 * difficulty)
                 e.cooldown = clamp(jet_cd, tuning.jet_fire_min_cooldown_s, tuning.jet_fire_max_cooldown_s)
                 _spawn_enemy_bullet_toward(mission, e.pos, helicopter.pos)
 
@@ -777,7 +820,7 @@ def _update_enemies(
                 nx, ny = 0.0, 0.0
 
             desired_speed = clamp(
-                tuning.mine_base_speed * (1.0 + 0.15 * difficulty),
+                (tuning.mine_base_speed * pressure) * (1.0 + 0.15 * difficulty),
                 tuning.mine_min_speed,
                 tuning.mine_max_speed,
             )
