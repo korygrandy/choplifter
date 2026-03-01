@@ -40,6 +40,7 @@ def run() -> None:
     prev_btn_b_down = False
     prev_btn_x_down = False
     prev_btn_y_down = False
+    prev_btn_start_down = False
 
     def set_toast(message: str) -> None:
         nonlocal toast_message, toast_seconds
@@ -113,6 +114,20 @@ def run() -> None:
     helicopter = Helicopter.spawn(heli_settings)
     mission = MissionState.create_default(heli_settings)
 
+    def reset_game() -> None:
+        nonlocal helicopter, mission, accumulator
+        nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
+
+        helicopter = Helicopter.spawn(heli_settings)
+        mission = MissionState.create_default(heli_settings)
+        accumulator = 0.0
+        prev_btn_a_down = False
+        prev_btn_b_down = False
+        prev_btn_x_down = False
+        prev_btn_y_down = False
+        prev_btn_start_down = False
+        logger.info("RESET: mission restarted")
+
     running = True
     accumulator = 0.0
 
@@ -143,6 +158,8 @@ def run() -> None:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
+                elif event.key == pygame.K_RETURN and mission.ended:
+                    reset_game()
                 elif event.key == pygame.K_F1:
                     debug = DebugSettings(show_overlay=not debug.show_overlay)
                 elif event.key == pygame.K_TAB:
@@ -195,6 +212,10 @@ def run() -> None:
             b_down = bool(active_js.get_numbuttons() > 1 and active_js.get_button(1))
             x_down = bool(active_js.get_numbuttons() > 2 and active_js.get_button(2))
             y_down = bool(active_js.get_numbuttons() > 3 and active_js.get_button(3))
+            start_down = bool(active_js.get_numbuttons() > 7 and active_js.get_button(7))
+
+            if start_down and not prev_btn_start_down and mission.ended:
+                reset_game()
 
             if a_down and not prev_btn_a_down:
                 toggle_doors_with_logging()
@@ -209,6 +230,7 @@ def run() -> None:
             prev_btn_b_down = b_down
             prev_btn_x_down = x_down
             prev_btn_y_down = y_down
+            prev_btn_start_down = start_down
 
         helicopter_input = HelicopterInput(
             tilt_left=kb_tilt_left or gp_tilt_left,

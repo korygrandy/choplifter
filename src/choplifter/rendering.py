@@ -235,6 +235,7 @@ def _draw_end(
         f"Lost in transit: {lost_in_transit}",
         f"Enemies destroyed: {enemies_destroyed}",
         f"Crashes: {crashes}",
+        "Press Enter (or Start) to restart",
     ]
     y = rect.bottom + 18
     for line in lines:
