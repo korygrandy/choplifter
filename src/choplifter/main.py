@@ -27,11 +27,9 @@ def run() -> None:
     debug = DebugSettings()
 
     pygame.init()
-    audio = AudioBank.try_create()
-
-    controls = load_controls(logger=logger)
-
     logger = create_session_logger()
+    controls = load_controls(logger=logger)
+    audio = AudioBank.try_create()
     logger.info("Controls: SPACE fire | E doors (grounded) | TAB facing | R reverse | F1 debug")
     logger.info("Rescue: open compound, land near hostages, E doors to load; land at base and E to unload")
     logger.info("Gamepad: Left stick tilt | Triggers lift | A doors | X fire | Y facing | B reverse | D-pad optional")
