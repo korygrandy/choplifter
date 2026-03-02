@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -39,13 +40,29 @@ class IntroVideoPlayer:
     _audio_failed: bool = False
     done: bool = False
 
+    _last_error: str | None = None
+
+    @staticmethod
+    def last_error() -> str | None:
+        return IntroVideoPlayer._last_error
+
     @staticmethod
     def try_create(path: Path) -> "IntroVideoPlayer | None":
+        IntroVideoPlayer._last_error = None
         try:
             if not path.exists():
+                IntroVideoPlayer._last_error = f"missing intro asset: {path}"
                 return None
 
             # Import lazily so the game still runs without video deps.
+            # Force `imageio` to use the bundled ffmpeg exe when available.
+            try:
+                import imageio_ffmpeg  # type: ignore
+
+                os.environ.setdefault("IMAGEIO_FFMPEG_EXE", imageio_ffmpeg.get_ffmpeg_exe())
+            except Exception:
+                pass
+
             import imageio.v2 as imageio  # type: ignore
 
             reader = imageio.get_reader(str(path), format="ffmpeg")
@@ -55,6 +72,12 @@ class IntroVideoPlayer:
             it = reader.iter_data()
             return IntroVideoPlayer(path=path, fps=fps, duration_s=duration_s, _reader=reader, _iter=it)
         except Exception:
+            try:
+                import traceback
+
+                IntroVideoPlayer._last_error = traceback.format_exc(limit=1).strip().splitlines()[-1]
+            except Exception:
+                IntroVideoPlayer._last_error = "failed to initialize intro video"
             return None
 
     def close(self) -> None:

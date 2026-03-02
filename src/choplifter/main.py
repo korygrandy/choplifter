@@ -143,6 +143,20 @@ def run() -> None:
     module_dir = Path(__file__).resolve().parent
     intro_video_path = module_dir / "assets" / "intro.mpg"
     intro_video = IntroVideoPlayer.try_create(intro_video_path)
+    if intro_video is None:
+        logger.info(
+            "INTRO_VIDEO: disabled path=%s exists=%s reason=%s",
+            intro_video_path.as_posix(),
+            intro_video_path.exists(),
+            IntroVideoPlayer.last_error(),
+        )
+    else:
+        logger.info(
+            "INTRO_VIDEO: enabled path=%s fps=%0.1f duration_s=%0.2f",
+            intro_video_path.as_posix(),
+            float(intro_video.fps),
+            float(intro_video.duration_s),
+        )
 
     clock = pygame.time.Clock()
     overlay = DebugOverlay()
