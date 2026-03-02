@@ -46,6 +46,7 @@ $addData = @(
     --specpath $workPath `
     --workpath $workPath `
     --distpath $distPath `
+    --collect-data imageio_ffmpeg `
     $addData `
     run.py
 

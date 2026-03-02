@@ -11,6 +11,10 @@ from .mission import EnemyKind, HostageState, MissionState, ProjectileKind
 _HUD_FONT: pygame.font.Font | None = None
 _TOAST_FONT: pygame.font.Font | None = None
 
+_INTRO_TITLE_FONT: pygame.font.Font | None = None
+_INTRO_SUB_FONT: pygame.font.Font | None = None
+_INTRO_SKIP_FONT: pygame.font.Font | None = None
+
 _BG_ORIG: dict[str, pygame.Surface] = {}
 _BG_LOAD_FAILED: set[str] = set()
 _BG_SCALED: dict[tuple[str, int, int], pygame.Surface] = {}
@@ -450,6 +454,86 @@ def draw_mission_select_overlay(
         lx = rect.centerx - label.get_width() // 2
         ly = rect.centery - label.get_height() // 2
         screen.blit(label, (lx, ly))
+
+
+def draw_intro_cutscene(
+    screen: pygame.Surface,
+    t: float,
+    *,
+    title: str = "CHOPLIFTER",
+    subtitle: str = "Mission: Middle East Rescue",
+    show_skip: bool = True,
+) -> None:
+    """Draw a lightweight intro title card.
+
+    Plays as an in-engine, resolution-independent sequence (no video assets).
+    """
+
+    global _INTRO_TITLE_FONT, _INTRO_SUB_FONT, _INTRO_SKIP_FONT
+    if _INTRO_TITLE_FONT is None or _INTRO_SUB_FONT is None or _INTRO_SKIP_FONT is None:
+        pygame.font.init()
+        _INTRO_TITLE_FONT = pygame.font.SysFont("consolas", 72, bold=True)
+        _INTRO_SUB_FONT = pygame.font.SysFont("consolas", 26)
+        _INTRO_SKIP_FONT = pygame.font.SysFont("consolas", 18)
+
+    w = screen.get_width()
+    h = screen.get_height()
+
+    # Black background.
+    screen.fill((0, 0, 0))
+
+    # Timeline:
+    # - Title fades in early and holds.
+    # - Subtitle fades in slightly later.
+    t = max(0.0, float(t))
+    title_in_start = 0.55
+    title_in_end = 1.55
+    sub_in_start = 1.25
+    sub_in_end = 2.15
+
+    def _fade01(x: float, a: float, b: float) -> float:
+        if b <= a:
+            return 1.0
+        if x <= a:
+            return 0.0
+        if x >= b:
+            return 1.0
+        return (x - a) / (b - a)
+
+    title_a01 = _fade01(t, title_in_start, title_in_end)
+    sub_a01 = _fade01(t, sub_in_start, sub_in_end)
+
+    title_surf = _INTRO_TITLE_FONT.render(title, True, (255, 255, 255))
+    sub_surf = _INTRO_SUB_FONT.render(subtitle, True, (235, 235, 235))
+
+    title_surf.set_alpha(int(255 * title_a01))
+    sub_surf.set_alpha(int(255 * sub_a01))
+
+    cx = w // 2
+    cy = h // 2
+
+    title_rect = title_surf.get_rect(center=(cx, cy - 18))
+    sub_rect = sub_surf.get_rect(center=(cx, title_rect.bottom + 24))
+    screen.blit(title_surf, title_rect)
+    screen.blit(sub_surf, sub_rect)
+
+    if show_skip:
+        draw_skip_overlay(screen)
+
+
+def draw_skip_overlay(screen: pygame.Surface) -> None:
+    """Draw the subtle "Skip" overlay used by the intro."""
+
+    global _INTRO_SKIP_FONT
+    if _INTRO_SKIP_FONT is None:
+        pygame.font.init()
+        _INTRO_SKIP_FONT = pygame.font.SysFont("consolas", 18)
+
+    w = screen.get_width()
+    pad = 16
+    skip_surf = _INTRO_SKIP_FONT.render("Skip", True, (235, 235, 235))
+    skip_surf.set_alpha(110)
+    screen.blit(skip_surf, (w - skip_surf.get_width() - pad, pad))
 
 
 def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0, enable_particles: bool = True) -> None:
