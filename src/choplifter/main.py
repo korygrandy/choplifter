@@ -19,6 +19,7 @@ from .mission import (
 from .rendering import (
     bg_asset_exists,
     draw_chopper_select_overlay,
+    draw_intro_cutscene,
     draw_ground,
     draw_helicopter,
     draw_hud,
@@ -159,7 +160,11 @@ def run() -> None:
     ]
     selected_chopper_index = 0
     selected_chopper_asset = chopper_choices[selected_chopper_index][0]
-    mode: str = "select_mission"  # select_mission | select_chopper | playing | paused
+
+    # Intro cutscene plays on every launch.
+    mode: str = "intro"  # intro | select_mission | select_chopper | playing | paused
+    intro_t = 0.0
+    intro_seconds = 4.25
     prev_menu_dir = 0
     prev_menu_vert = 0
     pause_focus: str = "choppers"  # choppers | restart_mission | restart_game
@@ -281,6 +286,9 @@ def run() -> None:
             elif event.type == pygame.KEYDOWN:
                 if matches_key(event.key, controls.quit):
                     running = False
+                elif mode == "intro":
+                    if event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_ESCAPE):
+                        mode = "select_mission"
                 elif mode == "playing" and event.key == pygame.K_ESCAPE:
                     mode = "paused"
                     pause_focus = "choppers"
@@ -438,6 +446,9 @@ def run() -> None:
                     mode = "playing"
                     set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
                     reset_game()
+            elif mode == "intro":
+                if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
+                    mode = "select_mission"
             elif mode == "select_mission":
                 if menu_dir != 0 and menu_dir != prev_menu_dir:
                     selected_mission_index = (selected_mission_index + menu_dir) % len(mission_choices)
@@ -586,8 +597,13 @@ def run() -> None:
             if toast_seconds <= 0.0:
                 toast_message = ""
 
+        if mode == "intro":
+            intro_t += frame_dt
+            if intro_t >= intro_seconds:
+                mode = "select_mission"
+
         # Visual-only sky particles.
-        if particles_enabled:
+        if particles_enabled and mode != "intro":
             sky_smoke.update(frame_dt, width=screen.get_width(), horizon_y=int(heli_settings.ground_y))
 
         # Side-scrolling camera (world x -> screen x).
@@ -601,39 +617,42 @@ def run() -> None:
             camera_x = max_cam_x
 
         # Render.
-        # Background above the horizon.
-        draw_sky(
-            screen,
-            heli_settings.ground_y,
-            bg_asset=getattr(mission, "bg_asset", "mission1-bg.jpg"),
-            dt=frame_dt,
-            enable_fade=(mode == "select_mission"),
-        )
-        if particles_enabled:
-            sky_smoke.draw(screen, horizon_y=int(heli_settings.ground_y))
-        draw_ground(screen, heli_settings.ground_y)
-        draw_mission(screen, mission, camera_x=camera_x, enable_particles=particles_enabled)
-        draw_helicopter(screen, helicopter, camera_x=camera_x)
-        if mode == "playing":
-            draw_hud(screen, mission, helicopter)
-        elif mode == "select_mission":
-            draw_mission_select_overlay(screen, mission_choices, selected_mission_index)
-        elif mode == "select_chopper":
-            draw_chopper_select_overlay(screen, chopper_choices, selected_chopper_index)
+        if mode == "intro":
+            draw_intro_cutscene(screen, intro_t, show_skip=True)
         else:
-            draw_chopper_select_overlay(
+            # Background above the horizon.
+            draw_sky(
                 screen,
-                chopper_choices,
-                selected_chopper_index,
-                title="Paused",
-                hint="Up/Down choose section • Left/Right chopper • Start/B resume • A select • X particles • Y flashes • RB shake",
-                show_restart=True,
-                restart_selected=(pause_focus == "restart_mission"),
-                show_restart_game=True,
-                restart_game_selected=(pause_focus == "restart_game"),
+                heli_settings.ground_y,
+                bg_asset=getattr(mission, "bg_asset", "mission1-bg.jpg"),
+                dt=frame_dt,
+                enable_fade=(mode == "select_mission"),
             )
-        if toast_message:
-            draw_toast(screen, toast_message)
+            if particles_enabled:
+                sky_smoke.draw(screen, horizon_y=int(heli_settings.ground_y))
+            draw_ground(screen, heli_settings.ground_y)
+            draw_mission(screen, mission, camera_x=camera_x, enable_particles=particles_enabled)
+            draw_helicopter(screen, helicopter, camera_x=camera_x)
+            if mode == "playing":
+                draw_hud(screen, mission, helicopter)
+            elif mode == "select_mission":
+                draw_mission_select_overlay(screen, mission_choices, selected_mission_index)
+            elif mode == "select_chopper":
+                draw_chopper_select_overlay(screen, chopper_choices, selected_chopper_index)
+            else:
+                draw_chopper_select_overlay(
+                    screen,
+                    chopper_choices,
+                    selected_chopper_index,
+                    title="Paused",
+                    hint="Up/Down choose section • Left/Right chopper • Start/B resume • A select • X particles • Y flashes • RB shake",
+                    show_restart=True,
+                    restart_selected=(pause_focus == "restart_mission"),
+                    show_restart_game=True,
+                    restart_game_selected=(pause_focus == "restart_game"),
+                )
+            if toast_message:
+                draw_toast(screen, toast_message)
 
         if debug.show_overlay and mode == "playing":
             overlay.draw(screen, helicopter, mission, clock.get_fps())
