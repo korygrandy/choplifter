@@ -518,10 +518,22 @@ def draw_intro_cutscene(
     screen.blit(sub_surf, sub_rect)
 
     if show_skip:
-        skip_surf = _INTRO_SKIP_FONT.render("Skip", True, (235, 235, 235))
-        skip_surf.set_alpha(110)
-        pad = 16
-        screen.blit(skip_surf, (w - skip_surf.get_width() - pad, pad))
+        draw_skip_overlay(screen)
+
+
+def draw_skip_overlay(screen: pygame.Surface) -> None:
+    """Draw the subtle "Skip" overlay used by the intro."""
+
+    global _INTRO_SKIP_FONT
+    if _INTRO_SKIP_FONT is None:
+        pygame.font.init()
+        _INTRO_SKIP_FONT = pygame.font.SysFont("consolas", 18)
+
+    w = screen.get_width()
+    pad = 16
+    skip_surf = _INTRO_SKIP_FONT.render("Skip", True, (235, 235, 235))
+    skip_surf.set_alpha(110)
+    screen.blit(skip_surf, (w - skip_surf.get_width() - pad, pad))
 
 
 def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0, enable_particles: bool = True) -> None:

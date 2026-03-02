@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import pygame
 
 from .audio import AudioBank
@@ -20,6 +21,7 @@ from .rendering import (
     bg_asset_exists,
     draw_chopper_select_overlay,
     draw_intro_cutscene,
+    draw_skip_overlay,
     draw_ground,
     draw_helicopter,
     draw_hud,
@@ -30,6 +32,7 @@ from .rendering import (
 )
 from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, PhysicsSettings, WindowSettings
 from .sky_smoke import SkySmokeSystem
+from .intro_video import IntroVideoPlayer
 
 
 def run() -> None:
@@ -136,6 +139,11 @@ def run() -> None:
     screen = pygame.display.set_mode((window.width, window.height), flags)
     pygame.display.set_caption(window.title)
 
+    # Optional video intro asset (falls back to the in-engine title card if missing/unavailable).
+    module_dir = Path(__file__).resolve().parent
+    intro_video_path = module_dir / "assets" / "intro.mpg"
+    intro_video = IntroVideoPlayer.try_create(intro_video_path)
+
     clock = pygame.time.Clock()
     overlay = DebugOverlay()
 
@@ -164,7 +172,7 @@ def run() -> None:
     # Intro cutscene plays on every launch.
     mode: str = "intro"  # intro | select_mission | select_chopper | playing | paused
     intro_t = 0.0
-    intro_seconds = 4.25
+    intro_seconds = float(intro_video.duration_s) if (intro_video is not None and intro_video.duration_s > 0.5) else 4.25
     prev_menu_dir = 0
     prev_menu_vert = 0
     pause_focus: str = "choppers"  # choppers | restart_mission | restart_game
@@ -287,8 +295,12 @@ def run() -> None:
                 if matches_key(event.key, controls.quit):
                     running = False
                 elif mode == "intro":
-                    if event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_ESCAPE):
+                    if event.key in (pygame.K_RETURN, pygame.K_SPACE):
                         mode = "select_mission"
+                        intro_t = 0.0
+                        if intro_video is not None:
+                            intro_video.close()
+                            intro_video = None
                 elif mode == "playing" and event.key == pygame.K_ESCAPE:
                     mode = "paused"
                     pause_focus = "choppers"
@@ -449,6 +461,10 @@ def run() -> None:
             elif mode == "intro":
                 if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
                     mode = "select_mission"
+                    intro_t = 0.0
+                    if intro_video is not None:
+                        intro_video.close()
+                        intro_video = None
             elif mode == "select_mission":
                 if menu_dir != 0 and menu_dir != prev_menu_dir:
                     selected_mission_index = (selected_mission_index + menu_dir) % len(mission_choices)
@@ -599,8 +615,19 @@ def run() -> None:
 
         if mode == "intro":
             intro_t += frame_dt
+            if intro_video is not None:
+                intro_video.update(frame_dt)
+                if intro_video.done:
+                    mode = "select_mission"
+                    intro_t = 0.0
+                    intro_video.close()
+                    intro_video = None
             if intro_t >= intro_seconds:
                 mode = "select_mission"
+                intro_t = 0.0
+                if intro_video is not None:
+                    intro_video.close()
+                    intro_video = None
 
         # Visual-only sky particles.
         if particles_enabled and mode != "intro":
@@ -618,7 +645,11 @@ def run() -> None:
 
         # Render.
         if mode == "intro":
-            draw_intro_cutscene(screen, intro_t, show_skip=True)
+            if intro_video is not None:
+                intro_video.draw(screen)
+                draw_skip_overlay(screen)
+            else:
+                draw_intro_cutscene(screen, intro_t, show_skip=True)
         else:
             # Background above the horizon.
             draw_sky(
