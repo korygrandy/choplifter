@@ -84,6 +84,32 @@
           radial-gradient(120% 160% at 80% 0%, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 55%),
           rgba(255, 255, 255, 0.05);
       }
+      .heroGrid {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 18px;
+        align-items: center;
+      }
+      @media (max-width: 860px) {
+        .heroGrid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .cover {
+        width: 100%;
+        height: auto;
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        box-shadow:
+          0 22px 60px rgba(0, 0, 0, 0.35),
+          0 0 0 6px rgba(43, 108, 255, 0.08);
+        background: rgba(0, 0, 0, 0.18);
+      }
+      .coverNote {
+        margin-top: 10px;
+        font-size: 13px;
+        color: var(--muted2);
+      }
       .kicker {
         display: inline-flex;
         gap: 8px;
@@ -208,9 +234,24 @@
     <main class="wrap">
       <div class="shell">
         <header class="hero" aria-label="Choplifter landing">
-          <div class="kicker"><span class="dot" aria-hidden="true"></span> Windows download</div>
-          <h1 class="titleGlow">CHOPLIFTER</h1>
-          <p class="subtitle"><strong>Mission:</strong> Middle East Rescue. Fly low, dodge fire, and bring everyone home.</p>
+          <div class="heroGrid">
+            <div>
+              <div class="kicker"><span class="dot" aria-hidden="true"></span> Windows download</div>
+              <h1 class="titleGlow">CHOPLIFTER</h1>
+              <p class="subtitle"><strong>Mission:</strong> Middle East Rescue. Fly low, dodge fire, and bring everyone home.</p>
+            </div>
+
+            <div aria-label="Cover art">
+              <img
+                class="cover"
+                src="choplifter-game-cover.png"
+                alt="Choplifter cover art"
+                loading="eager"
+                onerror="this.onerror=null; this.src='src/choplifter/assets/chopper-one.png';"
+              />
+              <div class="coverNote">Tip: Place <code>choplifter-game-cover.png</code> next to this HTML file.</div>
+            </div>
+          </div>
         </header>
 
         <section class="grid" aria-label="Download and details">
