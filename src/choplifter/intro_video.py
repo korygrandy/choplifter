@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import subprocess
+import tempfile
 from typing import Any
 
 import pygame
@@ -12,7 +14,11 @@ class IntroVideoPlayer:
     """Minimal video player for the launch intro.
 
     Uses `imageio` (ffmpeg backend) to decode frames and blit them with
-    letterboxing. Audio is intentionally ignored for simplicity.
+    letterboxing.
+
+    If the container has an audio track, it is extracted to a temporary WAV
+    (via `imageio-ffmpeg`'s bundled ffmpeg) and played with
+    `pygame.mixer.music`.
     """
 
     path: Path
@@ -28,6 +34,9 @@ class IntroVideoPlayer:
     _scaled: pygame.Surface | None = None
     _scaled_size: tuple[int, int] | None = None
     _scaled_screen: tuple[int, int] | None = None
+    _audio_wav: Path | None = None
+    _audio_started: bool = False
+    _audio_failed: bool = False
     done: bool = False
 
     @staticmethod
@@ -49,14 +58,105 @@ class IntroVideoPlayer:
             return None
 
     def close(self) -> None:
+        self._stop_audio()
+        if self._audio_wav is not None:
+            try:
+                self._audio_wav.unlink(missing_ok=True)
+            except Exception:
+                pass
+            self._audio_wav = None
+
         try:
             self._reader.close()
         except Exception:
             pass
 
+    def _stop_audio(self) -> None:
+        try:
+            if pygame.mixer.get_init() and pygame.mixer.music.get_busy():
+                pygame.mixer.music.fadeout(200)
+                pygame.mixer.music.stop()
+        except Exception:
+            pass
+
+    def _ensure_audio_started(self) -> None:
+        if self._audio_started or self._audio_failed:
+            return
+
+        # Lazy import so the game still runs without video deps.
+        try:
+            import imageio_ffmpeg  # type: ignore
+        except Exception:
+            self._audio_failed = True
+            return
+
+        # Ensure mixer is available.
+        try:
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+        except Exception:
+            self._audio_failed = True
+            return
+
+        # Extract audio to temp WAV (Windows: keep file path, don't rely on delete-on-close semantics).
+        try:
+            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+            tmp = tempfile.NamedTemporaryFile(prefix="choplifter-intro-", suffix=".wav", delete=False)
+            tmp_path = Path(tmp.name)
+            tmp.close()
+
+            args = [
+                str(ffmpeg_exe),
+                "-y",
+                "-i",
+                str(self.path),
+                "-vn",
+                "-acodec",
+                "pcm_s16le",
+                "-ar",
+                "44100",
+                "-ac",
+                "2",
+                str(tmp_path),
+            ]
+
+            creationflags = 0
+            if hasattr(subprocess, "CREATE_NO_WINDOW"):
+                creationflags = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+
+            r = subprocess.run(
+                args,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=creationflags,
+                check=False,
+            )
+            if r.returncode != 0 or not tmp_path.exists() or tmp_path.stat().st_size <= 0:
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                self._audio_failed = True
+                return
+
+            self._audio_wav = tmp_path
+        except Exception:
+            self._audio_failed = True
+            return
+
+        try:
+            pygame.mixer.music.load(str(self._audio_wav))
+            pygame.mixer.music.play()
+            self._audio_started = True
+        except Exception:
+            self._audio_failed = True
+            return
+
     def update(self, dt: float) -> None:
         if self.done:
             return
+
+        self._ensure_audio_started()
 
         self._t += max(0.0, float(dt))
         target_index = int(self._t * max(1e-6, self.fps))
