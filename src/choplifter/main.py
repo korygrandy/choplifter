@@ -44,6 +44,21 @@ def run() -> None:
 
     pygame.init()
     logger = create_session_logger()
+
+    # Window icon (taskbar/alt-tab). This does not change the .exe file icon.
+    try:
+        module_dir = Path(__file__).resolve().parent
+        icon_path = module_dir / "assets" / "chopper-one.png"
+        icon = pygame.image.load(str(icon_path))
+        try:
+            icon = pygame.transform.smoothscale(icon, (32, 32))
+        except Exception:
+            pass
+        pygame.display.set_icon(icon)
+        logger.info("WINDOW_ICON: %s", icon_path.as_posix())
+    except Exception as e:
+        logger.info("WINDOW_ICON: failed (%s)", type(e).__name__)
+
     controls = load_controls(logger=logger)
     accessibility = load_accessibility(logger=logger)
     audio = AudioBank.try_create()
