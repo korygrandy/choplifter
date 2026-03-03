@@ -134,6 +134,10 @@ class MissionTuning:
     mine_spawn_y_max: float = 220.0
     mine_max_alive: int = 2
 
+    # Hostage/rescue loop.
+    hostage_move_speed: float = 42.0
+    hostage_max_moving_to_lz: int = 6
+
 
 @dataclass(frozen=True)
 class LevelConfig:
@@ -681,7 +685,9 @@ def _update_hostages(mission: MissionState, helicopter: Helicopter, dt: float, h
     load_r2 = load_radius * load_radius
 
     # Hostage movement speed.
-    speed = 42.0
+    speed = mission.tuning.hostage_move_speed
+    max_moving_to_lz = max(1, int(mission.tuning.hostage_max_moving_to_lz))
+    moving_to_lz = sum(1 for h in mission.hostages if h.state is HostageState.MOVING_TO_LZ)
 
     def saved_slot_pos(slot: int) -> Vec2:
         # Pack saved hostages inside the base zone.
@@ -727,18 +733,25 @@ def _update_hostages(mission: MissionState, helicopter: Helicopter, dt: float, h
             h.state = HostageState.WAITING
 
         if h.state is HostageState.WAITING:
-            if lz_available:
+            if lz_available and moving_to_lz < max_moving_to_lz:
                 # If close enough horizontally, start moving to LZ.
                 if abs(h.pos.x - helicopter.pos.x) <= 240.0:
                     h.state = HostageState.MOVING_TO_LZ
+                    moving_to_lz += 1
 
         if h.state is HostageState.MOVING_TO_LZ:
             if not lz_available:
                 h.state = HostageState.WAITING
+                moving_to_lz = max(0, moving_to_lz - 1)
                 continue
 
             direction = -1.0 if h.pos.x > helicopter.pos.x else 1.0
-            h.pos.x += direction * speed * dt
+            step = speed * dt
+            dx_to_heli = helicopter.pos.x - h.pos.x
+            if abs(dx_to_heli) <= step:
+                h.pos.x = helicopter.pos.x
+            else:
+                h.pos.x += direction * step
 
             # Snap to helicopter and board.
             dx = h.pos.x - helicopter.pos.x
@@ -748,8 +761,10 @@ def _update_hostages(mission: MissionState, helicopter: Helicopter, dt: float, h
                 if boarded < capacity:
                     h.state = HostageState.BOARDED
                     h.pos = Vec2(-9999.0, -9999.0)
+                    moving_to_lz = max(0, moving_to_lz - 1)
                 else:
                     h.state = HostageState.WAITING
+                    moving_to_lz = max(0, moving_to_lz - 1)
 
 
 def _handle_unload(mission: MissionState, helicopter: Helicopter, heli: HelicopterSettings, dt: float) -> None:
