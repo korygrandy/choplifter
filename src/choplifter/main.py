@@ -332,7 +332,14 @@ def run() -> None:
                 prev_btn_x_down = False
                 prev_btn_y_down = False
             elif event.type == pygame.KEYDOWN:
-                if matches_key(event.key, controls.quit):
+                # Reserve ESC for pause/resume while in-game.
+                # Quit remains available from menus (and via window close).
+                if mode == "playing" and event.key == pygame.K_ESCAPE:
+                    mode = "paused"
+                    pause_focus = "choppers"
+                elif mode == "paused" and event.key == pygame.K_ESCAPE:
+                    mode = "playing"
+                elif matches_key(event.key, controls.quit):
                     running = False
                 elif mode == "intro":
                     # Skip intro immediately on any key press (except quit which is handled above).
@@ -341,11 +348,6 @@ def run() -> None:
                     if intro_video is not None:
                         intro_video.close(immediate=True)
                         intro_video = None
-                elif mode == "playing" and event.key == pygame.K_ESCAPE:
-                    mode = "paused"
-                    pause_focus = "choppers"
-                elif mode == "paused" and event.key == pygame.K_ESCAPE:
-                    mode = "playing"
                 elif mode == "select_chopper":
                     if event.key in (pygame.K_LEFT, pygame.K_a) or matches_key(event.key, controls.tilt_left):
                         selected_chopper_index = (selected_chopper_index - 1) % len(chopper_choices)
@@ -567,12 +569,13 @@ def run() -> None:
                         mode = "playing"
             else:
                 # Start toggles pause while playing.
-                if start_down and not prev_btn_start_down and not mission.ended:
-                    mode = "paused"
-                    pause_focus = "choppers"
-
-                if start_down and not prev_btn_start_down and mission.ended:
-                    reset_game()
+                if start_down and not prev_btn_start_down:
+                    if mission.ended:
+                        mode = "paused"
+                        pause_focus = "restart_mission"
+                    else:
+                        mode = "paused"
+                        pause_focus = "choppers"
 
                 if a_down and not prev_btn_a_down:
                     toggle_doors_with_logging()
@@ -644,7 +647,7 @@ def run() -> None:
 
                 if mission.crashes != prev_crashes:
                     if mission.ended:
-                        set_toast(f"THE END: {mission.end_reason} (Enter/Start)")
+                        set_toast(f"THE END: {mission.end_reason} (Enter=Retry, Esc/Start=Menu)")
                     else:
                         set_toast(f"CRASH {mission.crashes}/3 — respawn (invuln {mission.invuln_seconds:0.1f}s)")
                         audio.play_crash()
