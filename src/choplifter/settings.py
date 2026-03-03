@@ -41,7 +41,9 @@ class PhysicsSettings:
     ground_damping: float = 0.65
     ground_stop_speed: float = 0.02
 
-    safe_landing_vy: float = 1.5
+    # Vertical speed threshold above which a landing counts as "hard".
+    # This is in the same internal velocity units as `helicopter.vel.y`.
+    safe_landing_vy: float = 10.0
 
 
 @dataclass(frozen=True)

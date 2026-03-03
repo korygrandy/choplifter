@@ -26,6 +26,8 @@ class Helicopter:
     fuel: float
     last_landing_vy: float
     skin_asset: str
+    damage_flash_seconds: float
+    damage_flash_rgb: tuple[int, int, int]
 
     @staticmethod
     def spawn(
@@ -45,6 +47,8 @@ class Helicopter:
             fuel=100.0,
             last_landing_vy=0.0,
             skin_asset=skin_asset,
+            damage_flash_seconds=0.0,
+            damage_flash_rgb=(255, 60, 60),
         )
 
     def toggle_doors(self) -> None:
@@ -84,6 +88,8 @@ def update_helicopter(
     physics: PhysicsSettings,
     heli: HelicopterSettings,
     world_width: float = 1280.0,
+    *,
+    invulnerable: bool = False,
 ) -> None:
     ground_contact_y = heli.ground_y - heli.rotor_clearance
     on_ground_now = helicopter.pos.y >= ground_contact_y
@@ -150,8 +156,11 @@ def update_helicopter(
         if not helicopter.grounded:
             # Landing event.
             helicopter.last_landing_vy = helicopter.vel.y
-            if abs(helicopter.vel.y) > physics.safe_landing_vy:
+            if not invulnerable and abs(helicopter.vel.y) > physics.safe_landing_vy:
                 helicopter.damage = min(100.0, helicopter.damage + 12.5)
+                helicopter.damage_flash_seconds = 0.12
+                # Impact flash: bright/white to distinguish from bullets/mines/jets.
+                helicopter.damage_flash_rgb = (245, 245, 245)
             helicopter.doors_open = False
         helicopter.grounded = True
         helicopter.pos.y = ground_contact_y

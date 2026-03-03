@@ -171,6 +171,23 @@ def draw_ground(screen: pygame.Surface, ground_y: float) -> None:
     pygame.draw.line(screen, (90, 90, 90), (0, int(ground_y)), (screen.get_width(), int(ground_y)), 2)
 
 
+def draw_damage_flash(screen: pygame.Surface, helicopter: Helicopter) -> None:
+    if helicopter.damage_flash_seconds <= 0.0:
+        return
+
+    # A short, bright flash that decays quickly.
+    duration = 0.12
+    t = max(0.0, min(1.0, helicopter.damage_flash_seconds / duration))
+    alpha = int(160 * t)
+    if alpha <= 0:
+        return
+
+    r, g, b = helicopter.damage_flash_rgb
+    overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+    overlay.fill((int(r), int(g), int(b), alpha))
+    screen.blit(overlay, (0, 0))
+
+
 def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x: float = 0.0, boarded: int = 0) -> None:
     x = int(helicopter.pos.x - camera_x)
     y = int(helicopter.pos.y)
