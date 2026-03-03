@@ -97,6 +97,16 @@ Pause menu shortcuts (prototype):
 - `RB`: toggle screenshake
 - `F2/F3/F4`: same toggles on keyboard
 
+### Optional: physics tuning (no UI)
+
+- Copy `physics.example.json` to `physics.json` in the repo root and tweak values.
+- If `physics.json` is missing or invalid, defaults are used.
+
+Most impactful knobs:
+- `engine_power`, `friction`, `max_speed_x/max_speed_y`
+- `max_tilt_deg`, `tilt_rate_deg_per_s`, `tilt_return_rate_deg_per_s`
+- `brake_damping`, `ground_damping`, `safe_landing_vy`
+
 ### Gamepad (prototype)
 
 If you connect an Xbox-style controller, the game will show an on-screen toast when it connects/disconnects.

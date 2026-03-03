@@ -1,0 +1,20 @@
+{
+  "gravity": 18.0,
+  "engine_power": 22.0,
+  "descend_power_factor": 0.6,
+  "friction": 0.985,
+  "max_speed_x": 35.0,
+  "max_speed_y": 35.0,
+
+  "position_scale": 10.0,
+
+  "max_tilt_deg": 35.0,
+  "tilt_rate_deg_per_s": 160.0,
+  "tilt_return_rate_deg_per_s": 90.0,
+
+  "brake_damping": 0.92,
+  "ground_damping": 0.65,
+  "ground_stop_speed": 0.02,
+
+  "safe_landing_vy": 1.5
+}
