@@ -33,12 +33,13 @@ from .rendering import (
 from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, PhysicsSettings, WindowSettings
 from .sky_smoke import SkySmokeSystem
 from .intro_video import IntroVideoPlayer
+from .physics_config import load_physics_settings
 
 
 def run() -> None:
     window = WindowSettings()
     tick = FixedTickSettings()
-    physics = PhysicsSettings()
+    physics = load_physics_settings()
     heli_settings = HelicopterSettings()
     debug = DebugSettings()
 

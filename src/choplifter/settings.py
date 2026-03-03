@@ -24,13 +24,22 @@ class FixedTickSettings:
 class PhysicsSettings:
     gravity: float = 18.0
     engine_power: float = 22.0
+    descend_power_factor: float = 0.60
     friction: float = 0.985
     max_speed_x: float = 35.0
     max_speed_y: float = 35.0
 
+    # Converts the internal velocity units into screen pixels.
+    position_scale: float = 10.0
+
     max_tilt_deg: float = 35.0
     tilt_rate_deg_per_s: float = 160.0
     tilt_return_rate_deg_per_s: float = 90.0
+
+    # Multipliers (0..1) applied to velocity in special cases.
+    brake_damping: float = 0.92
+    ground_damping: float = 0.65
+    ground_stop_speed: float = 0.02
 
     safe_landing_vy: float = 1.5
 

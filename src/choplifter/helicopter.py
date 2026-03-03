@@ -114,7 +114,7 @@ def update_helicopter(
     if helicopter_input.lift_up:
         lift_accel += physics.engine_power
     if helicopter_input.lift_down:
-        lift_accel -= physics.engine_power * 0.60
+        lift_accel -= physics.engine_power * float(physics.descend_power_factor)
 
     # Horizontal acceleration from tilt (fudged physics).
     ax = math.sin(deg_to_rad(helicopter.tilt_deg)) * physics.engine_power
@@ -129,8 +129,8 @@ def update_helicopter(
 
     # Optional brake/hover assist.
     if helicopter_input.brake:
-        helicopter.vel.x *= 0.92
-        helicopter.vel.y *= 0.92
+        helicopter.vel.x *= float(physics.brake_damping)
+        helicopter.vel.y *= float(physics.brake_damping)
 
     # Clamp speeds.
     helicopter.vel.x = clamp(helicopter.vel.x, -physics.max_speed_x, physics.max_speed_x)
@@ -141,8 +141,9 @@ def update_helicopter(
     helicopter.vel.y *= physics.friction
 
     # Integrate.
-    helicopter.pos.x += helicopter.vel.x * dt * 10.0
-    helicopter.pos.y += helicopter.vel.y * dt * 10.0
+    scale = float(physics.position_scale)
+    helicopter.pos.x += helicopter.vel.x * dt * scale
+    helicopter.pos.y += helicopter.vel.y * dt * scale
 
     # Ground / landing.
     if helicopter.pos.y >= ground_contact_y:
@@ -157,8 +158,8 @@ def update_helicopter(
         helicopter.vel.y = 0.0
         if not helicopter_input.lift_up:
             # Extra ground friction so we don't drift/slide after landing.
-            helicopter.vel.x *= 0.65
-            if abs(helicopter.vel.x) < 0.02:
+            helicopter.vel.x *= float(physics.ground_damping)
+            if abs(helicopter.vel.x) < float(physics.ground_stop_speed):
                 helicopter.vel.x = 0.0
     else:
         helicopter.grounded = False
