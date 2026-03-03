@@ -33,6 +33,7 @@ The output is placed in:
 
 - `pyinstaller-dist\Choplifter\` (onedir)
 - `pyinstaller-dist\Choplifter.exe` (onefile)
+- `pyinstaller-dist\choplifter.zip` (convenience zip; contents may include the onedir build)
 
 ## Notes
 

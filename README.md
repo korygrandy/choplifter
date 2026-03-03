@@ -51,8 +51,10 @@ Milestone B adds a basic rescue loop (compounds → hostages → boarding → un
 
 ### Run
 
-1. Create/activate the venv and install dependencies:
-  - `pip install -r requirements.txt`
+Windows / PowerShell:
+
+1. Install dependencies into the repo venv:
+  - `./.venv/Scripts/python.exe -m pip install -r requirements.txt`
 
 ### Repo assets (Git LFS)
 
@@ -60,8 +62,15 @@ This repo stores large assets (like `src/choplifter/assets/intro.mpg`) using Git
 
 - Install/initialize Git LFS once: `git lfs install`
 - Fetch LFS files for this clone: `git lfs pull`
-2. Launch:
-  - `python run.py`
+
+### Launch
+
+- Recommended (always uses the venv): `./.venv/Scripts/python.exe run.py`
+
+Notes:
+
+- If you activate the venv first (`./.venv/Scripts/Activate.ps1`), then `python run.py` will work.
+- Avoid `py run.py` on Windows unless you intentionally want to use your global Python (it will not see venv packages like `pygame`).
 
 ### Controls (prototype)
 
@@ -129,5 +138,8 @@ If you connect an Xbox-style controller, the game will show an on-screen toast w
 
 ### Logs
 
-Each run writes a session log to `logs/session-*.log` (compound opens, boarding/unload counts, collateral, win).
+Each run writes a session log (compound opens, boarding/unload counts, collateral, win).
+
+- Preferred location on Windows: `%LOCALAPPDATA%\Choplifter\logs\session-*.log`
+- Development fallback (if needed): `./logs/session-*.log`
 
