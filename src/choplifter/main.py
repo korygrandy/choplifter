@@ -715,7 +715,7 @@ def run() -> None:
                 sky_smoke.draw(screen, horizon_y=int(heli_settings.ground_y))
             draw_ground(screen, heli_settings.ground_y)
             draw_mission(screen, mission, camera_x=camera_x, enable_particles=particles_enabled)
-            draw_helicopter(screen, helicopter, camera_x=camera_x)
+            draw_helicopter(screen, helicopter, camera_x=camera_x, boarded=boarded_count(mission))
             if mode == "playing":
                 draw_hud(screen, mission, helicopter)
             elif mode == "select_mission":
