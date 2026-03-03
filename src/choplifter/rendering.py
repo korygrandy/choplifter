@@ -171,9 +171,97 @@ def draw_ground(screen: pygame.Surface, ground_y: float) -> None:
     pygame.draw.line(screen, (90, 90, 90), (0, int(ground_y)), (screen.get_width(), int(ground_y)), 2)
 
 
-def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x: float = 0.0) -> None:
+def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x: float = 0.0, boarded: int = 0) -> None:
     x = int(helicopter.pos.x - camera_x)
     y = int(helicopter.pos.y)
+
+    def _with_door_overlay(base: pygame.Surface) -> pygame.Surface:
+        """Return a copy of the helicopter sprite with a simple door state indicator."""
+
+        w = base.get_width()
+        h = base.get_height()
+        if w <= 0 or h <= 0:
+            return base
+
+        # Normalized door rectangle in sprite space.
+        # Tuned for `chopper-one.png` authored facing LEFT; since we draw after flip, this stays correct.
+        door_nx, door_ny, door_nw, door_nh = (0.46, 0.58, 0.16, 0.22)
+        door_rect = pygame.Rect(
+            int(w * door_nx),
+            int(h * door_ny),
+            max(1, int(w * door_nw)),
+            max(1, int(h * door_nh)),
+        )
+
+        # Requested tweak: shift left ~10px, +4px height, -3px width.
+        door_rect.x -= 10
+        door_rect.width = max(1, door_rect.width - 3)
+        door_rect.height = max(1, door_rect.height + 4)
+
+        # Follow-up tweak: shift left another 5px, shrink width by 1px.
+        door_rect.x -= 5
+        door_rect.width = max(1, door_rect.width - 1)
+
+        # Right-facing sprites are horizontally flipped; nudge to keep the door aligned.
+        if helicopter.facing is Facing.RIGHT:
+            door_rect.x += 27
+
+        out = base.copy()
+        # Ensure we can draw alpha on top even if the source is non-alpha.
+        try:
+            out = out.convert_alpha()
+        except Exception:
+            pass
+
+        door_radius = 3
+
+        if helicopter.doors_open:
+            # Open: darker "cutout" + subtle light outline.
+            pygame.draw.rect(out, (0, 0, 0, 170), door_rect, border_radius=door_radius)
+            pygame.draw.rect(out, (235, 235, 235, 160), door_rect, 1, border_radius=door_radius)
+        else:
+            # Closed: red/white horizontal stripes (US flag vibe) with rounded corners.
+            door_panel = pygame.Surface((door_rect.width, door_rect.height), pygame.SRCALPHA)
+            stripe_h = max(1, door_rect.height // 7)
+            y0 = 0
+            stripe_index = 0
+            while y0 < door_rect.height:
+                h_stripe = min(stripe_h, door_rect.height - y0)
+                color = (200, 30, 30, 200) if (stripe_index % 2 == 0) else (245, 245, 245, 200)
+                pygame.draw.rect(door_panel, color, pygame.Rect(0, y0, door_rect.width, h_stripe))
+                y0 += stripe_h
+                stripe_index += 1
+
+            # Blue canton in the upper corner + tiny white dots to suggest stars.
+            canton_w = max(2, int(door_rect.width * 0.45))
+            canton_h = max(2, int(door_rect.height * 0.45))
+            canton = pygame.Rect(0, 0, canton_w, canton_h)
+            pygame.draw.rect(door_panel, (20, 60, 160, 220), canton)
+            for sx, sy in (
+                (canton.left + canton.width // 3, canton.top + canton.height // 3),
+                (canton.left + (2 * canton.width) // 3, canton.top + canton.height // 3),
+                (canton.left + canton.width // 2, canton.top + (2 * canton.height) // 3),
+            ):
+                pygame.draw.circle(door_panel, (245, 245, 245, 230), (sx, sy), 1)
+
+            # Apply a rounded-rect alpha mask so the fill has rounded edges too.
+            mask = pygame.Surface((door_rect.width, door_rect.height), pygame.SRCALPHA)
+            pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=door_radius)
+            door_panel.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+            out.blit(door_panel, door_rect.topleft)
+
+            pygame.draw.rect(out, (20, 20, 20, 140), door_rect, 1, border_radius=door_radius)
+
+        # Passenger indicator: a small "occupied" light that appears only when carrying someone.
+        if boarded > 0:
+            light_cx = door_rect.centerx
+            light_cy = door_rect.top - max(3, door_rect.height // 5)
+            light_cx = max(2, min(w - 3, light_cx))
+            light_cy = max(2, min(h - 3, light_cy))
+            pygame.draw.circle(out, (0, 0, 0, 150), (light_cx, light_cy), 4)
+            pygame.draw.circle(out, (255, 220, 80, 230), (light_cx, light_cy), 3)
+
+        return out
 
     skin = getattr(helicopter, "skin_asset", "chopper-one.png")
     sprite = _get_chopper_scaled(skin, width_px=120)
@@ -182,6 +270,8 @@ def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x:
         # The base sprite is authored facing LEFT; flip for RIGHT-facing.
         if helicopter.facing is Facing.RIGHT:
             s = pygame.transform.flip(s, True, False)
+
+        s = _with_door_overlay(s)
 
         rotated = pygame.transform.rotate(s, -helicopter.tilt_deg)
         rect = rotated.get_rect(center=(x, y))
@@ -193,6 +283,56 @@ def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x:
     body = pygame.Surface((body_w, body_h), pygame.SRCALPHA)
     body.fill((0, 0, 0, 0))
     pygame.draw.rect(body, (60, 190, 80), pygame.Rect(0, 0, body_w, body_h), border_radius=6)
+
+    # Door indicator (fallback rendering).
+    door_rect = pygame.Rect(int(body_w * 0.44), int(body_h * 0.45), int(body_w * 0.18), int(body_h * 0.45))
+    door_rect.x -= 10
+    door_rect.width = max(1, door_rect.width - 3)
+    door_rect.height = max(1, door_rect.height + 4)
+    door_rect.x -= 5
+    door_rect.width = max(1, door_rect.width - 1)
+    if helicopter.facing is Facing.RIGHT:
+        door_rect.x += 27
+    if helicopter.doors_open:
+        pygame.draw.rect(body, (0, 0, 0, 170), door_rect, border_radius=3)
+        pygame.draw.rect(body, (235, 235, 235, 160), door_rect, 1, border_radius=3)
+    else:
+        door_panel = pygame.Surface((door_rect.width, door_rect.height), pygame.SRCALPHA)
+        stripe_h = max(1, door_rect.height // 5)
+        y0 = 0
+        stripe_index = 0
+        while y0 < door_rect.height:
+            h_stripe = min(stripe_h, door_rect.height - y0)
+            color = (200, 30, 30, 255) if (stripe_index % 2 == 0) else (245, 245, 245, 255)
+            pygame.draw.rect(door_panel, color, pygame.Rect(0, y0, door_rect.width, h_stripe))
+            y0 += stripe_h
+            stripe_index += 1
+
+        canton_w = max(2, int(door_rect.width * 0.45))
+        canton_h = max(2, int(door_rect.height * 0.45))
+        canton = pygame.Rect(0, 0, canton_w, canton_h)
+        pygame.draw.rect(door_panel, (20, 60, 160, 255), canton)
+        for sx, sy in (
+            (canton.left + canton.width // 3, canton.top + canton.height // 3),
+            (canton.left + (2 * canton.width) // 3, canton.top + canton.height // 3),
+            (canton.left + canton.width // 2, canton.top + (2 * canton.height) // 3),
+        ):
+            pygame.draw.circle(door_panel, (245, 245, 245, 255), (sx, sy), 1)
+
+        mask = pygame.Surface((door_rect.width, door_rect.height), pygame.SRCALPHA)
+        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=3)
+        door_panel.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        body.blit(door_panel, door_rect.topleft)
+
+        pygame.draw.rect(body, (20, 20, 20, 160), door_rect, 1, border_radius=3)
+
+    if boarded > 0:
+        light_cx = door_rect.centerx
+        light_cy = door_rect.top - max(2, door_rect.height // 4)
+        light_cx = max(2, min(body_w - 3, light_cx))
+        light_cy = max(2, min(body_h - 3, light_cy))
+        pygame.draw.circle(body, (0, 0, 0, 170), (light_cx, light_cy), 4)
+        pygame.draw.circle(body, (255, 220, 80, 255), (light_cx, light_cy), 3)
 
     if helicopter.facing is Facing.LEFT:
         pygame.draw.circle(body, (220, 220, 220), (8, body_h // 2), 4)
