@@ -20,6 +20,7 @@ from .mission import (
 from .rendering import (
     bg_asset_exists,
     draw_chopper_select_overlay,
+    draw_damage_flash,
     draw_intro_cutscene,
     draw_skip_overlay,
     draw_ground,
@@ -616,13 +617,33 @@ def run() -> None:
         while accumulator >= tick.dt:
             if mode == "playing":
                 was_grounded = helicopter.grounded
-                update_helicopter(helicopter, helicopter_input, tick.dt, physics, heli_settings, world_width=float(mission.world_width))
+                # If the helicopter starts airborne, there may be no ground->air transition
+                # to kick off the flying loop. Start it as soon as the player applies lift.
+                if (helicopter_input.lift_up or helicopter_input.lift_down) and not helicopter.grounded:
+                    audio.start_flying()
+                update_helicopter(
+                    helicopter,
+                    helicopter_input,
+                    tick.dt,
+                    physics,
+                    heli_settings,
+                    world_width=float(mission.world_width),
+                    invulnerable=(mission.invuln_seconds > 0.0 or mission.ended),
+                )
                 if was_grounded and not helicopter.grounded:
                     audio.start_flying()
                 if not was_grounded and helicopter.grounded:
-                    hostage_crush_check_logged(mission, helicopter, helicopter.last_landing_vy, logger)
+                    hostage_crush_check_logged(
+                        mission,
+                        helicopter,
+                        helicopter.last_landing_vy,
+                        safe_landing_vy=physics.safe_landing_vy,
+                        logger=logger,
+                    )
                     audio.stop_flying()
                 update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
+
+                helicopter.damage_flash_seconds = max(0.0, helicopter.damage_flash_seconds - tick.dt)
 
                 saved_delta = mission.stats.saved - prev_saved
                 if saved_delta > 0:
@@ -736,6 +757,9 @@ def run() -> None:
                 )
             if toast_message:
                 draw_toast(screen, toast_message)
+
+            if mode == "playing" and flashes_enabled:
+                draw_damage_flash(screen, helicopter)
 
         if debug.show_overlay and mode == "playing":
             overlay.draw(screen, helicopter, mission, clock.get_fps())

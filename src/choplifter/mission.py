@@ -826,12 +826,18 @@ def _handle_unload(mission: MissionState, helicopter: Helicopter, heli: Helicopt
     mission.unload_release_seconds = 0.22
 
 
-def hostage_crush_check(mission: MissionState, helicopter: Helicopter, last_landing_vy: float) -> None:
+def hostage_crush_check(
+    mission: MissionState,
+    helicopter: Helicopter,
+    last_landing_vy: float,
+    *,
+    safe_landing_vy: float,
+) -> None:
     # Called on a landing event. If the landing was hard and a hostage is under the helicopter, crush them.
     if mission.ended:
         return
 
-    if abs(last_landing_vy) <= 1.5:
+    if abs(last_landing_vy) <= safe_landing_vy:
         return
 
     crush_radius = 28.0
@@ -851,10 +857,12 @@ def hostage_crush_check_logged(
     mission: MissionState,
     helicopter: Helicopter,
     last_landing_vy: float,
+    *,
+    safe_landing_vy: float,
     logger: logging.Logger | None,
 ) -> None:
     before = mission.stats.kia_by_player
-    hostage_crush_check(mission, helicopter, last_landing_vy)
+    hostage_crush_check(mission, helicopter, last_landing_vy, safe_landing_vy=safe_landing_vy)
     if logger is None:
         return
     if mission.stats.kia_by_player != before:
@@ -1217,6 +1225,18 @@ def _damage_helicopter(
 
     before = helicopter.damage
     helicopter.damage = min(100.0, helicopter.damage + amount)
+    if helicopter.damage > before:
+        # Screen flash: set a short timer + color based on damage source.
+        # (Rendering is gated by accessibility.flashes_enabled.)
+        helicopter.damage_flash_seconds = 0.12
+        if source == "ENEMY_BULLET":
+            helicopter.damage_flash_rgb = (255, 40, 40)
+        elif source == "JET":
+            helicopter.damage_flash_rgb = (120, 120, 255)
+        elif source == "AIR_MINE":
+            helicopter.damage_flash_rgb = (255, 170, 60)
+        else:
+            helicopter.damage_flash_rgb = (255, 60, 60)
     if logger is not None and int(before) != int(helicopter.damage):
         logger.info("HIT: %s damage=%.0f", source, helicopter.damage)
 
