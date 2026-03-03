@@ -71,3 +71,60 @@ The LLM should prioritize the following modern implementation strategies:
 
 * **The "End" Clause:** Never use "Game Over." The game must conclude with a cinematic "The End," followed by a statistical summary of lives saved vs. lives lost.
 * **Landing Sensitivity:** The helicopter "CRUSH" collision box must be active. If the `Vertical Velocity` exceeds a threshold of $1.5 \text{m/s}$ upon contact with a hostage entity, the hostage state changes to `KIA`.
+
+---
+
+## 7. Repository Reality Check (Current Prototype)
+
+This section is for future LLMs working on the *actual* code in this repository.
+
+### What exists today
+
+- Python + Pygame prototype with a playable rescue loop (open compounds → board hostages → unload at base → win at 20 saved).
+- Intro cutscene video playback (with optional audio extraction/playback) and a skip hint.
+- Windows packaging via PyInstaller (both onefile and onedir builds).
+
+### Entry points & layout
+
+- Entrypoint: `run.py` imports `src.choplifter.main:run`.
+- Game loop/state: `src/choplifter/main.py`.
+- Mission/rescue logic: `src/choplifter/mission.py`.
+- Helicopter physics: `src/choplifter/helicopter.py` (plus tuning in `src/choplifter/settings.py`).
+- Rendering/HUD: `src/choplifter/rendering.py`.
+- Logging helper: `src/choplifter/game_logging.py`.
+- Intro: `src/choplifter/intro_video.py`.
+
+### Running (Windows)
+
+- Recommended (always uses the repo venv): `./.venv/Scripts/python.exe run.py`
+- If you activate first (`./.venv/Scripts/Activate.ps1`), then `python run.py` works.
+- Avoid `py run.py` unless you intentionally want to use the global Python install (it will not see venv packages like `pygame`).
+
+### Logs
+
+- Preferred location on Windows: `%LOCALAPPDATA%\Choplifter\logs\session-*.log`
+- Development fallback: `./logs/session-*.log`
+
+### Assets (Git LFS)
+
+- Large assets (notably `src/choplifter/assets/intro.mpg`) are tracked via Git LFS.
+- Fresh clones typically need `git lfs install` and `git lfs pull`.
+
+### Optional JSON configs (no in-game UI)
+
+- `controls.json` (copy from `controls.example.json`)
+- `accessibility.json` (copy from `accessibility.example.json`)
+- `physics.json` (copy from `physics.example.json`)
+
+### Packaging (Windows EXE)
+
+- Build script: `scripts/build_windows_exe.ps1`
+- Onefile: `powershell -ExecutionPolicy Bypass -File .\scripts\build_windows_exe.ps1 -Mode onefile`
+- Onedir: `powershell -ExecutionPolicy Bypass -File .\scripts\build_windows_exe.ps1 -Mode onedir`
+- Outputs: `pyinstaller-dist/Choplifter.exe` (onefile), `pyinstaller-dist/Choplifter/Choplifter.exe` (onedir)
+
+### Recent merged gameplay polish (important context)
+
+- Rescue loop readability: HUD displays grounded/doors state during missions.
+- Hostage movement: when hostages begin moving to the helicopter, the game mixes a more controlled “queue” behavior with an occasional chaotic rush. This is controlled by `MissionTuning` fields in `src/choplifter/mission.py`:
+	- `hostage_controlled_*`, `hostage_chaotic_*`, `hostage_chaos_probability`
