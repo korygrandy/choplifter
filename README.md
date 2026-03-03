@@ -53,6 +53,13 @@ Milestone B adds a basic rescue loop (compounds → hostages → boarding → un
 
 1. Create/activate the venv and install dependencies:
   - `pip install -r requirements.txt`
+
+### Repo assets (Git LFS)
+
+This repo stores large assets (like `src/choplifter/assets/intro.mpg`) using Git LFS.
+
+- Install/initialize Git LFS once: `git lfs install`
+- Fetch LFS files for this clone: `git lfs pull`
 2. Launch:
   - `python run.py`
 

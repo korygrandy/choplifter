@@ -156,7 +156,15 @@ def run() -> None:
 
     # Optional video intro asset (falls back to the in-engine title card if missing/unavailable).
     module_dir = Path(__file__).resolve().parent
-    intro_video_path = module_dir / "assets" / "intro.mpg"
+    assets_dir = module_dir / "assets"
+    # Prefer the legacy MPG intro for now (simpler asset workflow).
+    # MP4 remains as a fallback if the MPG is missing.
+    intro_candidates = (
+        assets_dir / "intro.mpg",
+        assets_dir / "choplifter-intro.mp4",
+        assets_dir / "choplifter-intro,mp4",
+    )
+    intro_video_path = next((p for p in intro_candidates if p.exists()), intro_candidates[0])
     intro_video = IntroVideoPlayer.try_create(intro_video_path)
     if intro_video is None:
         logger.info(

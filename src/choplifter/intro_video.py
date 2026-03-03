@@ -169,6 +169,7 @@ class IntroVideoPlayer:
 
         try:
             pygame.mixer.music.load(str(self._audio_wav))
+            pygame.mixer.music.set_volume(1.0)
             pygame.mixer.music.play()
             self._audio_started = True
         except Exception:
