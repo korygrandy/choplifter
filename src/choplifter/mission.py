@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 import logging
 import math
+import random
 
 from .burning_particles import BurningParticleSystem
 from .helicopter import Facing, Helicopter
@@ -28,6 +29,7 @@ class Hostage:
     pos: Vec2
     health: float = 100.0
     saved_slot: int = -1
+    move_speed: float = 0.0
 
 
 @dataclass
@@ -135,8 +137,12 @@ class MissionTuning:
     mine_max_alive: int = 2
 
     # Hostage/rescue loop.
-    hostage_move_speed: float = 42.0
-    hostage_max_moving_to_lz: int = 6
+    # The game randomly mixes a more readable/controlled style with a more chaotic style.
+    hostage_controlled_move_speed: float = 40.0
+    hostage_controlled_max_moving_to_lz: int = 4
+    hostage_chaotic_move_speed: float = 52.0
+    hostage_chaotic_max_moving_to_lz: int = 12
+    hostage_chaos_probability: float = 0.35
 
 
 @dataclass(frozen=True)
@@ -684,9 +690,11 @@ def _update_hostages(mission: MissionState, helicopter: Helicopter, dt: float, h
     load_radius = 58.0
     load_r2 = load_radius * load_radius
 
-    # Hostage movement speed.
-    speed = mission.tuning.hostage_move_speed
-    max_moving_to_lz = max(1, int(mission.tuning.hostage_max_moving_to_lz))
+    controlled_speed = mission.tuning.hostage_controlled_move_speed
+    controlled_cap = max(1, int(mission.tuning.hostage_controlled_max_moving_to_lz))
+    chaotic_speed = mission.tuning.hostage_chaotic_move_speed
+    chaotic_cap = max(1, int(mission.tuning.hostage_chaotic_max_moving_to_lz))
+    chaos_p = clamp(mission.tuning.hostage_chaos_probability, 0.0, 1.0)
     moving_to_lz = sum(1 for h in mission.hostages if h.state is HostageState.MOVING_TO_LZ)
 
     def saved_slot_pos(slot: int) -> Vec2:
@@ -733,19 +741,35 @@ def _update_hostages(mission: MissionState, helicopter: Helicopter, dt: float, h
             h.state = HostageState.WAITING
 
         if h.state is HostageState.WAITING:
-            if lz_available and moving_to_lz < max_moving_to_lz:
+            if lz_available:
+                # Mix both behaviors: sometimes a controlled "queue", sometimes a chaotic rush.
+                is_chaotic = random.random() < chaos_p
+                cap = chaotic_cap if is_chaotic else controlled_cap
+                start_radius = 320.0 if is_chaotic else 240.0
+
+                if moving_to_lz >= cap:
+                    continue
+
                 # If close enough horizontally, start moving to LZ.
-                if abs(h.pos.x - helicopter.pos.x) <= 240.0:
+                if abs(h.pos.x - helicopter.pos.x) <= start_radius:
                     h.state = HostageState.MOVING_TO_LZ
                     moving_to_lz += 1
+
+                    base_speed = chaotic_speed if is_chaotic else controlled_speed
+                    if is_chaotic:
+                        # Small per-hostage variation so they don't march in lockstep.
+                        base_speed *= random.uniform(0.9, 1.15)
+                    h.move_speed = base_speed
 
         if h.state is HostageState.MOVING_TO_LZ:
             if not lz_available:
                 h.state = HostageState.WAITING
+                h.move_speed = 0.0
                 moving_to_lz = max(0, moving_to_lz - 1)
                 continue
 
             direction = -1.0 if h.pos.x > helicopter.pos.x else 1.0
+            speed = h.move_speed if h.move_speed > 0.0 else controlled_speed
             step = speed * dt
             dx_to_heli = helicopter.pos.x - h.pos.x
             if abs(dx_to_heli) <= step:
@@ -761,9 +785,11 @@ def _update_hostages(mission: MissionState, helicopter: Helicopter, dt: float, h
                 if boarded < capacity:
                     h.state = HostageState.BOARDED
                     h.pos = Vec2(-9999.0, -9999.0)
+                    h.move_speed = 0.0
                     moving_to_lz = max(0, moving_to_lz - 1)
                 else:
                     h.state = HostageState.WAITING
+                    h.move_speed = 0.0
                     moving_to_lz = max(0, moving_to_lz - 1)
 
 
