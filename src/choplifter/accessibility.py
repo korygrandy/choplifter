@@ -34,6 +34,9 @@ class AccessibilitySettings:
     flashes_enabled: bool = True
     screenshake_enabled: bool = True
 
+    # Haptics.
+    rumble_enabled: bool = True
+
     # Input comfort.
     gamepad_deadzone: float = 0.35
     trigger_threshold: float = 0.55
@@ -53,6 +56,7 @@ def load_accessibility(*, logger: logging.Logger | None = None) -> Accessibility
       "particles_enabled": true,
       "flashes_enabled": true,
       "screenshake_enabled": true,
+            "rumble_enabled": true,
       "gamepad_deadzone": 0.35,
       "trigger_threshold": 0.55
     }
@@ -82,6 +86,7 @@ def load_accessibility(*, logger: logging.Logger | None = None) -> Accessibility
         particles_enabled=_coerce_bool(data.get("particles_enabled"), settings.particles_enabled),
         flashes_enabled=_coerce_bool(data.get("flashes_enabled"), settings.flashes_enabled),
         screenshake_enabled=_coerce_bool(data.get("screenshake_enabled"), settings.screenshake_enabled),
+        rumble_enabled=_coerce_bool(data.get("rumble_enabled"), settings.rumble_enabled),
         gamepad_deadzone=_coerce_float(data.get("gamepad_deadzone"), settings.gamepad_deadzone, lo=0.0, hi=0.95),
         trigger_threshold=_coerce_float(data.get("trigger_threshold"), settings.trigger_threshold, lo=0.05, hi=0.95),
     )

@@ -10,6 +10,7 @@ from .burning_particles import BurningParticleSystem
 from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
 from .settings import HelicopterSettings
+from . import haptics
 
 
 class HostageState(Enum):
@@ -80,6 +81,7 @@ class Enemy:
     cooldown: float = 0.0
     ttl: float = 999.0
     alive: bool = True
+    entered_screen: bool = False
 
 
 @dataclass(frozen=True)
@@ -185,6 +187,7 @@ class MissionStats:
     lost_in_transit: int = 0
     enemies_destroyed: int = 0
     tanks_destroyed: int = 0
+    jets_entered: int = 0
 
 
 @dataclass
@@ -554,6 +557,7 @@ def _update_projectiles(
                             mission.stats.tanks_destroyed += 1
                             # Persist a burning effect at the destroyed cannon/tank location.
                             mission.burning.add_site(e.pos, intensity=1.0)
+                            haptics.rumble_tank_destroyed(logger=logger)
                         if logger is not None:
                             logger.info("ENEMY_DOWN: %s", e.kind.name)
                     p.alive = False
@@ -651,6 +655,7 @@ def _bomb_explode(mission: MissionState, pos: Vec2, logger: logging.Logger | Non
                 if e.kind is EnemyKind.TANK:
                     mission.stats.tanks_destroyed += 1
                     mission.burning.add_site(e.pos, intensity=1.0)
+                    haptics.rumble_tank_destroyed(logger=logger)
                 if logger is not None:
                     logger.info("ENEMY_DOWN: %s", e.kind.name)
 
@@ -1112,6 +1117,12 @@ def _update_enemies(
             e.pos.x += e.vel.x * dt
             e.pos.y += e.vel.y * dt
 
+            if not e.entered_screen and 0.0 <= e.pos.x <= mission.world_width:
+                e.entered_screen = True
+                mission.stats.jets_entered += 1
+                if logger is not None:
+                    logger.info("JET: entered")
+
             if abs(helicopter.pos.x - e.pos.x) <= tuning.jet_fire_range_x and e.cooldown <= 0.0:
                 jet_cd = (tuning.jet_fire_base_cooldown_s / pressure) * (1.0 - 0.10 * difficulty)
                 e.cooldown = clamp(jet_cd, tuning.jet_fire_min_cooldown_s, tuning.jet_fire_max_cooldown_s)
@@ -1237,6 +1248,7 @@ def _damage_helicopter(
             helicopter.damage_flash_rgb = (255, 170, 60)
         else:
             helicopter.damage_flash_rgb = (255, 60, 60)
+        haptics.rumble_hit(amount=amount, source=source, logger=logger)
     if logger is not None and int(before) != int(helicopter.damage):
         logger.info("HIT: %s damage=%.0f", source, helicopter.damage)
 

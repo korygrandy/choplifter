@@ -9,6 +9,7 @@ from .controls import load_controls, matches_key, pressed
 from .debug_overlay import DebugOverlay
 from .game_logging import create_session_logger
 from .helicopter import Facing, Helicopter, HelicopterInput, update_helicopter
+from . import haptics
 from .mission import (
     MissionState,
     get_mission_config_by_id,
@@ -63,6 +64,7 @@ def run() -> None:
 
     controls = load_controls(logger=logger)
     accessibility = load_accessibility(logger=logger)
+    haptics.set_enabled(accessibility.rumble_enabled)
     audio = AudioBank.try_create()
     logger.info("Controls: SPACE fire | E doors (grounded) | TAB facing | R reverse | F1 debug")
     logger.info("Rescue: open compound, land near hostages, E doors to load; land at base and E to unload")
@@ -230,10 +232,11 @@ def run() -> None:
     prev_boarded = boarded_count(mission)
     prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
     prev_tanks_destroyed = mission.stats.tanks_destroyed
+    prev_jets_entered = mission.stats.jets_entered
 
     def apply_mission_preview() -> None:
         nonlocal helicopter, mission, accumulator
-        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed
+        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed, prev_jets_entered
 
         mission = MissionState.create_from_level_config(heli_settings, get_mission_config_by_id(selected_mission_id))
         helicopter = Helicopter.spawn(
@@ -251,6 +254,7 @@ def run() -> None:
         prev_boarded = boarded_count(mission)
         prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
         prev_tanks_destroyed = mission.stats.tanks_destroyed
+        prev_jets_entered = mission.stats.jets_entered
 
         bg = getattr(mission, "bg_asset", "")
         if bg and not bg_asset_exists(bg):
@@ -261,7 +265,7 @@ def run() -> None:
         nonlocal selected_chopper_asset
         nonlocal selected_mission_id
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
-        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed
+        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed, prev_jets_entered
 
         mission = MissionState.create_from_level_config(heli_settings, get_mission_config_by_id(selected_mission_id))
         helicopter = Helicopter.spawn(
@@ -279,6 +283,7 @@ def run() -> None:
         prev_boarded = boarded_count(mission)
         prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
         prev_tanks_destroyed = mission.stats.tanks_destroyed
+        prev_jets_entered = mission.stats.jets_entered
         prev_btn_a_down = False
         prev_btn_b_down = False
         prev_btn_x_down = False
@@ -438,6 +443,7 @@ def run() -> None:
         gp_lift_down = False
 
         active_js = get_active_joystick()
+        haptics.set_active_joystick(active_js)
         if active_js is not None:
             x_axis = axis_value(active_js, 0)
             deadzone = float(accessibility.gamepad_deadzone)
@@ -665,6 +671,11 @@ def run() -> None:
                 if tank_delta > 0:
                     audio.play_explosion_big()
                     prev_tanks_destroyed = mission.stats.tanks_destroyed
+
+                jets_entered_delta = mission.stats.jets_entered - prev_jets_entered
+                if jets_entered_delta > 0:
+                    audio.play_jet_flyby()
+                    prev_jets_entered = mission.stats.jets_entered
 
                 if mission.crashes != prev_crashes:
                     if mission.ended:
