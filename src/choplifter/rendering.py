@@ -835,7 +835,7 @@ def _draw_projectiles(screen: pygame.Surface, mission: MissionState, *, camera_x
         y = int(p.pos.y)
         if p.kind is ProjectileKind.BULLET:
             pygame.draw.circle(screen, (240, 240, 240), (x, y), 2)
-        elif p.kind is ProjectileKind.ENEMY_BULLET:
+        elif p.kind in (ProjectileKind.ENEMY_BULLET, ProjectileKind.ENEMY_ARTILLERY):
             pygame.draw.circle(screen, (200, 40, 40), (x, y), 2)
         else:
             pygame.draw.circle(screen, (35, 35, 35), (x, y), 4)
