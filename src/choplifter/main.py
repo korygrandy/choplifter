@@ -9,6 +9,7 @@ from .controls import load_controls, matches_key, pressed
 from .debug_overlay import DebugOverlay
 from .game_logging import create_session_logger
 from .helicopter import Facing, Helicopter, HelicopterInput, update_helicopter
+from . import haptics
 from .mission import (
     MissionState,
     get_mission_config_by_id,
@@ -63,6 +64,7 @@ def run() -> None:
 
     controls = load_controls(logger=logger)
     accessibility = load_accessibility(logger=logger)
+    haptics.set_enabled(accessibility.rumble_enabled)
     audio = AudioBank.try_create()
     logger.info("Controls: SPACE fire | E doors (grounded) | TAB facing | R reverse | F1 debug")
     logger.info("Rescue: open compound, land near hostages, E doors to load; land at base and E to unload")
@@ -438,6 +440,7 @@ def run() -> None:
         gp_lift_down = False
 
         active_js = get_active_joystick()
+        haptics.set_active_joystick(active_js)
         if active_js is not None:
             x_axis = axis_value(active_js, 0)
             deadzone = float(accessibility.gamepad_deadzone)

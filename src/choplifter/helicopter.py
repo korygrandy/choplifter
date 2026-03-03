@@ -6,6 +6,7 @@ import math
 
 from .math2d import Vec2, clamp, deg_to_rad
 from .settings import HelicopterSettings, PhysicsSettings
+from . import haptics
 
 
 class Facing(Enum):
@@ -161,6 +162,7 @@ def update_helicopter(
                 helicopter.damage_flash_seconds = 0.12
                 # Impact flash: bright/white to distinguish from bullets/mines/jets.
                 helicopter.damage_flash_rgb = (245, 245, 245)
+                haptics.rumble_rough_landing(impact_vy=helicopter.vel.y, safe_vy=physics.safe_landing_vy)
             helicopter.doors_open = False
         helicopter.grounded = True
         helicopter.pos.y = ground_contact_y
