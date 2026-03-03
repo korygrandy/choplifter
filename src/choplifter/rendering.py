@@ -463,6 +463,7 @@ def draw_intro_cutscene(
     title: str = "CHOPLIFTER",
     subtitle: str = "Mission: Middle East Rescue",
     show_skip: bool = True,
+    skip_text: str | None = None,
 ) -> None:
     """Draw a lightweight intro title card.
 
@@ -518,10 +519,10 @@ def draw_intro_cutscene(
     screen.blit(sub_surf, sub_rect)
 
     if show_skip:
-        draw_skip_overlay(screen)
+        draw_skip_overlay(screen, text=skip_text)
 
 
-def draw_skip_overlay(screen: pygame.Surface) -> None:
+def draw_skip_overlay(screen: pygame.Surface, *, text: str | None = None) -> None:
     """Draw the subtle "Skip" overlay used by the intro."""
 
     global _INTRO_SKIP_FONT
@@ -531,7 +532,8 @@ def draw_skip_overlay(screen: pygame.Surface) -> None:
 
     w = screen.get_width()
     pad = 16
-    skip_surf = _INTRO_SKIP_FONT.render("Skip", True, (235, 235, 235))
+    label = text or "Enter/Space: Skip"
+    skip_surf = _INTRO_SKIP_FONT.render(label, True, (235, 235, 235))
     skip_surf.set_alpha(110)
     screen.blit(skip_surf, (w - skip_surf.get_width() - pad, pad))
 

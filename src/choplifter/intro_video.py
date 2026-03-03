@@ -80,8 +80,8 @@ class IntroVideoPlayer:
                 IntroVideoPlayer._last_error = "failed to initialize intro video"
             return None
 
-    def close(self) -> None:
-        self._stop_audio()
+    def close(self, *, immediate: bool = False) -> None:
+        self._stop_audio(immediate=immediate)
         if self._audio_wav is not None:
             try:
                 self._audio_wav.unlink(missing_ok=True)
@@ -94,10 +94,11 @@ class IntroVideoPlayer:
         except Exception:
             pass
 
-    def _stop_audio(self) -> None:
+    def _stop_audio(self, *, immediate: bool) -> None:
         try:
             if pygame.mixer.get_init() and pygame.mixer.music.get_busy():
-                pygame.mixer.music.fadeout(200)
+                if not immediate:
+                    pygame.mixer.music.fadeout(200)
                 pygame.mixer.music.stop()
         except Exception:
             pass
