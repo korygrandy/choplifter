@@ -308,6 +308,8 @@ def run() -> None:
         frame_dt = clock.tick(120) / 1000.0
         accumulator += frame_dt
 
+        skip_hint = "Enter/Space or A/Start: Skip" if get_active_joystick() is not None else "Enter/Space: Skip"
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -332,12 +334,12 @@ def run() -> None:
                 if matches_key(event.key, controls.quit):
                     running = False
                 elif mode == "intro":
-                    if event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                        mode = "select_mission"
-                        intro_t = 0.0
-                        if intro_video is not None:
-                            intro_video.close()
-                            intro_video = None
+                    # Skip intro immediately on any key press (except quit which is handled above).
+                    mode = "select_mission"
+                    intro_t = 0.0
+                    if intro_video is not None:
+                        intro_video.close(immediate=True)
+                        intro_video = None
                 elif mode == "playing" and event.key == pygame.K_ESCAPE:
                     mode = "paused"
                     pause_focus = "choppers"
@@ -496,11 +498,20 @@ def run() -> None:
                     set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
                     reset_game()
             elif mode == "intro":
-                if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
+                skip_btn = (
+                    (a_down and not prev_btn_a_down)
+                    or (b_down and not prev_btn_b_down)
+                    or (x_down and not prev_btn_x_down)
+                    or (y_down and not prev_btn_y_down)
+                    or (start_down and not prev_btn_start_down)
+                    or (rb_down and not prev_btn_rb_down)
+                    or (lb_down and not prev_btn_lb_down)
+                )
+                if skip_btn:
                     mode = "select_mission"
                     intro_t = 0.0
                     if intro_video is not None:
-                        intro_video.close()
+                        intro_video.close(immediate=True)
                         intro_video = None
             elif mode == "select_mission":
                 if menu_dir != 0 and menu_dir != prev_menu_dir:
@@ -684,9 +695,9 @@ def run() -> None:
         if mode == "intro":
             if intro_video is not None:
                 intro_video.draw(screen)
-                draw_skip_overlay(screen)
+                draw_skip_overlay(screen, text=skip_hint)
             else:
-                draw_intro_cutscene(screen, intro_t, show_skip=True)
+                draw_intro_cutscene(screen, intro_t, show_skip=True, skip_text=skip_hint)
         else:
             # Background above the horizon.
             draw_sky(
