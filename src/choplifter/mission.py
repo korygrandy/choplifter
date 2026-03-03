@@ -555,6 +555,7 @@ def _update_projectiles(
                             mission.stats.tanks_destroyed += 1
                             # Persist a burning effect at the destroyed cannon/tank location.
                             mission.burning.add_site(e.pos, intensity=1.0)
+                            haptics.rumble_tank_destroyed(logger=logger)
                         if logger is not None:
                             logger.info("ENEMY_DOWN: %s", e.kind.name)
                     p.alive = False
@@ -652,6 +653,7 @@ def _bomb_explode(mission: MissionState, pos: Vec2, logger: logging.Logger | Non
                 if e.kind is EnemyKind.TANK:
                     mission.stats.tanks_destroyed += 1
                     mission.burning.add_site(e.pos, intensity=1.0)
+                    haptics.rumble_tank_destroyed(logger=logger)
                 if logger is not None:
                     logger.info("ENEMY_DOWN: %s", e.kind.name)
 

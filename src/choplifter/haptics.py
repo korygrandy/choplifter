@@ -81,3 +81,9 @@ def rumble_rough_landing(*, impact_vy: float, safe_vy: float, logger: logging.Lo
     duration_ms = 140
 
     _rumble(low=low, high=high, duration_ms=duration_ms, logger=logger)
+
+
+def rumble_tank_destroyed(*, logger: logging.Logger | None = None) -> None:
+    # Longer, celebratory rumble for destroying a ground artillery cannon.
+    # (One continuous rumble call; actual device behavior varies by driver.)
+    _rumble(low=0.75, high=0.55, duration_ms=360, logger=logger)
