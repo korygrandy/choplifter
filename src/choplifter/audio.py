@@ -162,6 +162,7 @@ class AudioBank:
     explosion: pygame.mixer.Sound | None
     explosion_small: pygame.mixer.Sound | None
     explosion_big: pygame.mixer.Sound | None
+    jet_flyby: pygame.mixer.Sound | None
     doors_open: pygame.mixer.Sound | None
     doors_close: pygame.mixer.Sound | None
     board: pygame.mixer.Sound | None
@@ -184,6 +185,7 @@ class AudioBank:
                 explosion=None,
                 explosion_small=None,
                 explosion_big=None,
+                jet_flyby=None,
                 doors_open=None,
                 doors_close=None,
                 board=None,
@@ -237,6 +239,8 @@ class AudioBank:
             crash_a = _sine_pcm16(freq_hz=48.0, duration_s=0.40, volume=0.42, sample_rate=sample_rate, fade_out_s=0.25)
             crash = pygame.mixer.Sound(buffer=crash_a)
 
+            jet_flyby = _try_load_asset_sound(asset_dir / "fighter-jet-flyby.wav")
+
             # Override placeholders with external files if provided.
             # (These are optional: game stays playable without them.)
             explosion_big = _try_load_asset_sound(asset_dir / "explosion_big.wav") or explosion_big
@@ -266,6 +270,8 @@ class AudioBank:
             board.set_volume(0.22)
             rescue.set_volume(0.40)
             crash.set_volume(0.55)
+            if jet_flyby is not None:
+                jet_flyby.set_volume(0.55)
             if flying_loop is not None:
                 flying_loop.set_volume(0.28)
 
@@ -276,6 +282,7 @@ class AudioBank:
                 explosion=explosion,
                 explosion_small=explosion_small,
                 explosion_big=explosion_big,
+                jet_flyby=jet_flyby,
                 doors_open=doors_open,
                 doors_close=doors_close,
                 board=board,
@@ -291,6 +298,7 @@ class AudioBank:
                 explosion=None,
                 explosion_small=None,
                 explosion_big=None,
+                jet_flyby=None,
                 doors_open=None,
                 doors_close=None,
                 board=None,
@@ -362,3 +370,6 @@ class AudioBank:
 
     def play_crash(self) -> None:
         self._play(self.crash, bus="sfx")
+
+    def play_jet_flyby(self) -> None:
+        self._play(self.jet_flyby, bus="sfx")
