@@ -232,11 +232,12 @@ def run() -> None:
     prev_boarded = boarded_count(mission)
     prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
     prev_tanks_destroyed = mission.stats.tanks_destroyed
+    prev_artillery_fired = mission.stats.artillery_fired
     prev_jets_entered = mission.stats.jets_entered
 
     def apply_mission_preview() -> None:
         nonlocal helicopter, mission, accumulator
-        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed, prev_jets_entered
+        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed, prev_artillery_fired, prev_jets_entered
 
         mission = MissionState.create_from_level_config(heli_settings, get_mission_config_by_id(selected_mission_id))
         helicopter = Helicopter.spawn(
@@ -254,6 +255,7 @@ def run() -> None:
         prev_boarded = boarded_count(mission)
         prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
         prev_tanks_destroyed = mission.stats.tanks_destroyed
+        prev_artillery_fired = mission.stats.artillery_fired
         prev_jets_entered = mission.stats.jets_entered
 
         bg = getattr(mission, "bg_asset", "")
@@ -265,7 +267,7 @@ def run() -> None:
         nonlocal selected_chopper_asset
         nonlocal selected_mission_id
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
-        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed, prev_jets_entered
+        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed, prev_artillery_fired, prev_jets_entered
 
         mission = MissionState.create_from_level_config(heli_settings, get_mission_config_by_id(selected_mission_id))
         helicopter = Helicopter.spawn(
@@ -283,6 +285,7 @@ def run() -> None:
         prev_boarded = boarded_count(mission)
         prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
         prev_tanks_destroyed = mission.stats.tanks_destroyed
+        prev_artillery_fired = mission.stats.artillery_fired
         prev_jets_entered = mission.stats.jets_entered
         prev_btn_a_down = False
         prev_btn_b_down = False
@@ -671,6 +674,12 @@ def run() -> None:
                 if tank_delta > 0:
                     audio.play_explosion_big()
                     prev_tanks_destroyed = mission.stats.tanks_destroyed
+
+                artillery_delta = mission.stats.artillery_fired - prev_artillery_fired
+                if artillery_delta > 0:
+                    for _ in range(artillery_delta):
+                        audio.play_artillery_fire()
+                    prev_artillery_fired = mission.stats.artillery_fired
 
                 jets_entered_delta = mission.stats.jets_entered - prev_jets_entered
                 if jets_entered_delta > 0:
