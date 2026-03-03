@@ -581,6 +581,7 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
         f"Objective: save 20 (saved {saved}/20)",
         f"Rescue: shoot compound (Space) → land near hostages → press E to open doors → load {boarded}/16",
         "Unload: land in base zone (flag) → press E to open doors",
+        f"State: {'GROUNDED' if helicopter.grounded else 'AIR'}   Doors: {'OPEN' if helicopter.doors_open else 'CLOSED'}",
     ]
 
     if mission.invuln_seconds > 0.0:
