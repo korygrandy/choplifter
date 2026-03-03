@@ -13,7 +13,7 @@ This is the working backlog for incremental improvements on top of the current p
 - [x] Add a short README note about Git LFS (`git lfs install` + `git lfs pull`) so new clones get `intro.mpg`.
 - [x] Add/verify an in-game “Skip Intro” hint + ensure skip works instantly on keypress.
 - [x] Tune helicopter feel (document the knobs and current values): `engine_power`, `friction`, `max_speed`, `tilt_rate`, `max_tilt`.
-- [ ] Mission flow polish: clear “start mission / retry / back to mission select” loop.
+- [x] Mission flow polish: clear “start mission / retry / back to mission select” loop.
 
 ## Gameplay (Milestone-driven)
 
