@@ -4,6 +4,7 @@ from array import array
 from dataclasses import dataclass, field
 import math
 from pathlib import Path
+import random
 from typing import Literal
 
 import pygame
@@ -162,6 +163,8 @@ class AudioBank:
     explosion: pygame.mixer.Sound | None
     explosion_small: pygame.mixer.Sound | None
     explosion_big: pygame.mixer.Sound | None
+    artillery_fire_a: pygame.mixer.Sound | None
+    artillery_fire_b: pygame.mixer.Sound | None
     jet_flyby: pygame.mixer.Sound | None
     doors_open: pygame.mixer.Sound | None
     doors_close: pygame.mixer.Sound | None
@@ -170,6 +173,7 @@ class AudioBank:
     crash: pygame.mixer.Sound | None
     flying_loop: pygame.mixer.Sound | None
     _flying_active: bool = field(default=False, init=False, repr=False)
+    _last_artillery_fire_variant: int = field(default=-1, init=False, repr=False)
 
     @staticmethod
     def try_create() -> "AudioBank":
@@ -185,6 +189,8 @@ class AudioBank:
                 explosion=None,
                 explosion_small=None,
                 explosion_big=None,
+                artillery_fire_a=None,
+                artillery_fire_b=None,
                 jet_flyby=None,
                 doors_open=None,
                 doors_close=None,
@@ -239,6 +245,8 @@ class AudioBank:
             crash_a = _sine_pcm16(freq_hz=48.0, duration_s=0.40, volume=0.42, sample_rate=sample_rate, fade_out_s=0.25)
             crash = pygame.mixer.Sound(buffer=crash_a)
 
+            artillery_fire_a = _try_load_asset_sound(asset_dir / "artillery-impact.wav")
+            artillery_fire_b = _try_load_asset_sound(asset_dir / "alternate-artillery-impact.wav")
             jet_flyby = _try_load_asset_sound(asset_dir / "fighter-jet-flyby.wav")
 
             # Override placeholders with external files if provided.
@@ -270,6 +278,10 @@ class AudioBank:
             board.set_volume(0.22)
             rescue.set_volume(0.40)
             crash.set_volume(0.55)
+            if artillery_fire_a is not None:
+                artillery_fire_a.set_volume(0.55)
+            if artillery_fire_b is not None:
+                artillery_fire_b.set_volume(0.55)
             if jet_flyby is not None:
                 jet_flyby.set_volume(0.55)
             if flying_loop is not None:
@@ -282,6 +294,8 @@ class AudioBank:
                 explosion=explosion,
                 explosion_small=explosion_small,
                 explosion_big=explosion_big,
+                artillery_fire_a=artillery_fire_a,
+                artillery_fire_b=artillery_fire_b,
                 jet_flyby=jet_flyby,
                 doors_open=doors_open,
                 doors_close=doors_close,
@@ -298,6 +312,8 @@ class AudioBank:
                 explosion=None,
                 explosion_small=None,
                 explosion_big=None,
+                artillery_fire_a=None,
+                artillery_fire_b=None,
                 jet_flyby=None,
                 doors_open=None,
                 doors_close=None,
@@ -355,6 +371,27 @@ class AudioBank:
 
     def play_explosion_big(self) -> None:
         self._play(self.explosion_big, bus="sfx")
+
+    def play_artillery_fire(self) -> None:
+        # Randomize between two optional variants; avoid immediate repeats when both exist.
+        variants: list[pygame.mixer.Sound] = []
+        if self.artillery_fire_a is not None:
+            variants.append(self.artillery_fire_a)
+        if self.artillery_fire_b is not None:
+            variants.append(self.artillery_fire_b)
+        if not variants:
+            return
+
+        if len(variants) == 1:
+            self._play(variants[0], bus="sfx")
+            self._last_artillery_fire_variant = 0
+            return
+
+        idx = random.randrange(2)
+        if idx == self._last_artillery_fire_variant:
+            idx = 1 - idx
+        self._last_artillery_fire_variant = idx
+        self._play(variants[idx], bus="sfx")
 
     def play_doors_open(self) -> None:
         self._play(self.doors_open, bus="sfx")

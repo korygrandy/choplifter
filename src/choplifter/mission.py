@@ -187,6 +187,7 @@ class MissionStats:
     lost_in_transit: int = 0
     enemies_destroyed: int = 0
     tanks_destroyed: int = 0
+    artillery_fired: int = 0
     jets_entered: int = 0
 
 
@@ -1110,6 +1111,7 @@ def _update_enemies(
                 tank_cd = (tuning.tank_fire_base_cooldown_s / pressure) * (1.0 - 0.12 * difficulty)
                 e.cooldown = clamp(tank_cd, tuning.tank_fire_min_cooldown_s, tuning.tank_fire_max_cooldown_s)
                 _spawn_enemy_bullet_toward(mission, e.pos, helicopter.pos)
+                mission.stats.artillery_fired += 1
                 if logger is not None:
                     logger.info("TANK_FIRE")
 
