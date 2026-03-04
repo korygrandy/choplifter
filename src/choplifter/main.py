@@ -54,6 +54,7 @@ from .app.feedback import ScreenShakeState, consume_mission_feedback, rough_land
 from .app.flares import FlareState, reset_flares, try_start_flare_salvo, update_flares
 from .app.gamepads import init_connected_joysticks, handle_joy_device_added, handle_joy_device_removed
 from .app.toast import ToastState
+from .app.session import create_mission_and_helicopter
 
 
 def run() -> None:
@@ -202,17 +203,11 @@ def run() -> None:
 
     flares = FlareState()
 
-    mission = MissionState.create_from_level_config(
-        heli_settings,
-        get_mission_config_by_id(selected_mission_id),
+    mission, helicopter = create_mission_and_helicopter(
+        heli_settings=heli_settings,
         mission_id=selected_mission_id,
+        chopper_asset=selected_chopper_asset,
     )
-    helicopter = Helicopter.spawn(
-        heli_settings,
-        start_x=mission.base.pos.x + mission.base.width * 0.5,
-        skin_asset=selected_chopper_asset,
-    )
-    helicopter.facing = Facing.LEFT
 
     prev_crashes = mission.crashes
     prev_lost_in_transit = mission.stats.lost_in_transit
@@ -229,17 +224,11 @@ def run() -> None:
         nonlocal helicopter, mission, accumulator
         nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed, prev_artillery_fired, prev_artillery_hits, prev_jets_entered, prev_mines_detonated
 
-        mission = MissionState.create_from_level_config(
-            heli_settings,
-            get_mission_config_by_id(selected_mission_id),
+        mission, helicopter = create_mission_and_helicopter(
+            heli_settings=heli_settings,
             mission_id=selected_mission_id,
+            chopper_asset=selected_chopper_asset,
         )
-        helicopter = Helicopter.spawn(
-            heli_settings,
-            start_x=mission.base.pos.x + mission.base.width * 0.5,
-            skin_asset=selected_chopper_asset,
-        )
-        helicopter.facing = Facing.LEFT
         accumulator = 0.0
         sky_smoke.reset()
         audio.stop_flying()
@@ -267,17 +256,11 @@ def run() -> None:
         nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed, prev_artillery_fired, prev_artillery_hits, prev_jets_entered
         nonlocal flares
 
-        mission = MissionState.create_from_level_config(
-            heli_settings,
-            get_mission_config_by_id(selected_mission_id),
+        mission, helicopter = create_mission_and_helicopter(
+            heli_settings=heli_settings,
             mission_id=selected_mission_id,
+            chopper_asset=selected_chopper_asset,
         )
-        helicopter = Helicopter.spawn(
-            heli_settings,
-            start_x=mission.base.pos.x + mission.base.width * 0.5,
-            skin_asset=selected_chopper_asset,
-        )
-        helicopter.facing = Facing.LEFT
         accumulator = 0.0
         sky_smoke.reset()
         audio.stop_flying()
