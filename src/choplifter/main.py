@@ -23,6 +23,7 @@ from .rendering import (
     draw_chopper_select_overlay,
     draw_damage_flash,
     draw_intro_cutscene,
+    draw_impact_sparks,
     draw_skip_overlay,
     draw_ground,
     draw_helicopter,
@@ -216,7 +217,8 @@ def run() -> None:
     intro_seconds = float(intro_video.duration_s) if (intro_video is not None and intro_video.duration_s > 0.5) else 4.25
     prev_menu_dir = 0
     prev_menu_vert = 0
-    pause_focus: str = "choppers"  # choppers | restart_mission | restart_game
+    pause_focus: str = "choppers"  # choppers | mute | restart_mission | restart_game
+    muted = False
 
     mission = MissionState.create_from_level_config(heli_settings, get_mission_config_by_id(selected_mission_id))
     helicopter = Helicopter.spawn(
@@ -349,8 +351,10 @@ def run() -> None:
                 if mode == "playing" and event.key == pygame.K_ESCAPE:
                     mode = "paused"
                     pause_focus = "choppers"
+                    audio.set_pause_menu_active(True)
                 elif mode == "paused" and event.key == pygame.K_ESCAPE:
                     mode = "playing"
+                    audio.set_pause_menu_active(False)
                 elif matches_key(event.key, controls.quit):
                     running = False
                 elif mode == "intro":
@@ -394,9 +398,13 @@ def run() -> None:
                         if pause_focus == "restart_game":
                             pause_focus = "restart_mission"
                         elif pause_focus == "restart_mission":
+                            pause_focus = "mute"
+                        elif pause_focus == "mute":
                             pause_focus = "choppers"
                     elif event.key in (pygame.K_DOWN, pygame.K_s):
                         if pause_focus == "choppers":
+                            pause_focus = "mute"
+                        elif pause_focus == "mute":
                             pause_focus = "restart_mission"
                         elif pause_focus == "restart_mission":
                             pause_focus = "restart_game"
@@ -412,12 +420,18 @@ def run() -> None:
                         if pause_focus == "restart_mission":
                             reset_game()
                             mode = "playing"
+                            audio.set_pause_menu_active(False)
                         elif pause_focus == "restart_game":
                             mode = "select_mission"
                             pause_focus = "choppers"
                             set_toast("Restart Game")
+                            audio.set_pause_menu_active(False)
+                        elif pause_focus == "mute":
+                            muted = not muted
+                            audio.set_muted(muted)
                         else:
                             mode = "playing"
+                            audio.set_pause_menu_active(False)
                 elif matches_key(event.key, controls.restart) and mission.ended:
                     reset_game()
                 elif matches_key(event.key, controls.toggle_debug):
@@ -541,6 +555,7 @@ def run() -> None:
                 # Start/B resumes.
                 if (start_down and not prev_btn_start_down) or (b_down and not prev_btn_b_down):
                     mode = "playing"
+                    audio.set_pause_menu_active(False)
 
                 # Accessibility toggles.
                 if x_down and not prev_btn_x_down:
@@ -556,9 +571,13 @@ def run() -> None:
                         if pause_focus == "restart_game":
                             pause_focus = "restart_mission"
                         elif pause_focus == "restart_mission":
+                            pause_focus = "mute"
+                        elif pause_focus == "mute":
                             pause_focus = "choppers"
                     else:
                         if pause_focus == "choppers":
+                            pause_focus = "mute"
+                        elif pause_focus == "mute":
                             pause_focus = "restart_mission"
                         elif pause_focus == "restart_mission":
                             pause_focus = "restart_game"
@@ -574,12 +593,18 @@ def run() -> None:
                     if pause_focus == "restart_mission":
                         reset_game()
                         mode = "playing"
+                        audio.set_pause_menu_active(False)
                     elif pause_focus == "restart_game":
                         mode = "select_mission"
                         pause_focus = "choppers"
                         set_toast("Restart Game")
+                        audio.set_pause_menu_active(False)
+                    elif pause_focus == "mute":
+                        muted = not muted
+                        audio.set_muted(muted)
                     else:
                         mode = "playing"
+                        audio.set_pause_menu_active(False)
             else:
                 # Start toggles pause while playing.
                 if start_down and not prev_btn_start_down:
@@ -589,6 +614,7 @@ def run() -> None:
                     else:
                         mode = "paused"
                         pause_focus = "choppers"
+                    audio.set_pause_menu_active(True)
 
                 if a_down and not prev_btn_a_down:
                     toggle_doors_with_logging()
@@ -766,6 +792,7 @@ def run() -> None:
             draw_ground(screen, heli_settings.ground_y)
             draw_mission(screen, mission, camera_x=camera_x, enable_particles=particles_enabled)
             draw_helicopter(screen, helicopter, camera_x=camera_x, boarded=boarded_count(mission))
+            draw_impact_sparks(screen, mission, camera_x=camera_x, enable_particles=particles_enabled)
             if mode == "playing":
                 draw_hud(screen, mission, helicopter)
             elif mode == "select_mission":
@@ -779,6 +806,9 @@ def run() -> None:
                     selected_chopper_index,
                     title="Paused",
                     hint="Up/Down choose section • Left/Right chopper • Start/B resume • A select • X particles • Y flashes • RB shake",
+                    show_mute=True,
+                    mute_selected=(pause_focus == "mute"),
+                    muted=muted,
                     show_restart=True,
                     restart_selected=(pause_focus == "restart_mission"),
                     show_restart_game=True,

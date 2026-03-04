@@ -175,6 +175,8 @@ class AudioBank:
     flying_loop: pygame.mixer.Sound | None
     _flying_active: bool = field(default=False, init=False, repr=False)
     _last_artillery_impact_variant: int = field(default=-1, init=False, repr=False)
+    _muted: bool = field(default=False, init=False, repr=False)
+    _pause_menu_active: bool = field(default=False, init=False, repr=False)
 
     @staticmethod
     def try_create() -> "AudioBank":
@@ -359,10 +361,40 @@ class AudioBank:
     def _play(self, sound: pygame.mixer.Sound | None, *, bus: BusName) -> None:
         if sound is None:
             return
+        if self._pause_menu_active or self._muted:
+            return
         if self.mixer is not None:
             self.mixer.play(sound, bus=bus)
         else:
             sound.play()
+
+    def _apply_mute_state(self) -> None:
+        # During pause menu, always mute regardless of user mute toggle.
+        muted_now = self._pause_menu_active or self._muted
+
+        if self.mixer is not None:
+            vol = 0.0 if muted_now else 1.0
+            self.mixer.set_bus_volume("sfx", vol)
+            self.mixer.set_bus_volume("ui", vol)
+            self.mixer.set_bus_volume("music", vol)
+            return
+
+        # Fallback: global pause/unpause (not bus-aware).
+        try:
+            if muted_now:
+                pygame.mixer.pause()
+            else:
+                pygame.mixer.unpause()
+        except Exception:
+            pass
+
+    def set_muted(self, muted: bool) -> None:
+        self._muted = bool(muted)
+        self._apply_mute_state()
+
+    def set_pause_menu_active(self, active: bool) -> None:
+        self._pause_menu_active = bool(active)
+        self._apply_mute_state()
 
     def play_shoot(self) -> None:
         self._play(self.shoot, bus="sfx")
