@@ -2,7 +2,26 @@ param(
     [ValidateSet('onefile','onedir')]
     [string]$Mode = 'onedir',
 
-    [switch]$Console
+    [switch]$Console,
+
+    # Optional Authenticode signing. This is the primary way to reduce/remove
+    # SmartScreen warnings for public distribution.
+    [switch]$Sign,
+
+    # Sign using a PFX file.
+    [string]$PfxPath,
+
+    # If provided, read the PFX password from this environment variable.
+    # Example: $env:CHOPLIFTER_PFX_PASSWORD = '...'
+    [string]$PfxPasswordEnvVar = 'CHOPLIFTER_PFX_PASSWORD',
+
+    # Alternatively, sign using a certificate already installed in the Windows cert store.
+    # Provide the SHA1 thumbprint (no spaces).
+    [string]$CertThumbprint,
+
+    # RFC3161 timestamp server. Timestamping is important so the signature remains valid
+    # after the code signing certificate expires.
+    [string]$TimestampUrl = 'http://timestamp.digicert.com'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,5 +70,92 @@ $addData = @(
     --collect-data imageio_ffmpeg `
     $addData `
     run.py
+
+function Resolve-SignToolPath {
+    # Prefer user-provided path.
+    if ($env:SIGNTOOL_PATH -and (Test-Path $env:SIGNTOOL_PATH)) {
+        return $env:SIGNTOOL_PATH
+    }
+
+    # Try common Windows SDK locations.
+    $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+    if (Test-Path $sdkRoot) {
+        $candidates = Get-ChildItem -Path $sdkRoot -Directory -ErrorAction SilentlyContinue |
+            Sort-Object Name -Descending |
+            ForEach-Object {
+                @(
+                    (Join-Path $_.FullName 'x64\signtool.exe'),
+                    (Join-Path $_.FullName 'x86\signtool.exe')
+                )
+            } |
+            Where-Object { Test-Path $_ }
+
+        if ($candidates -and $candidates.Count -gt 0) {
+            return $candidates[0]
+        }
+    }
+
+    # Fall back to PATH.
+    $cmd = Get-Command signtool.exe -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+
+    return $null
+}
+
+function Get-OutputExePath([string]$distPath, [string]$mode) {
+    if ($mode -eq 'onefile') {
+        return (Join-Path $distPath 'Choplifter.exe')
+    }
+    return (Join-Path $distPath 'Choplifter\Choplifter.exe')
+}
+
+if ($Sign) {
+    $exePath = Get-OutputExePath -distPath $distPath -mode $Mode
+    if (-not (Test-Path $exePath)) {
+        throw "Expected output EXE not found at: $exePath"
+    }
+
+    $signtool = Resolve-SignToolPath
+    if (-not $signtool) {
+        throw "signtool.exe not found. Install the Windows SDK (Signing Tools) or set SIGNTOOL_PATH to signtool.exe."
+    }
+
+    $signArgs = @(
+        'sign',
+        '/v',
+        '/fd', 'sha256',
+        '/tr', $TimestampUrl,
+        '/td', 'sha256'
+    )
+
+    if ($PfxPath) {
+        if (-not (Test-Path $PfxPath)) {
+            throw "PfxPath not found: $PfxPath"
+        }
+        $signArgs += @('/f', $PfxPath)
+
+        if ($PfxPasswordEnvVar) {
+            $pfxPassword = [Environment]::GetEnvironmentVariable($PfxPasswordEnvVar)
+            if ($pfxPassword) {
+                $signArgs += @('/p', $pfxPassword)
+            }
+        }
+    }
+    elseif ($CertThumbprint) {
+        $thumb = ($CertThumbprint -replace '\s', '')
+        $signArgs += @('/sha1', $thumb)
+    }
+    else {
+        throw "Signing requested but neither -PfxPath nor -CertThumbprint was provided."
+    }
+
+    $signArgs += @($exePath)
+
+    Write-Host "Signing: $exePath"
+    & $signtool @signArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "signtool failed with exit code: $LASTEXITCODE"
+    }
+}
 
 Write-Host "Build complete: $distPath"
