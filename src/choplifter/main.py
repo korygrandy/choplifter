@@ -56,6 +56,7 @@ from .app.gamepads import init_connected_joysticks, handle_joy_device_added, han
 from .app.toast import ToastState
 from .app.session import create_mission_and_helicopter
 from .app.menu_helpers import cycle_index, move_pause_focus
+from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapshot
 
 
 def run() -> None:
@@ -210,20 +211,11 @@ def run() -> None:
         chopper_asset=selected_chopper_asset,
     )
 
-    prev_crashes = mission.crashes
-    prev_lost_in_transit = mission.stats.lost_in_transit
-    prev_saved = mission.stats.saved
-    prev_boarded = boarded_count(mission)
-    prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
-    prev_tanks_destroyed = mission.stats.tanks_destroyed
-    prev_artillery_fired = mission.stats.artillery_fired
-    prev_artillery_hits = mission.stats.artillery_hits
-    prev_jets_entered = mission.stats.jets_entered
-    prev_mines_detonated = mission.stats.mines_detonated
+    prev_stats: MissionStatsSnapshot = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
 
     def apply_mission_preview() -> None:
         nonlocal helicopter, mission, accumulator
-        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed, prev_artillery_fired, prev_artillery_hits, prev_jets_entered, prev_mines_detonated
+        nonlocal prev_stats
 
         mission, helicopter = create_mission_and_helicopter(
             heli_settings=heli_settings,
@@ -233,16 +225,7 @@ def run() -> None:
         accumulator = 0.0
         sky_smoke.reset()
         audio.stop_flying()
-        prev_crashes = mission.crashes
-        prev_lost_in_transit = mission.stats.lost_in_transit
-        prev_saved = mission.stats.saved
-        prev_boarded = boarded_count(mission)
-        prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
-        prev_tanks_destroyed = mission.stats.tanks_destroyed
-        prev_artillery_fired = mission.stats.artillery_fired
-        prev_artillery_hits = mission.stats.artillery_hits
-        prev_jets_entered = mission.stats.jets_entered
-        prev_mines_detonated = mission.stats.mines_detonated
+        prev_stats = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
 
         bg = getattr(mission, "bg_asset", "")
         if bg and not bg_asset_exists(bg):
@@ -254,7 +237,7 @@ def run() -> None:
         nonlocal selected_mission_id
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_btn_rb_down, prev_btn_lb_down, prev_btn_back_down
-        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed, prev_artillery_fired, prev_artillery_hits, prev_jets_entered
+        nonlocal prev_stats
         nonlocal flares
 
         mission, helicopter = create_mission_and_helicopter(
@@ -265,15 +248,7 @@ def run() -> None:
         accumulator = 0.0
         sky_smoke.reset()
         audio.stop_flying()
-        prev_crashes = mission.crashes
-        prev_lost_in_transit = mission.stats.lost_in_transit
-        prev_saved = mission.stats.saved
-        prev_boarded = boarded_count(mission)
-        prev_open_compounds = sum(1 for c in mission.compounds if c.is_open)
-        prev_tanks_destroyed = mission.stats.tanks_destroyed
-        prev_artillery_fired = mission.stats.artillery_fired
-        prev_artillery_hits = mission.stats.artillery_hits
-        prev_jets_entered = mission.stats.jets_entered
+        prev_stats = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
         prev_btn_a_down = False
         prev_btn_b_down = False
         prev_btn_x_down = False
@@ -685,16 +660,16 @@ def run() -> None:
 
                 helicopter.damage_flash_seconds = max(0.0, helicopter.damage_flash_seconds - tick.dt)
 
-                saved_delta = mission.stats.saved - prev_saved
+                saved_delta = mission.stats.saved - prev_stats.saved
                 if saved_delta > 0:
                     audio.play_rescue()
-                    prev_saved = mission.stats.saved
+                    prev_stats.saved = mission.stats.saved
 
                 boarded_now = boarded_count(mission)
-                boarded_delta = boarded_now - prev_boarded
+                boarded_delta = boarded_now - prev_stats.boarded
                 if boarded_delta > 0:
                     audio.play_board()
-                    prev_boarded = boarded_now
+                    prev_stats.boarded = boarded_now
 
                 # One-shot hostage rescue cutscene when the first 16 hostages are onboard.
                 if (
@@ -714,50 +689,50 @@ def run() -> None:
                         audio.stop_flying()
 
                 open_compounds = sum(1 for c in mission.compounds if c.is_open)
-                if open_compounds > prev_open_compounds:
+                if open_compounds > prev_stats.open_compounds:
                     audio.play_explosion_small()
-                    prev_open_compounds = open_compounds
+                    prev_stats.open_compounds = open_compounds
 
-                tank_delta = mission.stats.tanks_destroyed - prev_tanks_destroyed
+                tank_delta = mission.stats.tanks_destroyed - prev_stats.tanks_destroyed
                 if tank_delta > 0:
                     audio.play_explosion_big()
-                    prev_tanks_destroyed = mission.stats.tanks_destroyed
+                    prev_stats.tanks_destroyed = mission.stats.tanks_destroyed
 
-                artillery_delta = mission.stats.artillery_fired - prev_artillery_fired
+                artillery_delta = mission.stats.artillery_fired - prev_stats.artillery_fired
                 if artillery_delta > 0:
                     for _ in range(artillery_delta):
                         audio.play_artillery_shot()
-                    prev_artillery_fired = mission.stats.artillery_fired
+                    prev_stats.artillery_fired = mission.stats.artillery_fired
 
-                artillery_hit_delta = mission.stats.artillery_hits - prev_artillery_hits
+                artillery_hit_delta = mission.stats.artillery_hits - prev_stats.artillery_hits
                 if artillery_hit_delta > 0:
                     for _ in range(artillery_hit_delta):
                         audio.play_artillery_impact()
-                    prev_artillery_hits = mission.stats.artillery_hits
+                    prev_stats.artillery_hits = mission.stats.artillery_hits
 
-                jets_entered_delta = mission.stats.jets_entered - prev_jets_entered
+                jets_entered_delta = mission.stats.jets_entered - prev_stats.jets_entered
                 if jets_entered_delta > 0:
                     audio.play_jet_flyby()
-                    prev_jets_entered = mission.stats.jets_entered
+                    prev_stats.jets_entered = mission.stats.jets_entered
 
-                mine_delta = mission.stats.mines_detonated - prev_mines_detonated
+                mine_delta = mission.stats.mines_detonated - prev_stats.mines_detonated
                 if mine_delta > 0:
                     for _ in range(mine_delta):
                         audio.play_mine_explosion()
-                    prev_mines_detonated = mission.stats.mines_detonated
+                    prev_stats.mines_detonated = mission.stats.mines_detonated
 
-                if mission.crashes != prev_crashes:
+                if mission.crashes != prev_stats.crashes:
                     if mission.ended:
                         set_toast(f"THE END: {mission.end_reason} (Enter=Retry, Esc/Start=Menu)")
                     else:
                         set_toast(f"CRASH {mission.crashes}/3 — respawn (invuln {mission.invuln_seconds:0.1f}s)")
                         audio.play_crash()
-                    prev_crashes = mission.crashes
+                    prev_stats.crashes = mission.crashes
 
-                lost_delta = mission.stats.lost_in_transit - prev_lost_in_transit
+                lost_delta = mission.stats.lost_in_transit - prev_stats.lost_in_transit
                 if lost_delta > 0:
                     set_toast(f"Passengers lost in crash: +{lost_delta}")
-                    prev_lost_in_transit = mission.stats.lost_in_transit
+                    prev_stats.lost_in_transit = mission.stats.lost_in_transit
 
             accumulator -= tick.dt
 
