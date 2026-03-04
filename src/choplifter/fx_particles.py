@@ -287,12 +287,11 @@ class HelicopterDamageFxSystem:
 
         if len(self.particles) < self.max_particles and smoke_active:
             # Ensure a visible baseline at threshold; scale up into heavy smoke.
-            rate = self.smoke_rate_per_s * (0.60 + 0.80 * smoke_strength) * (1.0 + 0.60 * fire_strength)
+            rate = self.smoke_rate_per_s * (0.90 + 0.90 * smoke_strength) * (1.0 + 0.55 * fire_strength)
             self.smoke_spawn_accum += dt * rate
             while self.smoke_spawn_accum >= 1.0 and len(self.particles) < self.max_particles:
                 self.smoke_spawn_accum -= 1.0
                 self._spawn_smoke(base, heli_vel=heli_vel, strength=smoke_strength)
-
         if len(self.particles) < self.max_particles and fire_active:
             # Embers should start being noticeable right when fire begins.
             rate = self.ember_rate_per_s * (0.55 + 0.85 * fire_strength)
@@ -332,16 +331,17 @@ class HelicopterDamageFxSystem:
         ttl = self._rng.uniform(self.smoke_ttl_min_s, self.smoke_ttl_max_s) * (0.90 + 0.45 * strength)
         radius = self._rng.uniform(self.smoke_radius_min, self.smoke_radius_max) * (0.85 + 0.70 * strength)
 
-        self.particles.append(
-            FxParticle(
-                pos=Vec2(base.x + jitter_x, base.y + jitter_y),
-                vel=Vec2(vx, vy),
-                age=0.0,
-                ttl=ttl,
-                radius=radius,
-                kind="smoke",
-            )
+        p = FxParticle(
+            pos=Vec2(base.x + jitter_x, base.y + jitter_y),
+            vel=Vec2(vx, vy),
+            age=0.0,
+            ttl=ttl,
+            radius=radius,
+            kind="smoke",
         )
+        # Per-particle alpha boost so low-damage smoke reads on bright backgrounds.
+        p.intensity = 1.65 + 0.75 * clamp(float(strength), 0.0, 1.0)
+        self.particles.append(p)
 
     def _spawn_ember(self, base: Vec2, *, heli_vel: Vec2, strength: float) -> None:
         jitter_x = self._rng.uniform(-6.0, 6.0)
@@ -353,16 +353,16 @@ class HelicopterDamageFxSystem:
         ttl = self._rng.uniform(self.ember_ttl_min_s, self.ember_ttl_max_s) * (0.80 + 0.40 * strength)
         radius = self._rng.uniform(self.ember_radius_min, self.ember_radius_max)
 
-        self.particles.append(
-            FxParticle(
-                pos=Vec2(base.x + jitter_x, base.y + jitter_y),
-                vel=Vec2(vx, vy),
-                age=0.0,
-                ttl=ttl,
-                radius=radius,
-                kind="ember",
-            )
+        p = FxParticle(
+            pos=Vec2(base.x + jitter_x, base.y + jitter_y),
+            vel=Vec2(vx, vy),
+            age=0.0,
+            ttl=ttl,
+            radius=radius,
+            kind="ember",
         )
+        p.intensity = 1.10 + 0.50 * clamp(float(strength), 0.0, 1.0)
+        self.particles.append(p)
 
 
 class ExplosionSystem:
