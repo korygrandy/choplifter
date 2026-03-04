@@ -1431,7 +1431,7 @@ def _update_crash_sequence(
 
     # Post-impact delay, then respawn.
     mission.crash_impact_seconds += dt
-    if mission.crash_impact_seconds < 0.65:
+    if mission.crash_impact_seconds < 0.85:
         return
 
     # Respawn.
