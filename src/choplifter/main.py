@@ -217,7 +217,7 @@ def run() -> None:
     intro_seconds = float(intro_video.duration_s) if (intro_video is not None and intro_video.duration_s > 0.5) else 4.25
     prev_menu_dir = 0
     prev_menu_vert = 0
-    pause_focus: str = "choppers"  # choppers | mute | restart_mission | restart_game
+    pause_focus: str = "choppers"  # choppers | restart_mission | restart_game | mute
     muted = False
 
     mission = MissionState.create_from_level_config(heli_settings, get_mission_config_by_id(selected_mission_id))
@@ -399,19 +399,19 @@ def run() -> None:
                     elif event.key == pygame.K_F4:
                         toggle_screenshake()
                     if event.key in (pygame.K_UP, pygame.K_w):
-                        if pause_focus == "restart_game":
+                        if pause_focus == "mute":
+                            pause_focus = "restart_game"
+                        elif pause_focus == "restart_game":
                             pause_focus = "restart_mission"
                         elif pause_focus == "restart_mission":
-                            pause_focus = "mute"
-                        elif pause_focus == "mute":
                             pause_focus = "choppers"
                     elif event.key in (pygame.K_DOWN, pygame.K_s):
                         if pause_focus == "choppers":
-                            pause_focus = "mute"
-                        elif pause_focus == "mute":
                             pause_focus = "restart_mission"
                         elif pause_focus == "restart_mission":
                             pause_focus = "restart_game"
+                        elif pause_focus == "restart_game":
+                            pause_focus = "mute"
                     elif event.key in (pygame.K_LEFT, pygame.K_a) and pause_focus == "choppers":
                         selected_chopper_index = (selected_chopper_index - 1) % len(chopper_choices)
                         selected_chopper_asset = chopper_choices[selected_chopper_index][0]
@@ -581,19 +581,19 @@ def run() -> None:
                 # Up/Down selects section.
                 if menu_vert != 0 and menu_vert != prev_menu_vert:
                     if menu_vert < 0:
-                        if pause_focus == "restart_game":
+                        if pause_focus == "mute":
+                            pause_focus = "restart_game"
+                        elif pause_focus == "restart_game":
                             pause_focus = "restart_mission"
                         elif pause_focus == "restart_mission":
-                            pause_focus = "mute"
-                        elif pause_focus == "mute":
                             pause_focus = "choppers"
                     else:
                         if pause_focus == "choppers":
-                            pause_focus = "mute"
-                        elif pause_focus == "mute":
                             pause_focus = "restart_mission"
                         elif pause_focus == "restart_mission":
                             pause_focus = "restart_game"
+                        elif pause_focus == "restart_game":
+                            pause_focus = "mute"
 
                 # Left/Right changes chopper when focused.
                 if pause_focus == "choppers" and menu_dir != 0 and menu_dir != prev_menu_dir:
@@ -627,12 +627,8 @@ def run() -> None:
             else:
                 # Start toggles pause while playing.
                 if start_down and not prev_btn_start_down:
-                    if mission.ended:
-                        mode = "paused"
-                        pause_focus = "restart_mission"
-                    else:
-                        mode = "paused"
-                        pause_focus = "choppers"
+                    mode = "paused"
+                    pause_focus = "choppers"
                     audio.play_pause_toggle()
                     audio.set_pause_menu_active(True)
 
