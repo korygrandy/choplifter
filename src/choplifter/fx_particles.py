@@ -234,7 +234,7 @@ class HelicopterDamageFxSystem:
 
     Damage is assumed to be a 0..100 scale.
     - When remaining health <= 50% (damage >= 50): emit smoke.
-    - When remaining health <= 10% (damage >= 90): emit embers + heavier smoke.
+    - When remaining health <= 30% (damage >= 70): emit embers + heavier smoke.
     """
 
     def __init__(self, *, seed: int | None = None) -> None:
@@ -272,9 +272,9 @@ class HelicopterDamageFxSystem:
         smoke_active = dmg >= 50.0
         fire_active = dmg >= 70.0
 
-        # Threshold mapping: 50..90 ramps up smoke, 90..100 adds embers.
+        # Threshold mapping: 50..90 ramps up smoke, 70..100 adds embers.
         smoke_strength = clamp((dmg - 50.0) / 40.0, 0.0, 1.0)
-        fire_strength = clamp((dmg - 90.0) / 10.0, 0.0, 1.0)
+        fire_strength = clamp((dmg - 70.0) / 30.0, 0.0, 1.0)
 
         # Nothing to do until smoke threshold.
         if not smoke_active and not fire_active and not self.particles:
