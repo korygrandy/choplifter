@@ -11,7 +11,13 @@ The remake is built to be **logically faithful** to the classic feel (tight arca
 - **Core Loop:** Locate compounds, open them (combat), pick up hostages (doors + grounded), return to base, repeat
 - **Threats (Implemented):** Ground armor, fast air threats, and homing air mines
 - **Weather/Particle SFX:** Robust Rain, Fog, Dust, and Lightning systems with tunable parameters and visual feedback.
-- **Debug Mode:** In-game toggle (F3) and weather cycling (F5/F6) for rapid developer testing; overlay and state persist across pause/unpause.
+- **Debug Mode & Commands:**
+   - F3: Toggle debug mode (shows in-game overlay and enables debug features)
+   - F5: Cycle weather mode forward (only in debug mode)
+   - F6: Cycle weather mode backward (only in debug mode)
+   - Debug overlay: Visible when debug mode is active; shows "DEBUG MODE" in red at the top left
+   - Weather cycling: Instantly changes between [clear, rain, fog, dust, storm] for rapid SFX/particle testing
+   - Debug state and weather persist across pause/unpause
 - **Input Disablement:** All player input is locked on mission end to prevent accidental actions.
 - **UX:** Gamepad support, mission restart/pause flows, chopper selection, accessibility toggles
 
