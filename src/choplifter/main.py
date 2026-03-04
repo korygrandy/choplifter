@@ -53,6 +53,7 @@ from .app.input import get_active_joystick, read_gamepad
 from .app.feedback import ScreenShakeState, consume_mission_feedback, rough_landing_feedback, update_screenshake_target
 from .app.flares import FlareState, reset_flares, try_start_flare_salvo, update_flares
 from .app.gamepads import init_connected_joysticks, handle_joy_device_added, handle_joy_device_removed
+from .app.toast import ToastState
 
 
 def run() -> None:
@@ -93,8 +94,7 @@ def run() -> None:
 
     # Cinematic feedback (screenshake + audio duck).
     screenshake = ScreenShakeState()
-    toast_message = ""
-    toast_seconds = 0.0
+    toast = ToastState()
 
     prev_btn_a_down = False
     prev_btn_b_down = False
@@ -106,9 +106,7 @@ def run() -> None:
     prev_btn_back_down = False
 
     def set_toast(message: str) -> None:
-        nonlocal toast_message, toast_seconds
-        toast_message = message
-        toast_seconds = 3.0
+        toast.set(message)
 
     joysticks = init_connected_joysticks(logger=logger, set_toast=set_toast)
 
@@ -802,10 +800,7 @@ def run() -> None:
 
             accumulator -= tick.dt
 
-        if toast_seconds > 0.0:
-            toast_seconds -= frame_dt
-            if toast_seconds <= 0.0:
-                toast_message = ""
+        toast.update(frame_dt)
 
         if mode == "intro":
             if update_intro(cutscenes.intro, frame_dt):
@@ -884,8 +879,8 @@ def run() -> None:
                     show_restart_game=True,
                     restart_game_selected=(pause_focus == "restart_game"),
                 )
-            if toast_message:
-                draw_toast(target, toast_message)
+            if toast.message:
+                draw_toast(target, toast.message)
 
             if mode == "playing" and flashes_enabled:
                 draw_damage_flash(target, helicopter)
