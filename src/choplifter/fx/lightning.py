@@ -12,6 +12,31 @@ class LightningStrike:
         self.ttl = ttl
         self.age = 0.0
         self.active = True
+        # Generate the jagged bolt path once per strike
+        self.path = self._generate_bolt_path()
+
+    def _generate_bolt_path(self, segments=18, x_jitter=22, branch_chance=0.18, branch_length=0.18):
+        # Returns a list of (x, y) points for the main bolt and a list of branches
+        import random
+        points = [(self.x, self.y_start)]
+        y_range = self.y_end - self.y_start
+        branches = []
+        for i in range(1, segments+1):
+            y = self.y_start + (y_range * i) / segments
+            x = points[-1][0] + random.uniform(-x_jitter, x_jitter)
+            points.append((x, y))
+            # Randomly create a branch
+            if branch_chance > 0 and random.random() < branch_chance and i < segments-2:
+                branch_len = int(segments * branch_length * random.uniform(0.7, 1.3))
+                branch_angle = random.uniform(-1.2, 1.2)
+                bx, by = x, y
+                bpoints = [(bx, by)]
+                for j in range(1, branch_len+1):
+                    by += (y_range / segments) * random.uniform(0.7, 1.2)
+                    bx += random.uniform(-x_jitter*1.2, x_jitter*1.2)
+                    bpoints.append((bx, by))
+                branches.append(bpoints)
+        return {'main': points, 'branches': branches}
 
     def update(self, dt: float):
         self.age += dt
@@ -59,4 +84,9 @@ class LightningSystem:
         import pygame
         for strike in self.strikes:
             if strike.active:
-                pygame.draw.line(surface, color, (strike.x, strike.y_start), (strike.x, strike.y_end), 4)
+                # Draw main jagged bolt
+                pts = strike.path['main']
+                pygame.draw.lines(surface, color, False, pts, 4)
+                # Draw branches
+                for branch in strike.path['branches']:
+                    pygame.draw.lines(surface, color, False, branch, 2)

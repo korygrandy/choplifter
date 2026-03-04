@@ -975,6 +975,9 @@ def run() -> None:
             draw_helicopter_damage_fx(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
             draw_helicopter(target, helicopter, camera_x=camera_x, boarded=boarded_count(mission))
             draw_impact_sparks(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
+            # Draw black clouds above chopper for extra difficulty (rendered last, above chopper)
+            if weather_mode == "storm":
+                storm_clouds.draw(target, layer='black')
             # HUD/targeting disabled by lightning
             if mode == "playing":
                 if hud_disabled_timer > 0.0:
