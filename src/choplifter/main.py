@@ -368,10 +368,10 @@ def run() -> None:
 
         try:
             audio.play_flare_defense()
-            _emit_flare_burst_behind()
             _emit_flare_burst_front()
-            flare_salvo_remaining = 2
-            flare_salvo_timer_s = flare_salvo_gap_s
+            # Fire the front burst immediately, then delay the rear salvo.
+            flare_salvo_remaining = 3
+            flare_salvo_timer_s = 1.0
             flare_front_remaining = 1
             flare_front_timer_s = flare_front_gap_s
             flare_cooldown_s = 5.0
