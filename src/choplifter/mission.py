@@ -7,7 +7,7 @@ import math
 import random
 
 from .burning_particles import BurningParticleSystem
-from .fx_particles import DustStormSystem, ExplosionSystem, HelicopterDamageFxSystem, ImpactSparkSystem, JetTrailSystem
+from .fx_particles import DustStormSystem, ExplosionSystem, FlareSystem, HelicopterDamageFxSystem, ImpactSparkSystem, JetTrailSystem
 from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
 from .settings import HelicopterSettings
@@ -216,6 +216,7 @@ class MissionState:
     dust_storm: DustStormSystem = field(default_factory=DustStormSystem)
     heli_damage_fx: HelicopterDamageFxSystem = field(default_factory=HelicopterDamageFxSystem)
     explosions: ExplosionSystem = field(default_factory=ExplosionSystem)
+    flares: FlareSystem = field(default_factory=FlareSystem)
     elapsed_seconds: float = 0.0
     pending_air_mine_pos: Vec2 | None = None
     pending_air_mine_seconds: float = 0.0
@@ -523,6 +524,7 @@ def update_mission(
     mission.dust_storm.update(dt, heli_pos=helicopter.pos, heli_vel=helicopter.vel, ground_y=heli.ground_y)
     mission.heli_damage_fx.update(dt, heli_pos=helicopter.pos, heli_vel=helicopter.vel, damage=helicopter.damage)
     mission.explosions.update(dt)
+    mission.flares.update(dt)
 
     # If we're in a crash animation, run the crash sequence and skip gameplay updates.
     if mission.crash_active:
