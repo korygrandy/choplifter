@@ -78,6 +78,33 @@ def run() -> None:
     # Gamepad detection (connect/disconnect notifications).
     pygame.joystick.init()
     joysticks: dict[int, pygame.joystick.Joystick] = {}
+
+    # Cinematic feedback (screenshake + audio duck).
+    shake_remaining_s = 0.0
+    shake_total_s = 0.0
+    shake_strength = 0.0
+    shake_surface: pygame.Surface | None = None
+
+    def _clamp01(v: float) -> float:
+        if v < 0.0:
+            return 0.0
+        if v > 1.0:
+            return 1.0
+        return v
+
+    def add_screenshake(strength: float) -> None:
+        nonlocal shake_remaining_s, shake_total_s, shake_strength
+        if not screenshake_enabled:
+            return
+
+        s = _clamp01(float(strength))
+        if s <= 0.0:
+            return
+
+        shake_strength = max(shake_strength, s)
+        duration_s = 0.10 + 0.18 * s
+        shake_remaining_s = max(shake_remaining_s, duration_s)
+        shake_total_s = max(shake_total_s, shake_remaining_s)
     toast_message = ""
     toast_seconds = 0.0
 
@@ -833,10 +860,34 @@ def run() -> None:
                             safe_landing_vy=physics.safe_landing_vy,
                             logger=logger,
                         )
+
+                        # Cinematic feedback on rough landings.
+                        vy = abs(float(helicopter.last_landing_vy))
+                        safe = max(0.001, float(physics.safe_landing_vy))
+                        if vy > safe and mission.invuln_seconds <= 0.0 and not mission.ended:
+                            severity = (vy - safe) / (safe * 1.25)
+                            severity = _clamp01(severity)
+                            add_screenshake(0.35 + 0.65 * severity)
+                            if severity >= 0.60:
+                                audio.trigger_duck(strength=0.45 + 0.55 * severity)
                         audio.stop_flying()
                 update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
 
+                # Consume cinematic feedback impulses produced by mission damage events.
+                shake_impulse = float(getattr(mission, "feedback_shake_impulse", 0.0))
+                if shake_impulse > 0.0:
+                    add_screenshake(shake_impulse)
+                    mission.feedback_shake_impulse = 0.0
+                duck_strength = float(getattr(mission, "feedback_duck_strength", 0.0))
+                if duck_strength > 0.0:
+                    # Only apply duck for bigger impacts.
+                    if duck_strength >= 0.55:
+                        audio.trigger_duck(strength=duck_strength)
+                    mission.feedback_duck_strength = 0.0
+
                 if getattr(mission, "crash_impact_sfx_pending", False):
+                    add_screenshake(1.0)
+                    audio.trigger_duck(strength=1.0)
                     audio.play_chopper_crash()
                     mission.crash_impact_sfx_pending = False
 
@@ -936,39 +987,62 @@ def run() -> None:
         elif camera_x > max_cam_x:
             camera_x = max_cam_x
 
+        # Update audio (ducking is applied via bus volumes).
+        audio.update(frame_dt)
+
+        # Screenshake offsets (render-time only; affects the whole frame).
+        shake_x = 0
+        shake_y = 0
+        if screenshake_enabled and shake_remaining_s > 0.0:
+            shake_remaining_s = max(0.0, shake_remaining_s - frame_dt)
+            t = shake_remaining_s / max(0.001, shake_total_s)
+            amp = (2.0 + 7.0 * shake_strength) * t
+            shake_x = int(random.uniform(-amp, amp))
+            shake_y = int(random.uniform(-amp, amp))
+        elif shake_remaining_s <= 0.0:
+            shake_remaining_s = 0.0
+            shake_total_s = 0.0
+            shake_strength = 0.0
+
+        target = screen
+        if screenshake_enabled and (shake_x != 0 or shake_y != 0):
+            if shake_surface is None or shake_surface.get_size() != screen.get_size():
+                shake_surface = pygame.Surface(screen.get_size())
+            target = shake_surface
+
         # Render.
         if mode == "intro":
             if intro_video is not None:
-                intro_video.draw(screen)
-                draw_skip_overlay(screen, text=skip_hint)
+                intro_video.draw(target)
+                draw_skip_overlay(target, text=skip_hint)
             else:
-                draw_intro_cutscene(screen, intro_t, show_skip=True, skip_text=skip_hint)
+                draw_intro_cutscene(target, intro_t, show_skip=True, skip_text=skip_hint)
         else:
             # Background above the horizon.
             draw_sky(
-                screen,
+                target,
                 heli_settings.ground_y,
                 bg_asset=getattr(mission, "bg_asset", "mission1-bg.jpg"),
                 dt=frame_dt,
                 enable_fade=(mode == "select_mission"),
             )
             if particles_enabled:
-                sky_smoke.draw(screen, horizon_y=int(heli_settings.ground_y))
-            draw_ground(screen, heli_settings.ground_y)
-            draw_mission(screen, mission, camera_x=camera_x, enable_particles=particles_enabled)
-            draw_flares(screen, mission, camera_x=camera_x, enable_particles=particles_enabled)
-            draw_helicopter_damage_fx(screen, mission, camera_x=camera_x, enable_particles=particles_enabled)
-            draw_helicopter(screen, helicopter, camera_x=camera_x, boarded=boarded_count(mission))
-            draw_impact_sparks(screen, mission, camera_x=camera_x, enable_particles=particles_enabled)
+                sky_smoke.draw(target, horizon_y=int(heli_settings.ground_y))
+            draw_ground(target, heli_settings.ground_y)
+            draw_mission(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
+            draw_flares(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
+            draw_helicopter_damage_fx(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
+            draw_helicopter(target, helicopter, camera_x=camera_x, boarded=boarded_count(mission))
+            draw_impact_sparks(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
             if mode == "playing":
-                draw_hud(screen, mission, helicopter)
+                draw_hud(target, mission, helicopter)
             elif mode == "select_mission":
-                draw_mission_select_overlay(screen, mission_choices, selected_mission_index)
+                draw_mission_select_overlay(target, mission_choices, selected_mission_index)
             elif mode == "select_chopper":
-                draw_chopper_select_overlay(screen, chopper_choices, selected_chopper_index)
+                draw_chopper_select_overlay(target, chopper_choices, selected_chopper_index)
             else:
                 draw_chopper_select_overlay(
-                    screen,
+                    target,
                     chopper_choices,
                     selected_chopper_index,
                     title="Paused",
@@ -982,13 +1056,17 @@ def run() -> None:
                     restart_game_selected=(pause_focus == "restart_game"),
                 )
             if toast_message:
-                draw_toast(screen, toast_message)
+                draw_toast(target, toast_message)
 
             if mode == "playing" and flashes_enabled:
-                draw_damage_flash(screen, helicopter)
+                draw_damage_flash(target, helicopter)
 
         if debug.show_overlay and mode == "playing":
-            overlay.draw(screen, helicopter, mission, clock.get_fps())
+            overlay.draw(target, helicopter, mission, clock.get_fps())
+
+        if target is not screen:
+            screen.fill((0, 0, 0))
+            screen.blit(target, (shake_x, shake_y))
 
         pygame.display.flip()
 

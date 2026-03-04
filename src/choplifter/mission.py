@@ -227,6 +227,10 @@ class MissionState:
     invuln_seconds: float = 0.0
     flare_invuln_seconds: float = 0.0
 
+    # Cinematic feedback impulses consumed by the main loop.
+    feedback_shake_impulse: float = 0.0
+    feedback_duck_strength: float = 0.0
+
     # Crash animation state (damage >= 100 triggers crash sequence).
     crash_active: bool = False
     crash_variant: int = 0  # 0=level spin, 1=tail-spin
@@ -610,7 +614,7 @@ def _update_projectiles(
             if _hits_circle(p.pos, helicopter.pos, radius=26.0):
                 if p.kind is ProjectileKind.ENEMY_ARTILLERY:
                     mission.stats.artillery_hits += 1
-                    mission.impact_sparks.emit_hit(p.pos, p.vel)
+                    mission.impact_sparks.emit_hit(p.pos, p.vel, strength=1.25)
                     _damage_helicopter(mission, helicopter, 10.0, logger, source="ARTILLERY")
                 else:
                     _damage_helicopter(mission, helicopter, 10.0, logger, source="ENEMY_BULLET")
@@ -1318,6 +1322,26 @@ def _damage_helicopter(
     before = helicopter.damage
     helicopter.damage = min(100.0, helicopter.damage + amount)
     if helicopter.damage > before:
+        # Cinematic feedback: stash a short-lived impulse for the renderer/audio layer.
+        # (We only store the strongest impulse seen in a tick; the main loop consumes + clears it.)
+        base = clamp(float(amount) / 20.0, 0.0, 1.0)
+        if source in ("ENEMY_BULLET",):
+            shake = 0.20 + 0.35 * base
+        elif source in ("ARTILLERY",):
+            shake = 0.55 + 0.45 * base
+        elif source in ("AIR_MINE",):
+            shake = 0.70 + 0.30 * base
+        elif source in ("JET",):
+            shake = 0.50 + 0.50 * base
+        else:
+            shake = 0.30 + 0.45 * base
+
+        mission.feedback_shake_impulse = max(mission.feedback_shake_impulse, clamp(shake, 0.0, 1.0))
+
+        # Subtle audio "duck" only for bigger impacts.
+        if source in ("ARTILLERY", "AIR_MINE", "JET"):
+            mission.feedback_duck_strength = max(mission.feedback_duck_strength, clamp(shake, 0.0, 1.0))
+
         # Screen flash: set a short timer + color based on damage source.
         # (Rendering is gated by accessibility.flashes_enabled.)
         helicopter.damage_flash_seconds = 0.12
@@ -1452,7 +1476,7 @@ def _update_crash_sequence(
             impact_pos = Vec2(float(helicopter.pos.x), float(heli.ground_y) - 10.0)
             mission.explosions.emit_explosion(impact_pos, strength=1.0)
             mission.burning.add_site(impact_pos, intensity=1.0)
-            mission.impact_sparks.emit_hit(impact_pos, incoming_vel=Vec2(0.0, 220.0))
+            mission.impact_sparks.emit_hit(impact_pos, incoming_vel=Vec2(0.0, 220.0), strength=2.0)
 
             helicopter.crash_hide = True
             if logger is not None:

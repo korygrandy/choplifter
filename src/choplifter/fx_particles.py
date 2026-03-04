@@ -32,9 +32,11 @@ class ImpactSparkSystem:
     def reset(self) -> None:
         self.particles.clear()
 
-    def emit_hit(self, pos: Vec2, incoming_vel: Vec2) -> None:
+    def emit_hit(self, pos: Vec2, incoming_vel: Vec2, *, strength: float = 1.0) -> None:
         if len(self.particles) >= self.max_particles:
             return
+
+        s = clamp(float(strength), 0.35, 2.25)
 
         ivx, ivy = float(incoming_vel.x), float(incoming_vel.y)
         mag = math.hypot(ivx, ivy)
@@ -44,7 +46,7 @@ class ImpactSparkSystem:
         else:
             nx, ny = 0.0, -1.0
 
-        count = int(self.spark_count)
+        count = max(1, int(self.spark_count * (0.65 + 0.70 * s)))
         for _ in range(count):
             if len(self.particles) >= self.max_particles:
                 break
@@ -53,12 +55,12 @@ class ImpactSparkSystem:
             base_ang = math.atan2(ny, nx)
             ang = base_ang + spread
 
-            speed = self._rng.uniform(75.0, 180.0)
+            speed = self._rng.uniform(75.0, 180.0) * (0.70 + 0.55 * s)
             vx = math.cos(ang) * speed + self._rng.uniform(-20.0, 20.0)
             vy = math.sin(ang) * speed + self._rng.uniform(-20.0, 20.0)
 
-            ttl = self._rng.uniform(self.spark_ttl_min_s, self.spark_ttl_max_s)
-            radius = self._rng.uniform(self.spark_radius_min, self.spark_radius_max)
+            ttl = self._rng.uniform(self.spark_ttl_min_s, self.spark_ttl_max_s) * (0.85 + 0.35 * s)
+            radius = self._rng.uniform(self.spark_radius_min, self.spark_radius_max) * (0.80 + 0.30 * s)
 
             self.particles.append(
                 FxParticle(

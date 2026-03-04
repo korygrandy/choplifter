@@ -60,12 +60,12 @@ def rumble_hit(*, amount: float, source: str | None = None, logger: logging.Logg
     # Bias toward high-frequency motor for "impact" feel.
     low = 0.10 * scale
     high = 0.65 * scale
-    duration_ms = 95
+    duration_ms = int(85 + 90 * scale)
 
     # Slightly stronger for mines/jets.
     if source in ("AIR_MINE", "JET"):
         high = _clamp01(high + 0.15)
-        duration_ms = 120
+        duration_ms = int(duration_ms + 35)
 
     _rumble(low=low, high=high, duration_ms=duration_ms, logger=logger)
 
