@@ -269,26 +269,30 @@ class HelicopterDamageFxSystem:
 
         dmg = clamp(float(damage), 0.0, 100.0)
 
+        smoke_active = dmg >= 70.0
+        fire_active = dmg >= 90.0
+
         # Threshold mapping: 70..90 ramps up smoke, 90..100 adds embers.
         smoke_strength = clamp((dmg - 70.0) / 30.0, 0.0, 1.0)
         fire_strength = clamp((dmg - 90.0) / 10.0, 0.0, 1.0)
 
         # Nothing to do until smoke threshold.
-        if smoke_strength <= 0.001 and fire_strength <= 0.001 and not self.particles:
+        if not smoke_active and not fire_active and not self.particles:
             return
 
         # Engine exhaust origin: slightly behind travel direction.
-        sign = 1.0 if float(heli_vel.x) >= 0.0 else -1.0
+        vx = float(heli_vel.x)
+        sign = 0.0 if abs(vx) < 1.0 else (1.0 if vx >= 0.0 else -1.0)
         base = Vec2(float(heli_pos.x) - sign * 30.0, float(heli_pos.y) + 6.0)
 
-        if len(self.particles) < self.max_particles and smoke_strength > 0.001:
+        if len(self.particles) < self.max_particles and smoke_active:
             rate = self.smoke_rate_per_s * (0.35 + 0.65 * smoke_strength) * (1.0 + 0.35 * fire_strength)
             self.smoke_spawn_accum += dt * rate
             while self.smoke_spawn_accum >= 1.0 and len(self.particles) < self.max_particles:
                 self.smoke_spawn_accum -= 1.0
                 self._spawn_smoke(base, heli_vel=heli_vel, strength=smoke_strength)
 
-        if len(self.particles) < self.max_particles and fire_strength > 0.001:
+        if len(self.particles) < self.max_particles and fire_active:
             rate = self.ember_rate_per_s * (0.30 + 0.70 * fire_strength)
             self.ember_spawn_accum += dt * rate
             while self.ember_spawn_accum >= 1.0 and len(self.particles) < self.max_particles:
