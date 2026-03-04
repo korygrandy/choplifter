@@ -189,8 +189,13 @@ def draw_damage_flash(screen: pygame.Surface, helicopter: Helicopter) -> None:
 
 
 def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x: float = 0.0, boarded: int = 0) -> None:
+    if getattr(helicopter, "crash_hide", False):
+        return
+
     x = int(helicopter.pos.x - camera_x)
     y = int(helicopter.pos.y)
+
+    roll_deg = float(getattr(helicopter, "crash_roll_deg", 0.0)) if getattr(helicopter, "crashing", False) else float(helicopter.tilt_deg)
 
     def _with_door_overlay(base: pygame.Surface) -> pygame.Surface:
         """Return a copy of the helicopter sprite with a simple door state indicator."""
@@ -290,7 +295,7 @@ def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x:
 
         s = _with_door_overlay(s)
 
-        rotated = pygame.transform.rotate(s, -helicopter.tilt_deg)
+        rotated = pygame.transform.rotate(s, -roll_deg)
         rect = rotated.get_rect(center=(x, y))
         screen.blit(rotated, rect)
         return
@@ -358,13 +363,13 @@ def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x:
     else:
         pygame.draw.circle(body, (220, 220, 220), (body_w // 2, body_h // 2), 4)
 
-    rotated = pygame.transform.rotate(body, -helicopter.tilt_deg)
+    rotated = pygame.transform.rotate(body, -roll_deg)
     rect = rotated.get_rect(center=(x, y))
     screen.blit(rotated, rect)
 
     rotor_len = 90
     rotor_offset = 18
-    angle_rad = math.radians(-helicopter.tilt_deg)
+    angle_rad = math.radians(-roll_deg)
     cx, cy = rect.centerx, rect.centery - rotor_offset
     dx = math.cos(angle_rad) * (rotor_len / 2)
     dy = math.sin(angle_rad) * (rotor_len / 2)
@@ -730,6 +735,7 @@ def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: flo
     _draw_enemies(screen, mission, camera_x=camera_x)
     if enable_particles:
         _draw_burning_particles(screen, mission, camera_x=camera_x)
+        _draw_explosion_particles(screen, mission, camera_x=camera_x)
         _draw_dust_storm_particles(screen, mission, camera_x=camera_x)
     _draw_projectiles(screen, mission, camera_x=camera_x)
 
@@ -1004,6 +1010,28 @@ def _draw_dust_storm_particles(screen: pygame.Surface, mission: MissionState, *,
     if dust is None:
         return
     _draw_fx_particles(screen, list(getattr(dust, "particles", [])), camera_x=camera_x)
+
+
+def _draw_explosion_particles(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+    explosions = getattr(mission, "explosions", None)
+    if explosions is None:
+        return
+    _draw_fx_particles(screen, list(getattr(explosions, "particles", [])), camera_x=camera_x)
+
+
+def draw_helicopter_damage_fx(
+    screen: pygame.Surface,
+    mission: MissionState,
+    *,
+    camera_x: float = 0.0,
+    enable_particles: bool = True,
+) -> None:
+    if not enable_particles:
+        return
+    fx = getattr(mission, "heli_damage_fx", None)
+    if fx is None:
+        return
+    _draw_fx_particles(screen, list(getattr(fx, "particles", [])), camera_x=camera_x)
 
 
 def draw_impact_sparks(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0, enable_particles: bool = True) -> None:
