@@ -1,4 +1,6 @@
+
 from __future__ import annotations
+from .app.keyboard_events import handle_keyboard_event
 
 from pathlib import Path
 import random
@@ -48,6 +50,7 @@ from .app.cutscenes import (
     update_mission_cutscene,
     skip_mission_cutscene,
 )
+import src.choplifter.app.cutscene_config as cutscene_config
 from .app.state import CutsceneState, IntroCutsceneState, MissionCutsceneState
 from .app.input import get_active_joystick, read_gamepad
 from .app.feedback import ScreenShakeState, consume_mission_feedback, rough_landing_feedback, update_screenshake_target
@@ -55,8 +58,11 @@ from .app.flares import FlareState, reset_flares, try_start_flare_salvo, update_
 from .app.gamepads import init_connected_joysticks, handle_joy_device_added, handle_joy_device_removed
 from .app.toast import ToastState
 from .app.session import create_mission_and_helicopter
+from .app.flow import apply_mission_preview, reset_game
 from .app.menu_helpers import cycle_index, move_pause_focus
 from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapshot
+from .app.accessibility_toggles import toggle_particles, toggle_flashes, toggle_screenshake
+from .app.doors import toggle_doors_with_logging
 
 
 def run() -> None:
@@ -117,31 +123,6 @@ def run() -> None:
     flashes_enabled = accessibility.flashes_enabled
     screenshake_enabled = accessibility.screenshake_enabled
 
-    def toggle_doors_with_logging() -> None:
-        at_base = mission.base.contains_point(helicopter.pos)
-        if not helicopter.grounded:
-            logger.info("DOORS: toggle blocked (not grounded)")
-            return
-
-        before = helicopter.doors_open
-        helicopter.toggle_doors()
-        after = helicopter.doors_open
-        if before != after:
-            if after:
-                audio.play_doors_open()
-            else:
-                audio.play_doors_close()
-            logger.info(
-                "DOORS: %s at_base=%s boarded=%d",
-                "OPEN" if after else "closed",
-                at_base,
-                boarded_count(mission),
-            )
-
-        if after and not at_base and boarded_count(mission) > 0:
-            logger.info("UNLOAD_BLOCKED: doors open but not in base zone")
-        if after and at_base and boarded_count(mission) == 0:
-            logger.info("UNLOAD: no boarded passengers")
 
     flags = 0
     if window.vsync:
@@ -157,19 +138,7 @@ def run() -> None:
     cutscenes = CutsceneState(intro=IntroCutsceneState(), mission=MissionCutsceneState())
     init_intro_cutscene(cutscenes.intro, assets_dir=assets_dir, logger=logger)
 
-    HOSTAGE_RESCUE_CUTSCENE_EVENT_ID = "hostage_rescue_16"
-    HOSTAGE_RESCUE_CUTSCENE_THRESHOLD = 16
-    HOSTAGE_RESCUE_CUTSCENE_DEFAULT_ASSET = "hostage-rescue-cutscene.mpg"
-    # Hook for future per-mission cutscene videos.
-    # Example: {"airport": "airport-rescue-cutscene.mpg"}
-    HOSTAGE_RESCUE_CUTSCENE_BY_MISSION: dict[str, str] = {}
-
-    def get_hostage_rescue_cutscene_path(mission_id: str) -> Path:
-        asset = HOSTAGE_RESCUE_CUTSCENE_BY_MISSION.get(
-            (mission_id or "").strip().lower(),
-            HOSTAGE_RESCUE_CUTSCENE_DEFAULT_ASSET,
-        )
-        return assets_dir / asset
+    # Hostage rescue cutscene config/lookup now in app.cutscene_config
 
     clock = pygame.time.Clock()
     overlay = DebugOverlay()
@@ -213,42 +182,38 @@ def run() -> None:
 
     prev_stats: MissionStatsSnapshot = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
 
-    def apply_mission_preview() -> None:
-        nonlocal helicopter, mission, accumulator
-        nonlocal prev_stats
-
-        mission, helicopter = create_mission_and_helicopter(
-            heli_settings=heli_settings,
-            mission_id=selected_mission_id,
-            chopper_asset=selected_chopper_asset,
+    def apply_mission_preview_wrapper() -> None:
+        nonlocal helicopter, mission, accumulator, prev_stats
+        mission, helicopter, accumulator, prev_stats = apply_mission_preview(
+            create_mission_and_helicopter,
+            heli_settings,
+            selected_mission_id,
+            selected_chopper_asset,
+            take_mission_stats_snapshot,
+            boarded_count,
+            sky_smoke,
+            audio,
+            set_toast,
+            mission,
         )
-        accumulator = 0.0
-        sky_smoke.reset()
-        audio.stop_flying()
-        prev_stats = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
 
-        bg = getattr(mission, "bg_asset", "")
-        if bg and not bg_asset_exists(bg):
-            set_toast(f"Missing background: {bg}")
-
-    def reset_game() -> None:
-        nonlocal helicopter, mission, accumulator
-        nonlocal selected_chopper_asset
-        nonlocal selected_mission_id
+    def reset_game_wrapper() -> None:
+        nonlocal helicopter, mission, accumulator, prev_stats
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_btn_rb_down, prev_btn_lb_down, prev_btn_back_down
-        nonlocal prev_stats
-        nonlocal flares
-
-        mission, helicopter = create_mission_and_helicopter(
-            heli_settings=heli_settings,
-            mission_id=selected_mission_id,
-            chopper_asset=selected_chopper_asset,
+        mission, helicopter, accumulator, prev_stats = reset_game(
+            create_mission_and_helicopter,
+            heli_settings,
+            selected_mission_id,
+            selected_chopper_asset,
+            take_mission_stats_snapshot,
+            boarded_count,
+            sky_smoke,
+            audio,
+            reset_flares,
+            logger,
+            flares,
         )
-        accumulator = 0.0
-        sky_smoke.reset()
-        audio.stop_flying()
-        prev_stats = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
         prev_btn_a_down = False
         prev_btn_b_down = False
         prev_btn_x_down = False
@@ -257,23 +222,18 @@ def run() -> None:
         prev_btn_rb_down = False
         prev_btn_lb_down = False
         prev_btn_back_down = False
-        reset_flares(flares)
-        logger.info("RESET: mission restarted")
 
-    def toggle_particles() -> None:
+    def toggle_particles_wrapper() -> None:
         nonlocal particles_enabled
-        particles_enabled = not particles_enabled
-        set_toast(f"Particles: {'ON' if particles_enabled else 'OFF'}")
+        particles_enabled = toggle_particles(particles_enabled, set_toast)
 
-    def toggle_flashes() -> None:
+    def toggle_flashes_wrapper() -> None:
         nonlocal flashes_enabled
-        flashes_enabled = not flashes_enabled
-        set_toast(f"Flashes: {'ON' if flashes_enabled else 'OFF'}")
+        flashes_enabled = toggle_flashes(flashes_enabled, set_toast)
 
-    def toggle_screenshake() -> None:
+    def toggle_screenshake_wrapper() -> None:
         nonlocal screenshake_enabled
-        screenshake_enabled = not screenshake_enabled
-        set_toast(f"Screenshake: {'ON' if screenshake_enabled else 'OFF'}")
+        screenshake_enabled = toggle_screenshake(screenshake_enabled, set_toast)
 
     running = True
     accumulator = 0.0
@@ -299,123 +259,48 @@ def run() -> None:
                 prev_btn_y_down = False
                 prev_btn_back_down = False
             elif event.type == pygame.KEYDOWN:
-                # Reserve ESC for pause/resume while in-game.
-                # Quit remains available from menus (and via window close).
-                if mode == "playing" and event.key == pygame.K_ESCAPE:
-                    mode = "paused"
-                    pause_focus = "choppers"
-                    audio.play_pause_toggle()
-                    audio.set_pause_menu_active(True)
-                elif mode == "paused" and event.key == pygame.K_ESCAPE:
-                    mode = "playing"
-                    audio.play_pause_toggle()
-                    audio.set_pause_menu_active(False)
-                elif matches_key(event.key, controls.quit):
+                (
+                    mode,
+                    pause_focus,
+                    quit_flag,
+                    selected_mission_index,
+                    selected_mission_id,
+                    selected_chopper_index,
+                    selected_chopper_asset,
+                ) = handle_keyboard_event(
+                    event,
+                    mode=mode,
+                    controls=controls,
+                    mission=mission,
+                    helicopter=helicopter,
+                    audio=audio,
+                    logger=logger,
+                    chopper_choices=chopper_choices,
+                    mission_choices=mission_choices,
+                    pause_focus=pause_focus,
+                    muted=muted,
+                    set_toast=set_toast,
+                    reset_game=reset_game_wrapper,
+                    apply_mission_preview=apply_mission_preview_wrapper,
+                    skip_intro=lambda: skip_intro(cutscenes.intro),
+                    skip_mission_cutscene=lambda: skip_mission_cutscene(cutscenes.mission),
+                    toggle_particles_wrapper=toggle_particles_wrapper,
+                    toggle_flashes_wrapper=toggle_flashes_wrapper,
+                    toggle_screenshake_wrapper=toggle_screenshake_wrapper,
+                    spawn_projectile_from_helicopter_logged=spawn_projectile_from_helicopter_logged,
+                    try_start_flare_salvo=try_start_flare_salvo,
+                    toggle_doors_with_logging=toggle_doors_with_logging,
+                    Facing=Facing,
+                    DebugSettings=DebugSettings,
+                    boarded_count=boarded_count,
+                    flares=flares,
+                    selected_mission_index=selected_mission_index,
+                    selected_mission_id=selected_mission_id,
+                    selected_chopper_index=selected_chopper_index,
+                    selected_chopper_asset=selected_chopper_asset,
+                )
+                if quit_flag:
                     running = False
-                elif mode == "cutscene":
-                    # Skip cutscene immediately on any key press (except quit which is handled above).
-                    mode = "playing"
-                    skip_mission_cutscene(cutscenes.mission)
-                elif mode == "intro":
-                    # Skip intro immediately on any key press (except quit which is handled above).
-                    mode = "select_mission"
-                    skip_intro(cutscenes.intro)
-                elif mode == "select_chopper":
-                    if event.key in (pygame.K_LEFT, pygame.K_a) or matches_key(event.key, controls.tilt_left):
-                        selected_chopper_index = cycle_index(selected_chopper_index, -1, len(chopper_choices))
-                        selected_chopper_asset = chopper_choices[selected_chopper_index][0]
-                        audio.play_menu_select()
-                    elif event.key in (pygame.K_RIGHT, pygame.K_d) or matches_key(event.key, controls.tilt_right):
-                        selected_chopper_index = cycle_index(selected_chopper_index, 1, len(chopper_choices))
-                        selected_chopper_asset = chopper_choices[selected_chopper_index][0]
-                        audio.play_menu_select()
-                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                        mode = "playing"
-                        set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
-                        reset_game()
-                elif mode == "select_mission":
-                    if event.key in (pygame.K_LEFT, pygame.K_a):
-                        selected_mission_index = cycle_index(selected_mission_index, -1, len(mission_choices))
-                        selected_mission_id = mission_choices[selected_mission_index][0]
-                        audio.play_menu_select()
-                        apply_mission_preview()
-                    elif event.key in (pygame.K_RIGHT, pygame.K_d):
-                        selected_mission_index = cycle_index(selected_mission_index, 1, len(mission_choices))
-                        selected_mission_id = mission_choices[selected_mission_index][0]
-                        audio.play_menu_select()
-                        apply_mission_preview()
-                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                        mode = "select_chopper"
-                        set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")
-                elif mode == "paused":
-                    if event.key == pygame.K_F2:
-                        toggle_particles()
-                    elif event.key == pygame.K_F3:
-                        toggle_flashes()
-                    elif event.key == pygame.K_F4:
-                        toggle_screenshake()
-                    if event.key in (pygame.K_UP, pygame.K_w):
-                        prev_pause_focus = pause_focus
-                        pause_focus = move_pause_focus(pause_focus, -1)
-                        if pause_focus != prev_pause_focus:
-                            audio.play_menu_select()
-                    elif event.key in (pygame.K_DOWN, pygame.K_s):
-                        prev_pause_focus = pause_focus
-                        pause_focus = move_pause_focus(pause_focus, 1)
-                        if pause_focus != prev_pause_focus:
-                            audio.play_menu_select()
-                    elif event.key in (pygame.K_LEFT, pygame.K_a) and pause_focus == "choppers":
-                        selected_chopper_index = cycle_index(selected_chopper_index, -1, len(chopper_choices))
-                        selected_chopper_asset = chopper_choices[selected_chopper_index][0]
-                        helicopter.skin_asset = selected_chopper_asset
-                        audio.play_menu_select()
-                    elif event.key in (pygame.K_RIGHT, pygame.K_d) and pause_focus == "choppers":
-                        selected_chopper_index = cycle_index(selected_chopper_index, 1, len(chopper_choices))
-                        selected_chopper_asset = chopper_choices[selected_chopper_index][0]
-                        helicopter.skin_asset = selected_chopper_asset
-                        audio.play_menu_select()
-                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                        if pause_focus == "restart_mission":
-                            reset_game()
-                            mode = "playing"
-                            audio.play_pause_toggle()
-                            audio.set_pause_menu_active(False)
-                        elif pause_focus == "restart_game":
-                            mode = "select_mission"
-                            pause_focus = "choppers"
-                            set_toast("Restart Game")
-                            audio.play_pause_toggle()
-                            audio.set_pause_menu_active(False)
-                        elif pause_focus == "mute":
-                            muted = not muted
-                            audio.set_muted(muted)
-                        else:
-                            mode = "playing"
-                            audio.play_pause_toggle()
-                            audio.set_pause_menu_active(False)
-                elif matches_key(event.key, controls.restart) and mission.ended:
-                    reset_game()
-                elif matches_key(event.key, controls.toggle_debug):
-                    debug = DebugSettings(show_overlay=not debug.show_overlay)
-                    set_toast(f"Debug overlay: {'ON' if debug.show_overlay else 'OFF'}")
-                elif mode == "playing" and matches_key(event.key, controls.cycle_facing):
-                    if not getattr(mission, "crash_active", False):
-                        helicopter.cycle_facing()
-                elif mode == "playing" and matches_key(event.key, controls.reverse_flip):
-                    if not getattr(mission, "crash_active", False):
-                        helicopter.reverse_flip()
-                elif mode == "playing" and matches_key(event.key, controls.doors):
-                    if not getattr(mission, "crash_active", False):
-                        toggle_doors_with_logging()
-                elif mode == "playing" and matches_key(event.key, controls.flare):
-                    try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
-                elif mode == "playing" and matches_key(event.key, controls.fire):
-                    if not getattr(mission, "crash_active", False):
-                        spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
-                        if helicopter.facing is Facing.FORWARD:
-                            audio.play_bomb()
-                        else:
-                            audio.play_shoot()
 
         keys = pygame.key.get_pressed()
         kb_tilt_left = pressed(keys, controls.tilt_left)
@@ -511,11 +396,11 @@ def run() -> None:
 
                 # Accessibility toggles.
                 if x_down and not prev_btn_x_down:
-                    toggle_particles()
+                    toggle_particles_wrapper()
                 if y_down and not prev_btn_y_down:
-                    toggle_flashes()
+                    toggle_flashes_wrapper()
                 if rb_down and not prev_btn_rb_down:
-                    toggle_screenshake()
+                    toggle_screenshake_wrapper()
 
                 # Up/Down selects section.
                 if menu_vert != 0 and menu_vert != prev_menu_vert:
@@ -565,7 +450,7 @@ def run() -> None:
 
                 if a_down and not prev_btn_a_down:
                     if not getattr(mission, "crash_active", False):
-                        toggle_doors_with_logging()
+                        toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count)
                 if y_down and not prev_btn_y_down:
                     if not getattr(mission, "crash_active", False):
                         helicopter.reverse_flip()
@@ -673,16 +558,16 @@ def run() -> None:
 
                 # One-shot hostage rescue cutscene when the first 16 hostages are onboard.
                 if (
-                    boarded_now >= HOSTAGE_RESCUE_CUTSCENE_THRESHOLD
-                    and HOSTAGE_RESCUE_CUTSCENE_EVENT_ID not in mission.cutscenes_played
+                    boarded_now >= cutscene_config.HOSTAGE_RESCUE_CUTSCENE_THRESHOLD
+                    and cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID not in mission.cutscenes_played
                 ):
-                    mission.cutscenes_played.add(HOSTAGE_RESCUE_CUTSCENE_EVENT_ID)
-                    cutscene_path = get_hostage_rescue_cutscene_path(getattr(mission, "mission_id", ""))
+                    mission.cutscenes_played.add(cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID)
+                    cutscene_path = cutscene_config.get_hostage_rescue_cutscene_path(getattr(mission, "mission_id", ""))
                     if start_mission_cutscene(
                         cutscenes.mission,
                         cutscene_path=cutscene_path,
                         logger=logger,
-                        event_id=HOSTAGE_RESCUE_CUTSCENE_EVENT_ID,
+                        event_id=cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID,
                         mission_id=str(getattr(mission, "mission_id", "")),
                     ):
                         mode = "cutscene"
