@@ -1,0 +1,160 @@
+from __future__ import annotations
+
+import math
+from typing import TYPE_CHECKING
+import pygame
+
+if TYPE_CHECKING:
+    from ..mission import MissionState
+
+
+_BURN_SPRITE_CACHE: dict[tuple[str, int], pygame.Surface] = {}
+
+
+def _draw_fx_particles(screen: pygame.Surface, particles: list[object], *, camera_x: float) -> None:
+    # Particles are in world-space; apply camera offset.
+    for p in particles:
+        pos = getattr(p, "pos", None)
+        if pos is None:
+            continue
+
+        x = int(float(pos.x) - camera_x)
+        y = int(float(pos.y))
+
+        age = float(getattr(p, "age", 0.0))
+        ttl = float(getattr(p, "ttl", 0.0))
+        t = age / max(0.001, ttl)
+
+        kind = str(getattr(p, "kind", "smoke"))
+        radius_f = float(getattr(p, "radius", 4.0))
+        radius = int(max(1.0, radius_f))
+
+        intensity = float(getattr(p, "intensity", 1.0))
+        if not math.isfinite(intensity):
+            intensity = 1.0
+        intensity = max(0.0, intensity)
+
+        if kind == "ember":
+            alpha = int(240 * (1.0 - t) * intensity)
+            sprite = _get_burn_sprite("ember", radius)
+        else:
+            alpha = int(120 * (1.0 - t) * (1.0 - t) * intensity)
+            radius = int(max(1.0, radius_f * (1.0 + 0.45 * t)))
+            sprite = _get_burn_sprite("smoke", radius)
+
+        alpha = max(0, min(255, alpha))
+
+        if alpha <= 0:
+            continue
+
+        sprite.set_alpha(alpha)
+        screen.blit(sprite, (x - sprite.get_width() // 2, y - sprite.get_height() // 2))
+
+
+def draw_jet_trail_particles(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+    jet_trails = getattr(mission, "jet_trails", None)
+    if jet_trails is None:
+        return
+    _draw_fx_particles(screen, list(getattr(jet_trails, "particles", [])), camera_x=camera_x)
+
+
+def draw_dust_storm_particles(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+    dust = getattr(mission, "dust_storm", None)
+    if dust is None:
+        return
+    _draw_fx_particles(screen, list(getattr(dust, "particles", [])), camera_x=camera_x)
+
+
+def draw_explosion_particles(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+    explosions = getattr(mission, "explosions", None)
+    if explosions is None:
+        return
+    _draw_fx_particles(screen, list(getattr(explosions, "particles", [])), camera_x=camera_x)
+
+
+def draw_burning_particles(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+    # Particles are in world-space; apply camera offset.
+    for p in getattr(mission, "burning").particles:
+        x = int(p.pos.x - camera_x)
+        y = int(p.pos.y)
+
+        t = p.age / max(0.001, p.ttl)
+        if p.kind == "ember":
+            alpha = int(220 * (1.0 - t))
+            radius = int(max(1.0, p.radius))
+            sprite = _get_burn_sprite("ember", radius)
+        else:
+            # Smoke: fades slower and expands a little.
+            alpha = int(160 * (1.0 - t) * (1.0 - t))
+            radius = int(max(1.0, p.radius * (1.0 + 0.35 * t)))
+            sprite = _get_burn_sprite("smoke", radius)
+
+        if alpha <= 0:
+            continue
+
+        sprite.set_alpha(alpha)
+        screen.blit(sprite, (x - sprite.get_width() // 2, y - sprite.get_height() // 2))
+
+
+def draw_flares(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0, enable_particles: bool = True) -> None:
+    if not enable_particles:
+        return
+    flares = getattr(mission, "flares", None)
+    if flares is None:
+        return
+    _draw_fx_particles(screen, list(getattr(flares, "particles", [])), camera_x=camera_x)
+
+
+def draw_helicopter_damage_fx(
+    screen: pygame.Surface,
+    mission: MissionState,
+    *,
+    camera_x: float = 0.0,
+    enable_particles: bool = True,
+) -> None:
+    if not enable_particles:
+        return
+    fx = getattr(mission, "heli_damage_fx", None)
+    if fx is None:
+        return
+    _draw_fx_particles(screen, list(getattr(fx, "particles", [])), camera_x=camera_x)
+
+
+def draw_impact_sparks(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0, enable_particles: bool = True) -> None:
+    if not enable_particles:
+        return
+    sparks = getattr(mission, "impact_sparks", None)
+    if sparks is None:
+        return
+    _draw_fx_particles(screen, list(getattr(sparks, "particles", [])), camera_x=camera_x)
+
+
+def _get_burn_sprite(kind: str, radius: int) -> pygame.Surface:
+    radius = max(1, int(radius))
+    key = (kind, radius)
+    cached = _BURN_SPRITE_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    size = radius * 2 + 6
+    s = pygame.Surface((size, size), pygame.SRCALPHA)
+    cx = size // 2
+    cy = size // 2
+
+    if kind == "ember":
+        # Small hot spark with bright core.
+        pygame.draw.circle(s, (255, 210, 80, 220), (cx, cy), radius)
+        pygame.draw.circle(s, (255, 245, 220, 235), (cx, cy), max(1, radius // 2))
+    else:
+        # Soft smoke puff.
+        pygame.draw.circle(s, (55, 55, 55, 46), (cx, cy), radius)
+        pygame.draw.circle(s, (75, 75, 75, 62), (cx - max(1, radius // 5), cy), max(1, int(radius * 0.75)))
+        pygame.draw.circle(
+            s,
+            (35, 35, 35, 40),
+            (cx + max(1, radius // 6), cy + max(1, radius // 8)),
+            max(1, int(radius * 0.60)),
+        )
+
+    _BURN_SPRITE_CACHE[key] = s
+    return s
