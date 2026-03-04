@@ -129,6 +129,40 @@ def draw_impact_sparks(screen: pygame.Surface, mission: MissionState, *, camera_
     _draw_fx_particles(screen, list(getattr(sparks, "particles", [])), camera_x=camera_x)
 
 
+def draw_rain_particles(screen: pygame.Surface, rain_system, *, camera_x: float = 0.0) -> None:
+    # Draw blue streaks for rain
+    for p in getattr(rain_system, "particles", []):
+        x = int(p.pos.x - camera_x)
+        y = int(p.pos.y)
+        t = p.age / max(0.001, p.ttl)
+        alpha = int(180 * (1.0 - t))
+        if alpha <= 0:
+            continue
+        color = (120, 180, 255, alpha)
+        length = int(12 + 16 * (1.0 - t))
+        end_y = y + length
+        s = pygame.Surface((3, length), pygame.SRCALPHA)
+        pygame.draw.line(s, color, (1, 0), (1, length), 2)
+        s.set_alpha(alpha)
+        screen.blit(s, (x - 1, y))
+
+
+def draw_fog_particles(screen: pygame.Surface, fog_system, *, camera_x: float = 0.0) -> None:
+    # Draw large, soft white fog puffs
+    for p in getattr(fog_system, "particles", []):
+        x = int(p.pos.x - camera_x)
+        y = int(p.pos.y)
+        t = p.age / max(0.001, p.ttl)
+        alpha = int(60 * (1.0 - t) * (1.0 - t))
+        if alpha <= 0:
+            continue
+        radius = int(max(8, p.radius * (1.0 + 0.2 * t)))
+        s = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(s, (220, 220, 220, alpha), (radius, radius), radius)
+        s.set_alpha(alpha)
+        screen.blit(s, (x - radius, y - radius))
+
+
 def _get_burn_sprite(kind: str, radius: int) -> pygame.Surface:
     radius = max(1, int(radius))
     key = (kind, radius)
