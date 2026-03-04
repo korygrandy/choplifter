@@ -270,7 +270,7 @@ class HelicopterDamageFxSystem:
         dmg = clamp(float(damage), 0.0, 100.0)
 
         smoke_active = dmg >= 50.0
-        fire_active = dmg >= 90.0
+        fire_active = dmg >= 70.0
 
         # Threshold mapping: 50..90 ramps up smoke, 90..100 adds embers.
         smoke_strength = clamp((dmg - 50.0) / 40.0, 0.0, 1.0)
