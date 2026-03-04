@@ -1,16 +1,8 @@
-debug_mode = False
-debug_weather_modes = ["clear", "rain", "fog", "dust", "storm"]
-debug_weather_index = 0
 
 def draw_debug_overlay(target):
     font = pygame.font.SysFont(None, 32)
     overlay = font.render("DEBUG MODE", True, (255, 0, 0))
     target.blit(overlay, (12, 12))
-
-def set_debug_weather_mode(mode):
-    weather_mode = mode
-    weather_timer = 0.0
-    weather_duration = 9999.0  # Prevent auto-cycling
 
 
 debug_mode = False
@@ -69,6 +61,7 @@ from .fx.rain import RainSystem
 from .fx.fog import FogSystem
 from .fx.dust_storm import DustStormSystem
 from .fx.lightning import LightningSystem
+from .fx.storm_clouds import StormCloudSystem
 from .physics_config import load_physics_settings
 from .math2d import Vec2
 from .app.cutscenes import (
@@ -99,7 +92,16 @@ import random
 
 
 def run() -> None:
+    def set_debug_weather_mode(mode):
+        nonlocal weather_mode, weather_timer, weather_duration
+        weather_mode = mode
+        weather_timer = 0.0
+        weather_duration = 9999.0  # Prevent auto-cycling
+
     debug_mode = False
+
+    # Initialize accessibility_mode and accessibility_toggles to avoid UnboundLocalError
+    # accessibility_mode and accessibility_toggles will be initialized after accessibility is loaded
     debug_weather_modes = ["clear", "rain", "fog", "dust", "storm"]
     debug_weather_index = 0
     window = WindowSettings()
@@ -127,6 +129,9 @@ def run() -> None:
 
     controls = load_controls(logger=logger)
     accessibility = load_accessibility(logger=logger)
+    # Now safe to initialize accessibility_mode and accessibility_toggles
+    accessibility_mode = getattr(accessibility, 'mode', None)
+    accessibility_toggles = getattr(accessibility, 'toggles', None)
     haptics.set_enabled(accessibility.rumble_enabled)
     audio = AudioBank.try_create()
     logger.info("Controls: SPACE fire | F flare | E doors (grounded) | TAB facing | R reverse | F1 debug")
@@ -183,8 +188,10 @@ def run() -> None:
     # --- Weather/particle systems ---
     rain = RainSystem()
     fog = FogSystem()
+
     dust = DustStormSystem()
     lightning = LightningSystem(area_width=window.width, area_height=window.height)
+    storm_clouds = StormCloudSystem(window.width, window.height)
 
     weather_mode = random.choice(["clear", "rain", "fog", "dust", "storm"])
     weather_timer = 0.0
@@ -437,49 +444,76 @@ def run() -> None:
                     debug_weather_index = (debug_weather_index - 1) % len(debug_weather_modes)
                     set_debug_weather_mode(debug_weather_modes[debug_weather_index])
                     set_toast(f"Weather: {debug_weather_modes[debug_weather_index]}")
-                else:
-                    (
-                        mode,
-                        pause_focus,
-                        quit_flag,
-                        selected_mission_index,
-                        selected_mission_id,
-                        selected_chopper_index,
-                        selected_chopper_asset,
-                    ) = handle_keyboard_event(
-                        event,
-                        mode=mode,
-                        controls=controls,
-                        mission=mission,
-                        helicopter=helicopter,
-                        audio=audio,
-                        logger=logger,
-                        chopper_choices=chopper_choices,
-                        mission_choices=mission_choices,
-                        pause_focus=pause_focus,
-                        muted=muted,
-                        set_toast=set_toast,
-                        reset_game=reset_game_wrapper,
-                        apply_mission_preview=apply_mission_preview_wrapper,
-                        skip_intro=lambda: skip_intro(cutscenes.intro),
-                        skip_mission_cutscene=lambda: skip_mission_cutscene(cutscenes.mission),
-                        toggle_particles_wrapper=toggle_particles_wrapper,
-                        toggle_flashes_wrapper=toggle_flashes_wrapper,
-                        toggle_screenshake_wrapper=toggle_screenshake_wrapper,
-                        spawn_projectile_from_helicopter_logged=spawn_projectile_from_helicopter_logged,
-                        try_start_flare_salvo=try_start_flare_salvo,
-                        toggle_doors_with_logging=toggle_doors_with_logging,
-                        Facing=Facing,
-                        DebugSettings=DebugSettings,
-                        boarded_count=boarded_count,
-                        flares=flares,
-                        selected_mission_index=selected_mission_index,
-                        selected_mission_id=selected_mission_id,
-                        selected_chopper_index=selected_chopper_index,
-                        selected_chopper_asset=selected_chopper_asset,
-                    )
-                    if quit_flag:
-                        running = False
+                (
+                    mode,
+                    pause_focus,
+                    muted,
+                    selected_mission_index,
+                    selected_mission_id,
+                    selected_chopper_index,
+                    selected_chopper_asset,
+                ) = handle_keyboard_event(
+                    event,
+                    mode=mode,
+                    controls=controls,
+                    mission=mission,
+                    helicopter=helicopter,
+                    audio=audio,
+                    logger=logger,
+                    chopper_choices=chopper_choices,
+                    mission_choices=mission_choices,
+                    pause_focus=pause_focus,
+                    muted=muted,
+                    set_toast=set_toast,
+                    reset_game=reset_game_wrapper,
+                    apply_mission_preview=apply_mission_preview_wrapper,
+                    skip_intro=lambda: skip_intro(cutscenes.intro),
+                    skip_mission_cutscene=lambda: skip_mission_cutscene(cutscenes.mission),
+                    toggle_particles_wrapper=toggle_particles_wrapper,
+                    toggle_flashes_wrapper=toggle_flashes_wrapper,
+                    toggle_screenshake_wrapper=toggle_screenshake_wrapper,
+                    spawn_projectile_from_helicopter_logged=spawn_projectile_from_helicopter_logged,
+                    try_start_flare_salvo=try_start_flare_salvo,
+                    toggle_doors_with_logging=toggle_doors_with_logging,
+                    Facing=Facing,
+                    DebugSettings=DebugSettings,
+                    boarded_count=boarded_count,
+                    flares=flares,
+                    selected_mission_index=selected_mission_index,
+                    selected_mission_id=selected_mission_id,
+                    selected_chopper_index=selected_chopper_index,
+                    selected_chopper_asset=selected_chopper_asset
+                )
+                # The following block was incorrectly indented and is now commented out for review.
+                # audio=audio,
+                # logger=logger,
+                # chopper_choices=chopper_choices,
+                # mission_choices=mission_choices,
+                # pause_focus=pause_focus,
+                # muted=muted,
+                # set_toast=set_toast,
+                # reset_game=reset_game_wrapper,
+                # apply_mission_preview=apply_mission_preview_wrapper,
+                # skip_intro=lambda: skip_intro(cutscenes.intro),
+                # skip_mission_cutscene=lambda: skip_mission_cutscene(cutscenes.mission),
+                # toggle_particles_wrapper=toggle_particles_wrapper,
+                # toggle_flashes_wrapper=toggle_flashes_wrapper,
+                # toggle_screenshake_wrapper=toggle_screenshake_wrapper,
+                # spawn_projectile_from_helicopter_logged=spawn_projectile_from_helicopter_logged,
+                # try_start_flare_salvo=try_start_flare_salvo,
+                # toggle_doors_with_logging=toggle_doors_with_logging,
+                # Facing=Facing,
+                # DebugSettings=DebugSettings,
+                # boarded_count=boarded_count,
+                # flares=flares,
+                # selected_mission_index=selected_mission_index,
+                # selected_mission_id=selected_mission_id,
+                # selected_chopper_index=selected_chopper_index,
+                # selected_chopper_asset=selected_chopper_asset,
+                # debug=debug
+                # )
+            if quit_confirm:
+                running = False
 
         keys = pygame.key.get_pressed()
         kb_tilt_left = pressed(keys, controls.tilt_left)
@@ -623,22 +657,22 @@ def run() -> None:
                     elif pause_focus == "quit":
                         if not quit_confirm:
                             quit_confirm = True
-                        else:
-                            running = False
-                    else:
-                        mode = "playing"
-                        audio.play_pause_toggle()
-                        audio.set_pause_menu_active(False)
-                        quit_confirm = False
-            else:
-
-                # Start toggles pause while playing.
-                if start_down and not prev_btn_start_down:
-                    if not getattr(mission, "crash_active", False):
-                        mode = "paused"
-                        pause_focus = "choppers"
-                        audio.play_pause_toggle()
-                        audio.set_pause_menu_active(True)
+                        (
+                            running,
+                            debug,
+                            weather_mode,
+                            accessibility,
+                            accessibility_mode,
+                            accessibility_toggles,
+                        ) = handle_keyboard_event(
+                            event,
+                            running=running,
+                            weather_mode=weather_mode,
+                            accessibility=accessibility,
+                            accessibility_mode=accessibility_mode,
+                            accessibility_toggles=accessibility_toggles,
+                            audio=audio
+                        )
                         quit_confirm = False
 
                 if b_down and not prev_btn_b_down:
@@ -848,6 +882,7 @@ def run() -> None:
             if weather_mode == "dust":
                 dust.update(frame_dt, heli_pos=helicopter.pos, heli_vel=helicopter.vel, ground_y=heli_settings.ground_y)
             if weather_mode == "storm":
+                storm_clouds.update(frame_dt)
                 rain.update(frame_dt, area_width=window.width, area_height=window.height)
                 fog.update(frame_dt, area_width=window.width, area_height=window.height)
                 dust.update(frame_dt, heli_pos=helicopter.pos, heli_vel=helicopter.vel, ground_y=heli_settings.ground_y)
@@ -926,11 +961,14 @@ def run() -> None:
                     for p in dust.particles:
                         pygame.draw.circle(target, (180, 160, 120, 80), (int(p.pos.x), int(p.pos.y)), int(p.radius))
                 if weather_mode == "storm":
+                    # Draw background storm clouds (behind chopper)
+                    storm_clouds.draw(target, layer='back')
                     for p in rain.particles:
                         pygame.draw.circle(target, (120, 120, 255), (int(p.pos.x), int(p.pos.y)), 2)
-                    for p in fog.particles:
-                        pygame.draw.circle(target, (200, 200, 200, 60), (int(p.pos.x), int(p.pos.y)), int(p.radius))
+                    # Draw chopper and mission here (between cloud layers)
                     lightning.draw(target)
+                    # Draw foreground storm clouds (in front of chopper)
+                    storm_clouds.draw(target, layer='front')
             draw_ground(target, heli_settings.ground_y)
             draw_mission(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
             draw_flares(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
