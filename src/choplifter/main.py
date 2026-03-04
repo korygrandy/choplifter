@@ -562,7 +562,12 @@ def run() -> None:
                     and cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID not in mission.cutscenes_played
                 ):
                     mission.cutscenes_played.add(cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID)
-                    cutscene_path = cutscene_config.get_hostage_rescue_cutscene_path(getattr(mission, "mission_id", ""))
+                    cutscene_path = cutscene_config.get_hostage_rescue_cutscene_path(
+                        getattr(mission, "mission_id", ""),
+                        assets_dir,
+                        cutscene_config.HOSTAGE_RESCUE_CUTSCENE_DEFAULT_ASSET,
+                        cutscene_config.HOSTAGE_RESCUE_CUTSCENE_BY_MISSION,
+                    )
                     if start_mission_cutscene(
                         cutscenes.mission,
                         cutscene_path=cutscene_path,
