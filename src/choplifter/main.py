@@ -351,9 +351,11 @@ def run() -> None:
                 if mode == "playing" and event.key == pygame.K_ESCAPE:
                     mode = "paused"
                     pause_focus = "choppers"
+                    audio.play_pause_toggle()
                     audio.set_pause_menu_active(True)
                 elif mode == "paused" and event.key == pygame.K_ESCAPE:
                     mode = "playing"
+                    audio.play_pause_toggle()
                     audio.set_pause_menu_active(False)
                 elif matches_key(event.key, controls.quit):
                     running = False
@@ -373,6 +375,7 @@ def run() -> None:
                         selected_chopper_asset = chopper_choices[selected_chopper_index][0]
                     elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
                         mode = "playing"
+                        audio.play_menu_select()
                         set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
                         reset_game()
                 elif mode == "select_mission":
@@ -386,6 +389,7 @@ def run() -> None:
                         apply_mission_preview()
                     elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
                         mode = "select_chopper"
+                        audio.play_menu_select()
                         set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")
                 elif mode == "paused":
                     if event.key == pygame.K_F2:
@@ -418,19 +422,25 @@ def run() -> None:
                         helicopter.skin_asset = selected_chopper_asset
                     elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
                         if pause_focus == "restart_mission":
+                            audio.play_menu_select()
                             reset_game()
                             mode = "playing"
+                            audio.play_pause_toggle()
                             audio.set_pause_menu_active(False)
                         elif pause_focus == "restart_game":
+                            audio.play_menu_select()
                             mode = "select_mission"
                             pause_focus = "choppers"
                             set_toast("Restart Game")
+                            audio.play_pause_toggle()
                             audio.set_pause_menu_active(False)
                         elif pause_focus == "mute":
+                            audio.play_menu_select()
                             muted = not muted
                             audio.set_muted(muted)
                         else:
                             mode = "playing"
+                            audio.play_pause_toggle()
                             audio.set_pause_menu_active(False)
                 elif matches_key(event.key, controls.restart) and mission.ended:
                     reset_game()
@@ -525,6 +535,7 @@ def run() -> None:
                     selected_chopper_asset = chopper_choices[selected_chopper_index][0]
                 if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
                     mode = "playing"
+                    audio.play_menu_select()
                     set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
                     reset_game()
             elif mode == "intro":
@@ -550,11 +561,13 @@ def run() -> None:
                     apply_mission_preview()
                 if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
                     mode = "select_chopper"
+                    audio.play_menu_select()
                     set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")
             elif mode == "paused":
                 # Start/B resumes.
                 if (start_down and not prev_btn_start_down) or (b_down and not prev_btn_b_down):
                     mode = "playing"
+                    audio.play_pause_toggle()
                     audio.set_pause_menu_active(False)
 
                 # Accessibility toggles.
@@ -591,19 +604,25 @@ def run() -> None:
                 # A activates current focus.
                 if a_down and not prev_btn_a_down:
                     if pause_focus == "restart_mission":
+                        audio.play_menu_select()
                         reset_game()
                         mode = "playing"
+                        audio.play_pause_toggle()
                         audio.set_pause_menu_active(False)
                     elif pause_focus == "restart_game":
+                        audio.play_menu_select()
                         mode = "select_mission"
                         pause_focus = "choppers"
                         set_toast("Restart Game")
+                        audio.play_pause_toggle()
                         audio.set_pause_menu_active(False)
                     elif pause_focus == "mute":
+                        audio.play_menu_select()
                         muted = not muted
                         audio.set_muted(muted)
                     else:
                         mode = "playing"
+                        audio.play_pause_toggle()
                         audio.set_pause_menu_active(False)
             else:
                 # Start toggles pause while playing.
@@ -614,6 +633,7 @@ def run() -> None:
                     else:
                         mode = "paused"
                         pause_focus = "choppers"
+                    audio.play_pause_toggle()
                     audio.set_pause_menu_active(True)
 
                 if a_down and not prev_btn_a_down:

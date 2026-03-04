@@ -173,6 +173,8 @@ class AudioBank:
     rescue: pygame.mixer.Sound | None
     crash: pygame.mixer.Sound | None
     flying_loop: pygame.mixer.Sound | None
+    menu_select: pygame.mixer.Sound | None
+    pause: pygame.mixer.Sound | None
     _flying_active: bool = field(default=False, init=False, repr=False)
     _last_artillery_impact_variant: int = field(default=-1, init=False, repr=False)
     _muted: bool = field(default=False, init=False, repr=False)
@@ -202,6 +204,8 @@ class AudioBank:
                 rescue=None,
                 crash=None,
                 flying_loop=None,
+                menu_select=None,
+                pause=None,
             )
 
         try:
@@ -253,6 +257,8 @@ class AudioBank:
             artillery_impact_a = _try_load_asset_sound(asset_dir / "artillery-impact.wav")
             artillery_impact_b = _try_load_asset_sound(asset_dir / "alternate-artillery-impact.wav")
             jet_flyby = _try_load_asset_sound(asset_dir / "fighter-jet-flyby.wav")
+            menu_select = _try_load_asset_sound(asset_dir / "menu-select.wav")
+            pause = _try_load_asset_sound(asset_dir / "pause.wav")
 
             # Override placeholders with external files if provided.
             # (These are optional: game stays playable without them.)
@@ -293,6 +299,10 @@ class AudioBank:
                 jet_flyby.set_volume(0.55)
             if flying_loop is not None:
                 flying_loop.set_volume(0.28)
+            if menu_select is not None:
+                menu_select.set_volume(0.45)
+            if pause is not None:
+                pause.set_volume(0.55)
 
             return AudioBank(
                 mixer=mixer,
@@ -311,6 +321,8 @@ class AudioBank:
                 rescue=rescue,
                 crash=crash,
                 flying_loop=flying_loop,
+                menu_select=menu_select,
+                pause=pause,
             )
         except Exception:
             return AudioBank(
@@ -330,6 +342,8 @@ class AudioBank:
                 rescue=None,
                 crash=None,
                 flying_loop=None,
+                menu_select=None,
+                pause=None,
             )
 
     def start_flying(self) -> None:
@@ -361,7 +375,10 @@ class AudioBank:
     def _play(self, sound: pygame.mixer.Sound | None, *, bus: BusName) -> None:
         if sound is None:
             return
-        if self._pause_menu_active or self._muted:
+        if self._muted:
+            return
+        # When the pause menu is active, mute gameplay sounds but still allow UI feedback.
+        if self._pause_menu_active and bus != "ui":
             return
         if self.mixer is not None:
             self.mixer.play(sound, bus=bus)
@@ -369,19 +386,26 @@ class AudioBank:
             sound.play()
 
     def _apply_mute_state(self) -> None:
-        # During pause menu, always mute regardless of user mute toggle.
-        muted_now = self._pause_menu_active or self._muted
+        # When muted, mute everything.
+        # When pause menu is active, mute gameplay (sfx/music) but keep UI audible.
+        if self._muted:
+            mute_sfx = True
+            mute_ui = True
+            mute_music = True
+        else:
+            mute_sfx = bool(self._pause_menu_active)
+            mute_ui = False
+            mute_music = bool(self._pause_menu_active)
 
         if self.mixer is not None:
-            vol = 0.0 if muted_now else 1.0
-            self.mixer.set_bus_volume("sfx", vol)
-            self.mixer.set_bus_volume("ui", vol)
-            self.mixer.set_bus_volume("music", vol)
+            self.mixer.set_bus_volume("sfx", 0.0 if mute_sfx else 1.0)
+            self.mixer.set_bus_volume("ui", 0.0 if mute_ui else 1.0)
+            self.mixer.set_bus_volume("music", 0.0 if mute_music else 1.0)
             return
 
         # Fallback: global pause/unpause (not bus-aware).
         try:
-            if muted_now:
+            if self._pause_menu_active or self._muted:
                 pygame.mixer.pause()
             else:
                 pygame.mixer.unpause()
@@ -452,3 +476,9 @@ class AudioBank:
 
     def play_jet_flyby(self) -> None:
         self._play(self.jet_flyby, bus="sfx")
+
+    def play_menu_select(self) -> None:
+        self._play(self.menu_select, bus="ui")
+
+    def play_pause_toggle(self) -> None:
+        self._play(self.pause, bus="ui")
