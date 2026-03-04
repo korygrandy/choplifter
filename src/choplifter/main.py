@@ -48,6 +48,7 @@ from .app.cutscenes import (
     update_mission_cutscene,
     skip_mission_cutscene,
 )
+import src.choplifter.app.cutscene_config as cutscene_config
 from .app.state import CutsceneState, IntroCutsceneState, MissionCutsceneState
 from .app.input import get_active_joystick, read_gamepad
 from .app.feedback import ScreenShakeState, consume_mission_feedback, rough_landing_feedback, update_screenshake_target
@@ -135,19 +136,7 @@ def run() -> None:
     cutscenes = CutsceneState(intro=IntroCutsceneState(), mission=MissionCutsceneState())
     init_intro_cutscene(cutscenes.intro, assets_dir=assets_dir, logger=logger)
 
-    HOSTAGE_RESCUE_CUTSCENE_EVENT_ID = "hostage_rescue_16"
-    HOSTAGE_RESCUE_CUTSCENE_THRESHOLD = 16
-    HOSTAGE_RESCUE_CUTSCENE_DEFAULT_ASSET = "hostage-rescue-cutscene.mpg"
-    # Hook for future per-mission cutscene videos.
-    # Example: {"airport": "airport-rescue-cutscene.mpg"}
-    HOSTAGE_RESCUE_CUTSCENE_BY_MISSION: dict[str, str] = {}
-
-    def get_hostage_rescue_cutscene_path(mission_id: str) -> Path:
-        asset = HOSTAGE_RESCUE_CUTSCENE_BY_MISSION.get(
-            (mission_id or "").strip().lower(),
-            HOSTAGE_RESCUE_CUTSCENE_DEFAULT_ASSET,
-        )
-        return assets_dir / asset
+    # Hostage rescue cutscene config/lookup now in app.cutscene_config
 
     clock = pygame.time.Clock()
     overlay = DebugOverlay()
@@ -642,16 +631,16 @@ def run() -> None:
 
                 # One-shot hostage rescue cutscene when the first 16 hostages are onboard.
                 if (
-                    boarded_now >= HOSTAGE_RESCUE_CUTSCENE_THRESHOLD
-                    and HOSTAGE_RESCUE_CUTSCENE_EVENT_ID not in mission.cutscenes_played
+                    boarded_now >= cutscene_config.HOSTAGE_RESCUE_CUTSCENE_THRESHOLD
+                    and cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID not in mission.cutscenes_played
                 ):
-                    mission.cutscenes_played.add(HOSTAGE_RESCUE_CUTSCENE_EVENT_ID)
-                    cutscene_path = get_hostage_rescue_cutscene_path(getattr(mission, "mission_id", ""))
+                    mission.cutscenes_played.add(cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID)
+                    cutscene_path = cutscene_config.get_hostage_rescue_cutscene_path(getattr(mission, "mission_id", ""))
                     if start_mission_cutscene(
                         cutscenes.mission,
                         cutscene_path=cutscene_path,
                         logger=logger,
-                        event_id=HOSTAGE_RESCUE_CUTSCENE_EVENT_ID,
+                        event_id=cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID,
                         mission_id=str(getattr(mission, "mission_id", "")),
                     ):
                         mode = "cutscene"
