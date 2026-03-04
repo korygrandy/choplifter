@@ -88,6 +88,7 @@ This section is for future LLMs working on the *actual* code in this repository.
 
 - Entrypoint: `run.py` imports `src.choplifter.main:run`.
 - Game loop/state: `src/choplifter/main.py`.
+- App helpers (early modularization): `src/choplifter/app/` (cutscene state + helpers).
 - Mission/rescue logic: `src/choplifter/mission.py`.
 - Mission configs/tuning: `src/choplifter/mission_configs.py` (LevelConfig + MissionTuning + `get_mission_config_by_id`).
 - Helicopter physics: `src/choplifter/helicopter.py` (plus tuning in `src/choplifter/settings.py`).
