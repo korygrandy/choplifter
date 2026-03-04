@@ -183,6 +183,11 @@ class AudioBank:
     _muted: bool = field(default=False, init=False, repr=False)
     _pause_menu_active: bool = field(default=False, init=False, repr=False)
 
+    _duck_remaining_s: float = field(default=0.0, init=False, repr=False)
+    _duck_total_s: float = field(default=0.0, init=False, repr=False)
+    _duck_min_factor: float = field(default=1.0, init=False, repr=False)
+    _duck_current_factor: float = field(default=1.0, init=False, repr=False)
+
     @staticmethod
     def try_create() -> "AudioBank":
         # No external assets: generate simple placeholder tones.
@@ -419,10 +424,11 @@ class AudioBank:
             mute_ui = False
             mute_music = bool(self._pause_menu_active)
 
+        duck = float(self._duck_current_factor)
         if self.mixer is not None:
-            self.mixer.set_bus_volume("sfx", 0.0 if mute_sfx else 1.0)
+            self.mixer.set_bus_volume("sfx", (0.0 if mute_sfx else 1.0) * duck)
             self.mixer.set_bus_volume("ui", 0.0 if mute_ui else 1.0)
-            self.mixer.set_bus_volume("music", 0.0 if mute_music else 1.0)
+            self.mixer.set_bus_volume("music", (0.0 if mute_music else 1.0) * duck)
             return
 
         # Fallback: global pause/unpause (not bus-aware).
@@ -433,6 +439,52 @@ class AudioBank:
                 pygame.mixer.unpause()
         except Exception:
             pass
+
+        # Best-effort duck for the non-bus fallback.
+        if not self._pause_menu_active and not self._muted:
+            try:
+                for i in range(int(pygame.mixer.get_num_channels())):
+                    pygame.mixer.Channel(i).set_volume(duck)
+            except Exception:
+                pass
+
+    def trigger_duck(self, *, strength: float = 1.0) -> None:
+        """Briefly lower gameplay audio volume on big impacts/crashes.
+
+        Strength is in [0..1] where 1.0 is the strongest duck.
+        """
+
+        s = _clamp(float(strength), 0.0, 1.0)
+        if s <= 0.0:
+            return
+
+        # Keep it subtle: at max strength, duck to ~55% and recover quickly.
+        factor = _clamp(1.0 - 0.45 * s, 0.40, 1.0)
+        duration_s = 0.14 + 0.16 * s
+
+        self._duck_min_factor = min(self._duck_min_factor, factor)
+        self._duck_remaining_s = max(self._duck_remaining_s, duration_s)
+        self._duck_total_s = max(self._duck_total_s, self._duck_remaining_s)
+
+    def update(self, dt: float) -> None:
+        if dt <= 0.0:
+            return
+
+        if self._duck_remaining_s > 0.0:
+            self._duck_remaining_s = max(0.0, self._duck_remaining_s - dt)
+
+            total = max(0.001, float(self._duck_total_s))
+            t = 1.0 - (float(self._duck_remaining_s) / total)
+            factor = float(self._duck_min_factor) + (1.0 - float(self._duck_min_factor)) * _clamp(t, 0.0, 1.0)
+        else:
+            factor = 1.0
+            self._duck_total_s = 0.0
+            self._duck_min_factor = 1.0
+
+        # Only reapply volumes if the effective factor changed.
+        if abs(factor - float(self._duck_current_factor)) > 0.01:
+            self._duck_current_factor = factor
+            self._apply_mute_state()
 
     def set_muted(self, muted: bool) -> None:
         self._muted = bool(muted)
