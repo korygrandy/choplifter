@@ -368,6 +368,7 @@ def run() -> None:
 
         try:
             audio.play_flare_defense()
+            mission.flare_invuln_seconds = max(float(getattr(mission, "flare_invuln_seconds", 0.0)), 3.0)
             _emit_flare_burst_front()
             # Fire the front burst immediately, then delay the rear salvo.
             flare_salvo_remaining = 3

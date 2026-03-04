@@ -225,6 +225,7 @@ class MissionState:
     end_reason: str = ""
     crashes: int = 0
     invuln_seconds: float = 0.0
+    flare_invuln_seconds: float = 0.0
 
     # Crash animation state (damage >= 100 triggers crash sequence).
     crash_active: bool = False
@@ -511,6 +512,9 @@ def update_mission(
 
     if mission.invuln_seconds > 0.0:
         mission.invuln_seconds = max(0.0, mission.invuln_seconds - dt)
+
+    if mission.flare_invuln_seconds > 0.0:
+        mission.flare_invuln_seconds = max(0.0, mission.flare_invuln_seconds - dt)
 
     _update_fuel(mission, helicopter, dt, logger)
     if helicopter.fuel <= 0.0:
@@ -1299,7 +1303,15 @@ def _damage_helicopter(
     logger: logging.Logger | None,
     source: str,
 ) -> None:
-    if mission.invuln_seconds > 0.0 or mission.ended or mission.crash_active:
+    if mission.ended or mission.crash_active:
+        return
+
+    # Respawn i-frames (blocks all damage).
+    if mission.invuln_seconds > 0.0:
+        return
+
+    # Flare i-frames (blocks only projectile/artillery damage).
+    if mission.flare_invuln_seconds > 0.0 and source in ("ENEMY_BULLET", "ARTILLERY"):
         return
 
     before = helicopter.damage
@@ -1455,6 +1467,7 @@ def _update_crash_sequence(
     helicopter.facing = Facing.LEFT
     helicopter.pos = Vec2(mission.base.pos.x + mission.base.width * 0.5, heli.ground_y - 120.0)
     mission.invuln_seconds = 2.0
+    mission.flare_invuln_seconds = 0.0
 
     if logger is not None:
         logger.info("RESPAWN: invuln=%.1fs fuel=%.0f", mission.invuln_seconds, helicopter.fuel)
