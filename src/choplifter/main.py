@@ -40,6 +40,7 @@ from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, Phys
 from .sky_smoke import SkySmokeSystem
 from .intro_video import IntroVideoPlayer
 from .physics_config import load_physics_settings
+from .math2d import Vec2
 
 
 def run() -> None:
@@ -343,7 +344,7 @@ def run() -> None:
             _emit_flare_burst()
             flare_salvo_remaining = 2
             flare_salvo_timer_s = flare_salvo_gap_s
-            flare_cooldown_s = 1.35
+            flare_cooldown_s = 5.0
         except Exception:
             flare_salvo_remaining = 0
             flare_salvo_timer_s = 0.0
