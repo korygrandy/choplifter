@@ -238,10 +238,11 @@ def run() -> None:
     prev_artillery_fired = mission.stats.artillery_fired
     prev_artillery_hits = mission.stats.artillery_hits
     prev_jets_entered = mission.stats.jets_entered
+    prev_mines_detonated = mission.stats.mines_detonated
 
     def apply_mission_preview() -> None:
         nonlocal helicopter, mission, accumulator
-        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed, prev_artillery_fired, prev_artillery_hits, prev_jets_entered
+        nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed, prev_artillery_fired, prev_artillery_hits, prev_jets_entered, prev_mines_detonated
 
         mission = MissionState.create_from_level_config(heli_settings, get_mission_config_by_id(selected_mission_id))
         helicopter = Helicopter.spawn(
@@ -262,6 +263,7 @@ def run() -> None:
         prev_artillery_fired = mission.stats.artillery_fired
         prev_artillery_hits = mission.stats.artillery_hits
         prev_jets_entered = mission.stats.jets_entered
+        prev_mines_detonated = mission.stats.mines_detonated
 
         bg = getattr(mission, "bg_asset", "")
         if bg and not bg_asset_exists(bg):
@@ -759,6 +761,12 @@ def run() -> None:
                 if jets_entered_delta > 0:
                     audio.play_jet_flyby()
                     prev_jets_entered = mission.stats.jets_entered
+
+                mine_delta = mission.stats.mines_detonated - prev_mines_detonated
+                if mine_delta > 0:
+                    for _ in range(mine_delta):
+                        audio.play_mine_explosion()
+                    prev_mines_detonated = mission.stats.mines_detonated
 
                 if mission.crashes != prev_crashes:
                     if mission.ended:
