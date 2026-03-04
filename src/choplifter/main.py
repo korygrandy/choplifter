@@ -25,9 +25,7 @@ from .rendering import (
     draw_damage_flash,
     draw_flares,
     draw_helicopter_damage_fx,
-    draw_intro_cutscene,
     draw_impact_sparks,
-    draw_skip_overlay,
     draw_ground,
     draw_helicopter,
     draw_hud,
@@ -38,9 +36,19 @@ from .rendering import (
 )
 from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, PhysicsSettings, WindowSettings
 from .sky_smoke import SkySmokeSystem
-from .intro_video import IntroVideoPlayer
 from .physics_config import load_physics_settings
 from .math2d import Vec2
+from .app.cutscenes import (
+    init_intro_cutscene,
+    draw_intro,
+    update_intro,
+    skip_intro,
+    start_mission_cutscene,
+    draw_mission_cutscene,
+    update_mission_cutscene,
+    skip_mission_cutscene,
+)
+from .app.state import CutsceneState, IntroCutsceneState, MissionCutsceneState
 
 
 def run() -> None:
@@ -194,29 +202,8 @@ def run() -> None:
     # Optional video intro asset (falls back to the in-engine title card if missing/unavailable).
     module_dir = Path(__file__).resolve().parent
     assets_dir = module_dir / "assets"
-    # Prefer the legacy MPG intro for now (simpler asset workflow).
-    # MP4 remains as a fallback if the MPG is missing.
-    intro_candidates = (
-        assets_dir / "intro.mpg",
-        assets_dir / "choplifter-intro.mp4",
-        assets_dir / "choplifter-intro,mp4",
-    )
-    intro_video_path = next((p for p in intro_candidates if p.exists()), intro_candidates[0])
-    intro_video = IntroVideoPlayer.try_create(intro_video_path)
-    if intro_video is None:
-        logger.info(
-            "INTRO_VIDEO: disabled path=%s exists=%s reason=%s",
-            intro_video_path.as_posix(),
-            intro_video_path.exists(),
-            IntroVideoPlayer.last_error(),
-        )
-    else:
-        logger.info(
-            "INTRO_VIDEO: enabled path=%s fps=%0.1f duration_s=%0.2f",
-            intro_video_path.as_posix(),
-            float(intro_video.fps),
-            float(intro_video.duration_s),
-        )
+    cutscenes = CutsceneState(intro=IntroCutsceneState(), mission=MissionCutsceneState())
+    init_intro_cutscene(cutscenes.intro, assets_dir=assets_dir, logger=logger)
 
     HOSTAGE_RESCUE_CUTSCENE_EVENT_ID = "hostage_rescue_16"
     HOSTAGE_RESCUE_CUTSCENE_THRESHOLD = 16
@@ -259,12 +246,6 @@ def run() -> None:
 
     # Intro cutscene plays on every launch.
     mode: str = "intro"  # intro | select_mission | select_chopper | playing | paused | cutscene
-    intro_t = 0.0
-    intro_seconds = float(intro_video.duration_s) if (intro_video is not None and intro_video.duration_s > 0.5) else 4.25
-
-    mission_cutscene_video: IntroVideoPlayer | None = None
-    mission_cutscene_t = 0.0
-    mission_cutscene_seconds = 0.0
     prev_menu_dir = 0
     prev_menu_vert = 0
     pause_focus: str = "choppers"  # choppers | restart_mission | restart_game | mute
@@ -501,17 +482,11 @@ def run() -> None:
                 elif mode == "cutscene":
                     # Skip cutscene immediately on any key press (except quit which is handled above).
                     mode = "playing"
-                    mission_cutscene_t = 0.0
-                    if mission_cutscene_video is not None:
-                        mission_cutscene_video.close(immediate=True)
-                        mission_cutscene_video = None
+                    skip_mission_cutscene(cutscenes.mission)
                 elif mode == "intro":
                     # Skip intro immediately on any key press (except quit which is handled above).
                     mode = "select_mission"
-                    intro_t = 0.0
-                    if intro_video is not None:
-                        intro_video.close(immediate=True)
-                        intro_video = None
+                    skip_intro(cutscenes.intro)
                 elif mode == "select_chopper":
                     if event.key in (pygame.K_LEFT, pygame.K_a) or matches_key(event.key, controls.tilt_left):
                         selected_chopper_index = (selected_chopper_index - 1) % len(chopper_choices)
@@ -710,10 +685,7 @@ def run() -> None:
                 )
                 if skip_btn:
                     mode = "select_mission"
-                    intro_t = 0.0
-                    if intro_video is not None:
-                        intro_video.close(immediate=True)
-                        intro_video = None
+                    skip_intro(cutscenes.intro)
             elif mode == "cutscene":
                 skip_btn = (
                     (a_down and not prev_btn_a_down)
@@ -726,10 +698,7 @@ def run() -> None:
                 )
                 if skip_btn:
                     mode = "playing"
-                    mission_cutscene_t = 0.0
-                    if mission_cutscene_video is not None:
-                        mission_cutscene_video.close(immediate=True)
-                        mission_cutscene_video = None
+                    skip_mission_cutscene(cutscenes.mission)
             elif mode == "select_mission":
                 if menu_dir != 0 and menu_dir != prev_menu_dir:
                     selected_mission_index = (selected_mission_index + menu_dir) % len(mission_choices)
@@ -964,30 +933,13 @@ def run() -> None:
                 ):
                     mission.cutscenes_played.add(HOSTAGE_RESCUE_CUTSCENE_EVENT_ID)
                     cutscene_path = get_hostage_rescue_cutscene_path(getattr(mission, "mission_id", ""))
-                    cutscene_video = IntroVideoPlayer.try_create(cutscene_path)
-                    if cutscene_video is None:
-                        logger.info(
-                            "MISSION_CUTSCENE: skipped id=%s mission_id=%s path=%s exists=%s reason=%s",
-                            HOSTAGE_RESCUE_CUTSCENE_EVENT_ID,
-                            getattr(mission, "mission_id", ""),
-                            cutscene_path.as_posix(),
-                            cutscene_path.exists(),
-                            IntroVideoPlayer.last_error(),
-                        )
-                    else:
-                        logger.info(
-                            "MISSION_CUTSCENE: start id=%s mission_id=%s path=%s fps=%0.1f duration_s=%0.2f",
-                            HOSTAGE_RESCUE_CUTSCENE_EVENT_ID,
-                            getattr(mission, "mission_id", ""),
-                            cutscene_path.as_posix(),
-                            float(cutscene_video.fps),
-                            float(cutscene_video.duration_s),
-                        )
-                        mission_cutscene_video = cutscene_video
-                        mission_cutscene_t = 0.0
-                        mission_cutscene_seconds = (
-                            float(cutscene_video.duration_s) if float(cutscene_video.duration_s) > 0.5 else 6.0
-                        )
+                    if start_mission_cutscene(
+                        cutscenes.mission,
+                        cutscene_path=cutscene_path,
+                        logger=logger,
+                        event_id=HOSTAGE_RESCUE_CUTSCENE_EVENT_ID,
+                        mission_id=str(getattr(mission, "mission_id", "")),
+                    ):
                         mode = "cutscene"
                         audio.stop_flying()
 
@@ -1045,33 +997,12 @@ def run() -> None:
                 toast_message = ""
 
         if mode == "intro":
-            intro_t += frame_dt
-            if intro_video is not None:
-                intro_video.update(frame_dt)
-                if intro_video.done:
-                    mode = "select_mission"
-                    intro_t = 0.0
-                    intro_video.close()
-                    intro_video = None
-            if intro_t >= intro_seconds:
+            if update_intro(cutscenes.intro, frame_dt):
                 mode = "select_mission"
-                intro_t = 0.0
-                if intro_video is not None:
-                    intro_video.close()
-                    intro_video = None
 
         if mode == "cutscene":
-            mission_cutscene_t += frame_dt
-            if mission_cutscene_video is not None:
-                mission_cutscene_video.update(frame_dt)
-                if mission_cutscene_video.done:
-                    mode = "playing"
-                    mission_cutscene_t = 0.0
-                    mission_cutscene_video.close()
-                    mission_cutscene_video = None
-            elif mission_cutscene_t >= mission_cutscene_seconds:
+            if update_mission_cutscene(cutscenes.mission, frame_dt):
                 mode = "playing"
-                mission_cutscene_t = 0.0
 
         # Visual-only sky particles.
         if particles_enabled and mode not in ("intro", "cutscene"):
@@ -1112,18 +1043,9 @@ def run() -> None:
 
         # Render.
         if mode == "intro":
-            if intro_video is not None:
-                intro_video.draw(target)
-                draw_skip_overlay(target, text=skip_hint)
-            else:
-                draw_intro_cutscene(target, intro_t, show_skip=True, skip_text=skip_hint)
+            draw_intro(cutscenes.intro, target, skip_hint=skip_hint)
         elif mode == "cutscene":
-            if mission_cutscene_video is not None:
-                mission_cutscene_video.draw(target)
-                draw_skip_overlay(target, text=skip_hint)
-            else:
-                target.fill((0, 0, 0))
-                draw_skip_overlay(target, text=skip_hint)
+            draw_mission_cutscene(cutscenes.mission, target, skip_hint=skip_hint)
         else:
             # Background above the horizon.
             draw_sky(
