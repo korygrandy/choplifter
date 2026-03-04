@@ -1329,6 +1329,16 @@ def _damage_helicopter(
             helicopter.damage_flash_rgb = (255, 170, 60)
         else:
             helicopter.damage_flash_rgb = (255, 60, 60)
+
+        if logger is not None:
+            logger.debug(
+                "FLASH: kind=damage source=%s amount=%.2f damage=%.1f->%.1f rgb=%s",
+                source,
+                float(amount),
+                float(before),
+                float(helicopter.damage),
+                helicopter.damage_flash_rgb,
+            )
         if source == "ARTILLERY":
             haptics.rumble_artillery_hit(logger=logger)
         else:

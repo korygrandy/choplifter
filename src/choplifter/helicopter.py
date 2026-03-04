@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import logging
 import math
 
 from .math2d import Vec2, clamp, deg_to_rad
 from .settings import HelicopterSettings, PhysicsSettings
 from . import haptics
+
+_logger = logging.getLogger(__name__)
 
 
 class Facing(Enum):
@@ -165,10 +168,19 @@ def update_helicopter(
             # Landing event.
             helicopter.last_landing_vy = helicopter.vel.y
             if not invulnerable and abs(helicopter.vel.y) > physics.safe_landing_vy:
+                before_damage = float(helicopter.damage)
                 helicopter.damage = min(100.0, helicopter.damage + 12.5)
                 helicopter.damage_flash_seconds = 0.12
                 # Impact flash: bright/white to distinguish from bullets/mines/jets.
                 helicopter.damage_flash_rgb = (245, 245, 245)
+                _logger.debug(
+                    "FLASH: kind=impact impact_vy=%.2f safe_vy=%.2f damage=%.1f->%.1f rgb=%s",
+                    float(helicopter.vel.y),
+                    float(physics.safe_landing_vy),
+                    before_damage,
+                    float(helicopter.damage),
+                    helicopter.damage_flash_rgb,
+                )
                 haptics.rumble_rough_landing(impact_vy=helicopter.vel.y, safe_vy=physics.safe_landing_vy)
             helicopter.doors_open = False
         helicopter.grounded = True
