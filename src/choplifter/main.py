@@ -325,7 +325,7 @@ def run() -> None:
         flare_front_timer_s = 0.0
         logger.info("RESET: mission restarted")
 
-    def _emit_flare_burst(*, dir_sign: float, y_min: float, y_max: float) -> None:
+    def _emit_flare_burst(*, dir_sign: float, y_min: float, y_max: float, facing_mult: float = 1.0) -> None:
         fx = float(getattr(helicopter.facing, "value", 1))
         if fx == 0.0:
             fx = 1.0
@@ -333,13 +333,14 @@ def run() -> None:
         offset_x = facing_sign * float(dir_sign) * random.uniform(18.0, 52.0)
         offset_y = random.uniform(float(y_min), float(y_max))
         spawn_pos = helicopter.pos + Vec2(offset_x, offset_y)
-        mission.flares.emit_fountain(spawn_pos, facing_x=fx, heli_vel=helicopter.vel)
+        mission.flares.emit_fountain(spawn_pos, facing_x=fx * float(facing_mult), heli_vel=helicopter.vel)
 
     def _emit_flare_burst_behind() -> None:
         _emit_flare_burst(dir_sign=-1.0, y_min=4.0, y_max=18.0)
 
     def _emit_flare_burst_front() -> None:
-        _emit_flare_burst(dir_sign=1.0, y_min=0.0, y_max=14.0)
+        # Emit forward (opposite of rear bursts) by flipping facing_x.
+        _emit_flare_burst(dir_sign=1.0, y_min=0.0, y_max=14.0, facing_mult=-1.0)
 
     def try_start_flare_salvo() -> None:
         nonlocal flare_cooldown_s, flare_salvo_remaining, flare_salvo_timer_s
