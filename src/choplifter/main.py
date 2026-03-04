@@ -169,7 +169,8 @@ def run() -> None:
     mode: str = "intro"  # intro | select_mission | select_chopper | playing | paused | cutscene
     prev_menu_dir = 0
     prev_menu_vert = 0
-    pause_focus: str = "choppers"  # choppers | restart_mission | restart_game | mute
+    pause_focus: str = "choppers"  # choppers | restart_mission | restart_game | mute | quit
+    quit_confirm: bool = False
     muted = False
 
     flares = FlareState()
@@ -179,6 +180,7 @@ def run() -> None:
         mission_id=selected_mission_id,
         chopper_asset=selected_chopper_asset,
     )
+    mission.audio = audio
 
     prev_stats: MissionStatsSnapshot = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
 
@@ -196,6 +198,7 @@ def run() -> None:
             set_toast,
             mission,
         )
+        mission.audio = audio
 
     def reset_game_wrapper() -> None:
         nonlocal helicopter, mission, accumulator, prev_stats
@@ -214,6 +217,7 @@ def run() -> None:
             logger,
             flares,
         )
+        mission.audio = audio
         prev_btn_a_down = False
         prev_btn_b_down = False
         prev_btn_x_down = False
@@ -388,11 +392,13 @@ def run() -> None:
                     mode = "select_chopper"
                     set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")
             elif mode == "paused":
+
                 # Start/B resumes.
                 if (start_down and not prev_btn_start_down) or (b_down and not prev_btn_b_down):
                     mode = "playing"
                     audio.play_pause_toggle()
                     audio.set_pause_menu_active(False)
+                    quit_confirm = False
 
                 # Accessibility toggles.
                 if x_down and not prev_btn_x_down:
@@ -402,12 +408,15 @@ def run() -> None:
                 if rb_down and not prev_btn_rb_down:
                     toggle_screenshake_wrapper()
 
+
                 # Up/Down selects section.
                 if menu_vert != 0 and menu_vert != prev_menu_vert:
                     prev_pause_focus = pause_focus
                     pause_focus = move_pause_focus(pause_focus, -1 if menu_vert < 0 else 1)
                     if pause_focus != prev_pause_focus:
                         audio.play_menu_select()
+                        quit_confirm = False
+
 
                 # Left/Right changes chopper when focused.
                 if pause_focus == "choppers" and menu_dir != 0 and menu_dir != prev_menu_dir:
@@ -415,28 +424,39 @@ def run() -> None:
                     selected_chopper_asset = chopper_choices[selected_chopper_index][0]
                     helicopter.skin_asset = selected_chopper_asset
                     audio.play_menu_select()
+                    quit_confirm = False
 
                 # A activates current focus.
                 if a_down and not prev_btn_a_down:
                     if pause_focus == "restart_mission":
-                        reset_game()
+                        reset_game_wrapper()
                         mode = "playing"
                         audio.play_pause_toggle()
                         audio.set_pause_menu_active(False)
+                        quit_confirm = False
                     elif pause_focus == "restart_game":
                         mode = "select_mission"
                         pause_focus = "choppers"
                         set_toast("Restart Game")
                         audio.play_pause_toggle()
                         audio.set_pause_menu_active(False)
+                        quit_confirm = False
                     elif pause_focus == "mute":
                         muted = not muted
                         audio.set_muted(muted)
+                        quit_confirm = False
+                    elif pause_focus == "quit":
+                        if not quit_confirm:
+                            quit_confirm = True
+                        else:
+                            running = False
                     else:
                         mode = "playing"
                         audio.play_pause_toggle()
                         audio.set_pause_menu_active(False)
+                        quit_confirm = False
             else:
+
                 # Start toggles pause while playing.
                 if start_down and not prev_btn_start_down:
                     if not getattr(mission, "crash_active", False):
@@ -444,6 +464,7 @@ def run() -> None:
                         pause_focus = "choppers"
                         audio.play_pause_toggle()
                         audio.set_pause_menu_active(True)
+                        quit_confirm = False
 
                 if b_down and not prev_btn_b_down:
                     try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
@@ -704,6 +725,9 @@ def run() -> None:
                     restart_selected=(pause_focus == "restart_mission"),
                     show_restart_game=True,
                     restart_game_selected=(pause_focus == "restart_game"),
+                    show_quit=True,
+                    quit_selected=(pause_focus == "quit"),
+                    quit_confirm=quit_confirm,
                 )
             if toast.message:
                 draw_toast(target, toast.message)

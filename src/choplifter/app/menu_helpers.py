@@ -11,7 +11,7 @@ def cycle_index(index: int, direction: int, length: int) -> int:
 
 def move_pause_focus(current: str, direction: int) -> str:
     # Order matches main.py behavior.
-    order = ["choppers", "restart_mission", "restart_game", "mute"]
+    order = ["choppers", "restart_mission", "restart_game", "mute", "quit"]
     if current not in order:
         current = "choppers"
     if direction == 0:

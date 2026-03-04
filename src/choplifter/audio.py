@@ -114,8 +114,13 @@ class AudioMixer:
         self.buses = {bus: [pygame.mixer.Channel(idx) for idx in idxs] for bus, idxs in bus_layout.items()}
         self.active_loops = {}
 
-    def play(self, sound: pygame.mixer.Sound, bus: BusName = "sfx") -> None:
-        """Play a one-shot sound on the specified bus."""
+    def play(self, sound: pygame.mixer.Sound, bus: BusName = "sfx", *, dedicated_channel: int = None) -> None:
+        """Play a one-shot sound on the specified bus. If dedicated_channel is set, use that channel and do not interrupt it."""
+        if dedicated_channel is not None:
+            ch = pygame.mixer.Channel(dedicated_channel)
+            if not ch.get_busy():
+                ch.play(sound)
+            return
         channels = self.buses.get(bus, [])
         if channels:
             # If the bus is saturated, steal the first channel.
@@ -155,6 +160,19 @@ class AudioMixer:
 
 @dataclass
 class AudioBank:
+    def play_midair_collision(self) -> None:
+        # Use SFX channel 6 (never interrupted)
+        if self.mixer is not None:
+            self.mixer.play(self.midair_collision, bus="sfx", dedicated_channel=6)
+        elif self.midair_collision is not None:
+            pygame.mixer.Channel(6).play(self.midair_collision)
+
+    def play_chopper_warning_beeps(self) -> None:
+        # Use SFX channel 7 (never interrupted)
+        if self.mixer is not None:
+            self.mixer.play(self.chopper_warning_beeps, bus="sfx", dedicated_channel=7)
+        elif self.chopper_warning_beeps is not None:
+            pygame.mixer.Channel(7).play(self.chopper_warning_beeps)
     # Ducking state variables (for audio ducking/fading)
     _duck_remaining_s: float = field(default=0.0, init=False, repr=False)
     _duck_total_s: float = field(default=0.0, init=False, repr=False)
