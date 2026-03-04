@@ -351,7 +351,7 @@ def run() -> None:
                 if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
                     mode = "playing"
                     set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
-                    reset_game()
+                    reset_game_wrapper()
             elif mode == "intro":
                 skip_btn = (
                     (a_down and not prev_btn_a_down)
