@@ -84,10 +84,16 @@ This section is for future LLMs working on the *actual* code in this repository.
 - Entrypoint: `run.py` imports `src.choplifter.main:run`.
 - Game loop/state: `src/choplifter/main.py`.
 - Mission/rescue logic: `src/choplifter/mission.py`.
+- Mission configs/tuning: `src/choplifter/mission_configs.py` (LevelConfig + MissionTuning + `get_mission_config_by_id`).
 - Helicopter physics: `src/choplifter/helicopter.py` (plus tuning in `src/choplifter/settings.py`).
 - Rendering/HUD: `src/choplifter/rendering.py`.
 - Logging helper: `src/choplifter/game_logging.py`.
 - Intro: `src/choplifter/intro_video.py`.
+
+### Cutscenes (current)
+
+- Intro video plays on launch (skippable).
+- Mission cutscene: when the first 16 hostages are boarded, the game attempts to play `src/choplifter/assets/hostage-rescue-cutscene.mpg` once per mission run (skippable; will not replay until mission reset).
 
 ### Running (Windows)
 
