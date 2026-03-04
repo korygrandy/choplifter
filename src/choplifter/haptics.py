@@ -87,3 +87,9 @@ def rumble_tank_destroyed(*, logger: logging.Logger | None = None) -> None:
     # Longer, celebratory rumble for destroying a ground artillery cannon.
     # (One continuous rumble call; actual device behavior varies by driver.)
     _rumble(low=0.75, high=0.55, duration_ms=360, logger=logger)
+
+
+def rumble_artillery_hit(*, logger: logging.Logger | None = None) -> None:
+    # Extended rumble specifically for when an enemy artillery round impacts the helicopter.
+    # Keep other events as short/normal pulses.
+    _rumble(low=0.85, high=0.65, duration_ms=520, logger=logger)
