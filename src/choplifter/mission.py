@@ -7,7 +7,7 @@ import math
 import random
 
 from .burning_particles import BurningParticleSystem
-from .fx_particles import DustStormSystem, ImpactSparkSystem, JetTrailSystem
+from .fx_particles import DustStormSystem, ExplosionSystem, HelicopterDamageFxSystem, ImpactSparkSystem, JetTrailSystem
 from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
 from .settings import HelicopterSettings
@@ -213,6 +213,8 @@ class MissionState:
     impact_sparks: ImpactSparkSystem = field(default_factory=ImpactSparkSystem)
     jet_trails: JetTrailSystem = field(default_factory=JetTrailSystem)
     dust_storm: DustStormSystem = field(default_factory=DustStormSystem)
+    heli_damage_fx: HelicopterDamageFxSystem = field(default_factory=HelicopterDamageFxSystem)
+    explosions: ExplosionSystem = field(default_factory=ExplosionSystem)
     elapsed_seconds: float = 0.0
     pending_air_mine_pos: Vec2 | None = None
     pending_air_mine_seconds: float = 0.0
@@ -221,6 +223,15 @@ class MissionState:
     end_reason: str = ""
     crashes: int = 0
     invuln_seconds: float = 0.0
+
+    # Crash animation state (damage >= 100 triggers crash sequence).
+    crash_active: bool = False
+    crash_variant: int = 0  # 0=level spin, 1=tail-spin
+    crash_seconds: float = 0.0
+    crash_origin: Vec2 = field(default_factory=lambda: Vec2(0.0, 0.0))
+    crash_vel: Vec2 = field(default_factory=lambda: Vec2(0.0, 0.0))
+    crash_impacted: bool = False
+    crash_impact_seconds: float = 0.0
     jet_spawn_seconds: float = 4.0
     mine_spawn_seconds: float = 24.0
     unload_release_seconds: float = 0.0
@@ -504,20 +515,27 @@ def update_mission(
         _end_mission(mission, "THE END", "OUT OF FUEL", logger)
         return
 
-    _update_enemies(mission, helicopter, dt, heli, logger)
-
     # Particle effects (world-space).
     mission.burning.update(dt)
     mission.impact_sparks.update(dt)
     mission.jet_trails.update(dt)
     mission.dust_storm.update(dt, heli_pos=helicopter.pos, heli_vel=helicopter.vel, ground_y=heli.ground_y)
+    mission.heli_damage_fx.update(dt, heli_pos=helicopter.pos, heli_vel=helicopter.vel, damage=helicopter.damage)
+    mission.explosions.update(dt)
+
+    # If we're in a crash animation, run the crash sequence and skip gameplay updates.
+    if mission.crash_active:
+        _update_crash_sequence(mission, helicopter, dt, heli, logger)
+        return
+
+    _update_enemies(mission, helicopter, dt, heli, logger)
 
     _update_projectiles(mission, dt, heli, logger, helicopter)
     _update_compounds_and_release(mission, heli, logger)
     _update_hostages(mission, helicopter, dt, heli)
     _handle_unload(mission, helicopter, heli, dt)
 
-    _handle_crash_and_respawn(mission, helicopter, heli, logger)
+    _handle_crash_and_respawn(mission, helicopter, dt, heli, logger)
     if mission.ended:
         return
 
@@ -1276,7 +1294,7 @@ def _damage_helicopter(
     logger: logging.Logger | None,
     source: str,
 ) -> None:
-    if mission.invuln_seconds > 0.0 or mission.ended:
+    if mission.invuln_seconds > 0.0 or mission.ended or mission.crash_active:
         return
 
     before = helicopter.damage
@@ -1304,11 +1322,18 @@ def _damage_helicopter(
 def _handle_crash_and_respawn(
     mission: MissionState,
     helicopter: Helicopter,
+    dt: float,
     heli: HelicopterSettings,
     logger: logging.Logger | None,
 ) -> None:
     if mission.ended:
         return
+    # If a crash animation is already running, advance it.
+    if mission.crash_active:
+        _update_crash_sequence(mission, helicopter, dt, heli, logger)
+        return
+
+    # Start crash sequence when damage maxes out.
     if helicopter.damage < 100.0:
         return
 
@@ -1330,6 +1355,92 @@ def _handle_crash_and_respawn(
     if mission.crashes >= 3:
         _end_mission(mission, "THE END", "AIRCRAFT LOST", logger)
         return
+
+    # Begin crash animation.
+    mission.crash_active = True
+    mission.crash_seconds = 0.0
+    mission.crash_impacted = False
+    mission.crash_impact_seconds = 0.0
+    mission.crash_origin = Vec2(float(helicopter.pos.x), float(helicopter.pos.y))
+    mission.crash_vel = Vec2(float(helicopter.vel.x) * 0.45, float(helicopter.vel.y))
+    mission.crash_variant = 0 if random.random() < 0.5 else 1
+
+    # Lock helicopter visuals/controls.
+    helicopter.crashing = True
+    helicopter.crash_variant = mission.crash_variant
+    helicopter.crash_seconds = 0.0
+    helicopter.crash_hide = False
+
+
+def _update_crash_sequence(
+    mission: MissionState,
+    helicopter: Helicopter,
+    dt: float,
+    heli: HelicopterSettings,
+    logger: logging.Logger | None,
+) -> None:
+    if not mission.crash_active or mission.ended:
+        return
+
+    ground_contact_y = float(heli.ground_y - heli.rotor_clearance)
+
+    mission.crash_seconds += dt
+    helicopter.crash_seconds = mission.crash_seconds
+
+    if not mission.crash_impacted:
+        # Midair phase: spin + descend.
+        vx, vy = float(mission.crash_vel.x), float(mission.crash_vel.y)
+        vy = min(420.0, vy + 520.0 * dt)
+        vx *= 0.995
+
+        mission.crash_vel = Vec2(vx, vy)
+        t = mission.crash_seconds
+
+        if mission.crash_variant == 0:
+            # Level, fast spins with a gentle horizontal swirl.
+            helicopter.crash_roll_deg = (t * 720.0) % 360.0
+            swirl = math.sin(t * 3.4) * 55.0
+            helicopter.pos = Vec2(mission.crash_origin.x + swirl, float(helicopter.pos.y) + vy * dt)
+        else:
+            # Tail-spin: angled, wobble + spin.
+            base = -32.0 if vx >= 0.0 else 32.0
+            wobble = math.sin(t * 9.0) * 14.0
+            helicopter.crash_roll_deg = base + wobble + (t * 420.0) % 360.0
+            helicopter.pos = Vec2(float(helicopter.pos.x) + vx * dt, float(helicopter.pos.y) + vy * dt)
+
+        # Clamp into world bounds.
+        helicopter.pos = Vec2(clamp(float(helicopter.pos.x), 0.0, float(mission.world_width)), float(helicopter.pos.y))
+
+        if float(helicopter.pos.y) >= ground_contact_y:
+            mission.crash_impacted = True
+            mission.crash_impact_seconds = 0.0
+            helicopter.pos = Vec2(float(helicopter.pos.x), ground_contact_y)
+            helicopter.vel = Vec2(0.0, 0.0)
+            mission.crash_vel = Vec2(0.0, 0.0)
+
+            # Explosion on impact.
+            impact_pos = Vec2(float(helicopter.pos.x), float(heli.ground_y) - 10.0)
+            mission.explosions.emit_explosion(impact_pos, strength=1.0)
+            mission.burning.add_site(impact_pos, intensity=1.0)
+            mission.impact_sparks.emit_hit(impact_pos, incoming_vel=Vec2(0.0, 220.0))
+
+            helicopter.crash_hide = True
+            if logger is not None:
+                logger.info("CRASH_IMPACT: variant=%d", mission.crash_variant)
+        return
+
+    # Post-impact delay, then respawn.
+    mission.crash_impact_seconds += dt
+    if mission.crash_impact_seconds < 0.65:
+        return
+
+    # Respawn.
+    mission.crash_active = False
+    helicopter.crashing = False
+    helicopter.crash_hide = False
+    helicopter.crash_roll_deg = 0.0
+    helicopter.crash_variant = 0
+    helicopter.crash_seconds = 0.0
 
     helicopter.damage = 0.0
     helicopter.fuel = max(0.0, helicopter.fuel - 20.0)

@@ -30,6 +30,13 @@ class Helicopter:
     damage_flash_seconds: float
     damage_flash_rgb: tuple[int, int, int]
 
+    # Crash animation state (render-only; gameplay uses MissionState crash flags).
+    crashing: bool = False
+    crash_variant: int = 0
+    crash_seconds: float = 0.0
+    crash_roll_deg: float = 0.0
+    crash_hide: bool = False
+
     @staticmethod
     def spawn(
         settings: HelicopterSettings,

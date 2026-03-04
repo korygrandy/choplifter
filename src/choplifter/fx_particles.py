@@ -225,3 +225,222 @@ class DustStormSystem:
                 kind="smoke",
             )
         )
+
+
+class HelicopterDamageFxSystem:
+    """Smoke/fire particle emissions based on helicopter damage.
+
+    Uses FxParticle so existing rendering helper `_draw_fx_particles` can draw it.
+
+    Damage is assumed to be a 0..100 scale.
+    - When remaining health <= 30% (damage >= 70): emit smoke.
+    - When remaining health <= 10% (damage >= 90): emit embers + heavier smoke.
+    """
+
+    def __init__(self, *, seed: int | None = None) -> None:
+        self._rng = random.Random(seed)
+        self.particles: list[FxParticle] = []
+
+        self.max_particles = 300
+        self.smoke_spawn_accum = 0.0
+        self.ember_spawn_accum = 0.0
+
+        self.smoke_rate_per_s = 28.0
+        self.ember_rate_per_s = 18.0
+
+        self.smoke_ttl_min_s = 0.70
+        self.smoke_ttl_max_s = 1.55
+        self.smoke_radius_min = 5.0
+        self.smoke_radius_max = 11.0
+
+        self.ember_ttl_min_s = 0.22
+        self.ember_ttl_max_s = 0.55
+        self.ember_radius_min = 1.2
+        self.ember_radius_max = 2.8
+
+    def reset(self) -> None:
+        self.particles.clear()
+        self.smoke_spawn_accum = 0.0
+        self.ember_spawn_accum = 0.0
+
+    def update(self, dt: float, *, heli_pos: Vec2, heli_vel: Vec2, damage: float) -> None:
+        if dt <= 0.0:
+            return
+
+        dmg = clamp(float(damage), 0.0, 100.0)
+
+        # Threshold mapping: 70..90 ramps up smoke, 90..100 adds embers.
+        smoke_strength = clamp((dmg - 70.0) / 30.0, 0.0, 1.0)
+        fire_strength = clamp((dmg - 90.0) / 10.0, 0.0, 1.0)
+
+        # Nothing to do until smoke threshold.
+        if smoke_strength <= 0.001 and fire_strength <= 0.001 and not self.particles:
+            return
+
+        # Engine exhaust origin: slightly behind travel direction.
+        sign = 1.0 if float(heli_vel.x) >= 0.0 else -1.0
+        base = Vec2(float(heli_pos.x) - sign * 30.0, float(heli_pos.y) + 6.0)
+
+        if len(self.particles) < self.max_particles and smoke_strength > 0.001:
+            rate = self.smoke_rate_per_s * (0.35 + 0.65 * smoke_strength) * (1.0 + 0.35 * fire_strength)
+            self.smoke_spawn_accum += dt * rate
+            while self.smoke_spawn_accum >= 1.0 and len(self.particles) < self.max_particles:
+                self.smoke_spawn_accum -= 1.0
+                self._spawn_smoke(base, heli_vel=heli_vel, strength=smoke_strength)
+
+        if len(self.particles) < self.max_particles and fire_strength > 0.001:
+            rate = self.ember_rate_per_s * (0.30 + 0.70 * fire_strength)
+            self.ember_spawn_accum += dt * rate
+            while self.ember_spawn_accum >= 1.0 and len(self.particles) < self.max_particles:
+                self.ember_spawn_accum -= 1.0
+                self._spawn_ember(base, heli_vel=heli_vel, strength=fire_strength)
+
+        # Update + cull.
+        alive: list[FxParticle] = []
+        for p in self.particles:
+            p.age += dt
+            if p.age >= p.ttl:
+                continue
+
+            if p.kind == "ember":
+                p.vel.y -= 24.0 * dt
+                p.vel.x *= 0.985
+                p.vel.y *= 0.985
+            else:
+                p.vel.y -= 10.0 * dt
+                p.vel.x *= 0.99
+                p.vel.y *= 0.99
+
+            p.pos = Vec2(p.pos.x + p.vel.x * dt, p.pos.y + p.vel.y * dt)
+            alive.append(p)
+
+        self.particles = alive
+
+    def _spawn_smoke(self, base: Vec2, *, heli_vel: Vec2, strength: float) -> None:
+        jitter_x = self._rng.uniform(-8.0, 8.0)
+        jitter_y = self._rng.uniform(-6.0, 4.0)
+
+        vx = -float(heli_vel.x) * 0.16 + self._rng.uniform(-18.0, 18.0)
+        vy = self._rng.uniform(-12.0, 4.0)
+
+        ttl = self._rng.uniform(self.smoke_ttl_min_s, self.smoke_ttl_max_s) * (0.85 + 0.40 * strength)
+        radius = self._rng.uniform(self.smoke_radius_min, self.smoke_radius_max) * (0.75 + 0.60 * strength)
+
+        self.particles.append(
+            FxParticle(
+                pos=Vec2(base.x + jitter_x, base.y + jitter_y),
+                vel=Vec2(vx, vy),
+                age=0.0,
+                ttl=ttl,
+                radius=radius,
+                kind="smoke",
+            )
+        )
+
+    def _spawn_ember(self, base: Vec2, *, heli_vel: Vec2, strength: float) -> None:
+        jitter_x = self._rng.uniform(-6.0, 6.0)
+        jitter_y = self._rng.uniform(-4.0, 3.0)
+
+        vx = -float(heli_vel.x) * 0.08 + self._rng.uniform(-50.0, 50.0)
+        vy = -self._rng.uniform(40.0, 110.0) * (0.50 + 0.50 * strength)
+
+        ttl = self._rng.uniform(self.ember_ttl_min_s, self.ember_ttl_max_s) * (0.80 + 0.40 * strength)
+        radius = self._rng.uniform(self.ember_radius_min, self.ember_radius_max)
+
+        self.particles.append(
+            FxParticle(
+                pos=Vec2(base.x + jitter_x, base.y + jitter_y),
+                vel=Vec2(vx, vy),
+                age=0.0,
+                ttl=ttl,
+                radius=radius,
+                kind="ember",
+            )
+        )
+
+
+class ExplosionSystem:
+    """A short burst of embers + smoke, intended for impacts/explosions."""
+
+    def __init__(self, *, seed: int | None = None) -> None:
+        self._rng = random.Random(seed)
+        self.particles: list[FxParticle] = []
+        self.max_particles = 420
+
+    def reset(self) -> None:
+        self.particles.clear()
+
+    def emit_explosion(self, pos: Vec2, *, strength: float = 1.0) -> None:
+        if len(self.particles) >= self.max_particles:
+            return
+
+        strength = clamp(float(strength), 0.0, 1.0)
+        ember_count = int(32 + 36 * strength)
+        smoke_count = int(18 + 26 * strength)
+
+        # Embers: bright, fast, short-lived.
+        for _ in range(ember_count):
+            if len(self.particles) >= self.max_particles:
+                break
+            ang = self._rng.uniform(0.0, math.tau)
+            speed = self._rng.uniform(140.0, 280.0) * (0.75 + 0.45 * strength)
+            vx = math.cos(ang) * speed + self._rng.uniform(-30.0, 30.0)
+            vy = math.sin(ang) * speed - self._rng.uniform(40.0, 120.0)
+            ttl = self._rng.uniform(0.18, 0.55)
+            radius = self._rng.uniform(1.2, 3.2)
+            self.particles.append(
+                FxParticle(
+                    pos=Vec2(float(pos.x) + self._rng.uniform(-6.0, 6.0), float(pos.y) + self._rng.uniform(-6.0, 6.0)),
+                    vel=Vec2(vx, vy),
+                    age=0.0,
+                    ttl=ttl,
+                    radius=radius,
+                    kind="ember",
+                )
+            )
+
+        # Smoke: slower, longer-lived.
+        for _ in range(smoke_count):
+            if len(self.particles) >= self.max_particles:
+                break
+            ang = self._rng.uniform(0.0, math.tau)
+            speed = self._rng.uniform(40.0, 120.0) * (0.60 + 0.55 * strength)
+            vx = math.cos(ang) * speed + self._rng.uniform(-18.0, 18.0)
+            vy = math.sin(ang) * speed - self._rng.uniform(20.0, 65.0)
+            ttl = self._rng.uniform(0.65, 1.60) * (0.85 + 0.35 * strength)
+            radius = self._rng.uniform(8.0, 18.0) * (0.75 + 0.60 * strength)
+            self.particles.append(
+                FxParticle(
+                    pos=Vec2(float(pos.x) + self._rng.uniform(-10.0, 10.0), float(pos.y) + self._rng.uniform(-8.0, 8.0)),
+                    vel=Vec2(vx, vy),
+                    age=0.0,
+                    ttl=ttl,
+                    radius=radius,
+                    kind="smoke",
+                )
+            )
+
+    def update(self, dt: float) -> None:
+        if dt <= 0.0:
+            return
+
+        gravity = 260.0
+        alive: list[FxParticle] = []
+        for p in self.particles:
+            p.age += dt
+            if p.age >= p.ttl:
+                continue
+
+            if p.kind == "ember":
+                p.vel.y += gravity * dt
+                p.vel.x *= 0.975
+                p.vel.y *= 0.975
+            else:
+                p.vel.y -= 14.0 * dt
+                p.vel.x *= 0.985
+                p.vel.y *= 0.985
+
+            p.pos = Vec2(p.pos.x + p.vel.x * dt, p.pos.y + p.vel.y * dt)
+            alive.append(p)
+
+        self.particles = alive

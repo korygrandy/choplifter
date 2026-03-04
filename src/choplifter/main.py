@@ -22,6 +22,7 @@ from .rendering import (
     bg_asset_exists,
     draw_chopper_select_overlay,
     draw_damage_flash,
+    draw_helicopter_damage_fx,
     draw_intro_cutscene,
     draw_impact_sparks,
     draw_skip_overlay,
@@ -455,17 +456,21 @@ def run() -> None:
                     debug = DebugSettings(show_overlay=not debug.show_overlay)
                     set_toast(f"Debug overlay: {'ON' if debug.show_overlay else 'OFF'}")
                 elif mode == "playing" and matches_key(event.key, controls.cycle_facing):
-                    helicopter.cycle_facing()
+                    if not getattr(mission, "crash_active", False):
+                        helicopter.cycle_facing()
                 elif mode == "playing" and matches_key(event.key, controls.reverse_flip):
-                    helicopter.reverse_flip()
+                    if not getattr(mission, "crash_active", False):
+                        helicopter.reverse_flip()
                 elif mode == "playing" and matches_key(event.key, controls.doors):
-                    toggle_doors_with_logging()
+                    if not getattr(mission, "crash_active", False):
+                        toggle_doors_with_logging()
                 elif mode == "playing" and matches_key(event.key, controls.fire):
-                    spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
-                    if helicopter.facing is Facing.FORWARD:
-                        audio.play_bomb()
-                    else:
-                        audio.play_shoot()
+                    if not getattr(mission, "crash_active", False):
+                        spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
+                        if helicopter.facing is Facing.FORWARD:
+                            audio.play_bomb()
+                        else:
+                            audio.play_shoot()
 
         keys = pygame.key.get_pressed()
         kb_tilt_left = pressed(keys, controls.tilt_left)
@@ -635,23 +640,28 @@ def run() -> None:
             else:
                 # Start toggles pause while playing.
                 if start_down and not prev_btn_start_down:
-                    mode = "paused"
-                    pause_focus = "choppers"
-                    audio.play_pause_toggle()
-                    audio.set_pause_menu_active(True)
+                    if not getattr(mission, "crash_active", False):
+                        mode = "paused"
+                        pause_focus = "choppers"
+                        audio.play_pause_toggle()
+                        audio.set_pause_menu_active(True)
 
                 if a_down and not prev_btn_a_down:
-                    toggle_doors_with_logging()
+                    if not getattr(mission, "crash_active", False):
+                        toggle_doors_with_logging()
                 if b_down and not prev_btn_b_down:
-                    helicopter.reverse_flip()
+                    if not getattr(mission, "crash_active", False):
+                        helicopter.reverse_flip()
                 if y_down and not prev_btn_y_down:
-                    helicopter.cycle_facing()
+                    if not getattr(mission, "crash_active", False):
+                        helicopter.cycle_facing()
                 if x_down and not prev_btn_x_down:
-                    spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
-                    if helicopter.facing is Facing.FORWARD:
-                        audio.play_bomb()
-                    else:
-                        audio.play_shoot()
+                    if not getattr(mission, "crash_active", False):
+                        spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
+                        if helicopter.facing is Facing.FORWARD:
+                            audio.play_bomb()
+                        else:
+                            audio.play_shoot()
 
             prev_btn_a_down = a_down
             prev_btn_b_down = b_down
@@ -678,31 +688,36 @@ def run() -> None:
 
         while accumulator >= tick.dt:
             if mode == "playing":
-                was_grounded = helicopter.grounded
-                # If the helicopter starts airborne, there may be no ground->air transition
-                # to kick off the flying loop. Start it as soon as the player applies lift.
-                if (helicopter_input.lift_up or helicopter_input.lift_down) and not helicopter.grounded:
-                    audio.start_flying()
-                update_helicopter(
-                    helicopter,
-                    helicopter_input,
-                    tick.dt,
-                    physics,
-                    heli_settings,
-                    world_width=float(mission.world_width),
-                    invulnerable=(mission.invuln_seconds > 0.0 or mission.ended),
-                )
-                if was_grounded and not helicopter.grounded:
-                    audio.start_flying()
-                if not was_grounded and helicopter.grounded:
-                    hostage_crush_check_logged(
-                        mission,
-                        helicopter,
-                        helicopter.last_landing_vy,
-                        safe_landing_vy=physics.safe_landing_vy,
-                        logger=logger,
-                    )
+                if getattr(mission, "crash_active", False):
+                    # Crash animation drives the helicopter pose; stop the flight loop.
                     audio.stop_flying()
+                else:
+                    was_grounded = helicopter.grounded
+                    # If the helicopter starts airborne, there may be no ground->air transition
+                    # to kick off the flying loop. Start it as soon as the player applies lift.
+                    if (helicopter_input.lift_up or helicopter_input.lift_down) and not helicopter.grounded:
+                        audio.start_flying()
+
+                    update_helicopter(
+                        helicopter,
+                        helicopter_input,
+                        tick.dt,
+                        physics,
+                        heli_settings,
+                        world_width=float(mission.world_width),
+                        invulnerable=(mission.invuln_seconds > 0.0 or mission.ended),
+                    )
+                    if was_grounded and not helicopter.grounded:
+                        audio.start_flying()
+                    if not was_grounded and helicopter.grounded:
+                        hostage_crush_check_logged(
+                            mission,
+                            helicopter,
+                            helicopter.last_landing_vy,
+                            safe_landing_vy=physics.safe_landing_vy,
+                            logger=logger,
+                        )
+                        audio.stop_flying()
                 update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
 
                 helicopter.damage_flash_seconds = max(0.0, helicopter.damage_flash_seconds - tick.dt)
@@ -815,6 +830,7 @@ def run() -> None:
                 sky_smoke.draw(screen, horizon_y=int(heli_settings.ground_y))
             draw_ground(screen, heli_settings.ground_y)
             draw_mission(screen, mission, camera_x=camera_x, enable_particles=particles_enabled)
+            draw_helicopter_damage_fx(screen, mission, camera_x=camera_x, enable_particles=particles_enabled)
             draw_helicopter(screen, helicopter, camera_x=camera_x, boarded=boarded_count(mission))
             draw_impact_sparks(screen, mission, camera_x=camera_x, enable_particles=particles_enabled)
             if mode == "playing":
