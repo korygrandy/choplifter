@@ -49,6 +49,8 @@ from .app.cutscenes import (
     skip_mission_cutscene,
 )
 from .app.state import CutsceneState, IntroCutsceneState, MissionCutsceneState
+from .app.input import get_active_joystick, read_gamepad
+from .app.feedback import ScreenShakeState, consume_mission_feedback, rough_landing_feedback, update_screenshake_target
 
 
 def run() -> None:
@@ -88,31 +90,7 @@ def run() -> None:
     joysticks: dict[int, pygame.joystick.Joystick] = {}
 
     # Cinematic feedback (screenshake + audio duck).
-    shake_remaining_s = 0.0
-    shake_total_s = 0.0
-    shake_strength = 0.0
-    shake_surface: pygame.Surface | None = None
-
-    def _clamp01(v: float) -> float:
-        if v < 0.0:
-            return 0.0
-        if v > 1.0:
-            return 1.0
-        return v
-
-    def add_screenshake(strength: float) -> None:
-        nonlocal shake_remaining_s, shake_total_s, shake_strength
-        if not screenshake_enabled:
-            return
-
-        s = _clamp01(float(strength))
-        if s <= 0.0:
-            return
-
-        shake_strength = max(shake_strength, s)
-        duration_s = 0.08 + 0.20 * s
-        shake_remaining_s = max(shake_remaining_s, duration_s)
-        shake_total_s = max(shake_total_s, shake_remaining_s)
+    screenshake = ScreenShakeState()
     toast_message = ""
     toast_seconds = 0.0
 
@@ -138,28 +116,6 @@ def run() -> None:
         logger.info("GAMEPAD_CONNECTED: %s", name)
         logger.info("GAMEPAD_INFO: axes=%d buttons=%d hats=%d", js.get_numaxes(), js.get_numbuttons(), js.get_numhats())
         set_toast(f"Gamepad connected: {name}")
-
-    def get_active_joystick() -> pygame.joystick.Joystick | None:
-        if not joysticks:
-            return None
-        # Prefer a stable order to avoid flipping between devices.
-        instance_id = sorted(joysticks.keys())[0]
-        return joysticks.get(instance_id)
-
-    def axis_value(js: pygame.joystick.Joystick, axis_index: int) -> float:
-        if axis_index < 0 or axis_index >= js.get_numaxes():
-            return 0.0
-        return float(js.get_axis(axis_index))
-
-    def trigger_pressed(raw: float, threshold01: float) -> bool:
-        # Triggers are inconsistent across drivers:
-        # - Some report in [-1..1] (rest=-1, pressed=1)
-        # - Some report in [0..1] (rest=0, pressed=1)
-        if raw < -0.1:
-            value01 = (raw + 1.0) * 0.5
-        else:
-            value01 = raw
-        return value01 >= threshold01
 
     particles_enabled = accessibility.particles_enabled
     flashes_enabled = accessibility.flashes_enabled
@@ -442,7 +398,9 @@ def run() -> None:
         frame_dt = clock.tick(120) / 1000.0
         accumulator += frame_dt
 
-        skip_hint = "Enter/Space or A/Start: Skip" if get_active_joystick() is not None else "Enter/Space: Skip"
+        skip_hint = (
+            "Enter/Space or A/Start: Skip" if get_active_joystick(joysticks) is not None else "Enter/Space: Skip"
+        )
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -606,58 +564,29 @@ def run() -> None:
         gp_lift_up = False
         gp_lift_down = False
 
-        active_js = get_active_joystick()
+        active_js = get_active_joystick(joysticks)
         haptics.set_active_joystick(active_js)
         if active_js is not None:
-            x_axis = axis_value(active_js, 0)
-            deadzone = float(accessibility.gamepad_deadzone)
-            gp_tilt_left = x_axis <= -deadzone
-            gp_tilt_right = x_axis >= deadzone
+            gp = read_gamepad(
+                active_js,
+                deadzone=float(accessibility.gamepad_deadzone),
+                trigger_threshold01=float(accessibility.trigger_threshold),
+            )
+            gp_tilt_left = gp.tilt_left
+            gp_tilt_right = gp.tilt_right
+            gp_lift_up = gp.lift_up
+            gp_lift_down = gp.lift_down
+            menu_dir = gp.menu_dir
+            menu_vert = gp.menu_vert
 
-            menu_dir = -1 if gp_tilt_left else (1 if gp_tilt_right else 0)
-            menu_vert = 0
-
-            if active_js.get_numhats() > 0:
-                hat_x, hat_y = active_js.get_hat(0)
-                gp_tilt_left = gp_tilt_left or hat_x <= -1
-                gp_tilt_right = gp_tilt_right or hat_x >= 1
-                gp_lift_up = gp_lift_up or hat_y >= 1
-                gp_lift_down = gp_lift_down or hat_y <= -1
-                if hat_x <= -1:
-                    menu_dir = -1
-                elif hat_x >= 1:
-                    menu_dir = 1
-                if hat_y >= 1:
-                    menu_vert = -1
-                elif hat_y <= -1:
-                    menu_vert = 1
-            else:
-                # Fallback: use left stick Y for menu up/down.
-                y_axis = axis_value(active_js, 1)
-                if y_axis <= -deadzone:
-                    menu_vert = -1
-                elif y_axis >= deadzone:
-                    menu_vert = 1
-
-            axes = active_js.get_numaxes()
-            if axes >= 6:
-                gp_lift_down = trigger_pressed(axis_value(active_js, 4), threshold01=float(accessibility.trigger_threshold))
-                gp_lift_up = trigger_pressed(axis_value(active_js, 5), threshold01=float(accessibility.trigger_threshold))
-            elif axes >= 3:
-                # Common fallback: a combined trigger axis.
-                trig = axis_value(active_js, 2)
-                gp_lift_down = trig <= -0.35
-                gp_lift_up = trig >= 0.35
-
-            # Edge-triggered actions.
-            a_down = bool(active_js.get_numbuttons() > 0 and active_js.get_button(0))
-            b_down = bool(active_js.get_numbuttons() > 1 and active_js.get_button(1))
-            x_down = bool(active_js.get_numbuttons() > 2 and active_js.get_button(2))
-            y_down = bool(active_js.get_numbuttons() > 3 and active_js.get_button(3))
-            start_down = bool(active_js.get_numbuttons() > 7 and active_js.get_button(7))
-            rb_down = bool(active_js.get_numbuttons() > 5 and active_js.get_button(5))
-            lb_down = bool(active_js.get_numbuttons() > 4 and active_js.get_button(4))
-            back_down = bool(active_js.get_numbuttons() > 6 and active_js.get_button(6))
+            a_down = gp.a_down
+            b_down = gp.b_down
+            x_down = gp.x_down
+            y_down = gp.y_down
+            start_down = gp.start_down
+            rb_down = gp.rb_down
+            lb_down = gp.lb_down
+            back_down = gp.back_down
 
             # Debug overlay toggle (gamepad).
             if lb_down and not prev_btn_lb_down:
@@ -884,34 +813,25 @@ def run() -> None:
                         )
 
                         # Cinematic feedback on rough landings.
-                        vy = abs(float(helicopter.last_landing_vy))
-                        safe = max(0.001, float(physics.safe_landing_vy))
-                        if vy > safe and mission.invuln_seconds <= 0.0 and not mission.ended:
-                            severity = (vy - safe) / (safe * 1.25)
-                            severity = _clamp01(severity)
-                            add_screenshake(0.35 + 0.65 * severity)
-                            if severity >= 0.60:
-                                audio.trigger_duck(strength=0.45 + 0.55 * severity)
+                        rough_landing_feedback(
+                            state=screenshake,
+                            landing_vy=float(helicopter.last_landing_vy),
+                            safe_landing_vy=float(physics.safe_landing_vy),
+                            invuln_seconds=float(mission.invuln_seconds),
+                            ended=bool(mission.ended),
+                            audio=audio,
+                            screenshake_enabled=screenshake_enabled,
+                        )
                         audio.stop_flying()
                 update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
 
                 # Consume cinematic feedback impulses produced by mission damage events.
-                shake_impulse = float(getattr(mission, "feedback_shake_impulse", 0.0))
-                if shake_impulse > 0.0:
-                    add_screenshake(shake_impulse)
-                    mission.feedback_shake_impulse = 0.0
-                duck_strength = float(getattr(mission, "feedback_duck_strength", 0.0))
-                if duck_strength > 0.0:
-                    # Only apply duck for bigger impacts.
-                    if duck_strength >= 0.55:
-                        audio.trigger_duck(strength=duck_strength)
-                    mission.feedback_duck_strength = 0.0
-
-                if getattr(mission, "crash_impact_sfx_pending", False):
-                    add_screenshake(1.0)
-                    audio.trigger_duck(strength=1.0)
-                    audio.play_chopper_crash()
-                    mission.crash_impact_sfx_pending = False
+                consume_mission_feedback(
+                    state=screenshake,
+                    mission=mission,
+                    audio=audio,
+                    screenshake_enabled=screenshake_enabled,
+                )
 
                 helicopter.damage_flash_seconds = max(0.0, helicopter.damage_flash_seconds - tick.dt)
 
@@ -1022,24 +942,13 @@ def run() -> None:
         audio.update(frame_dt)
 
         # Screenshake offsets (render-time only; affects the whole frame).
-        shake_x = 0
-        shake_y = 0
-        if mode == "playing" and screenshake_enabled and shake_remaining_s > 0.0:
-            shake_remaining_s = max(0.0, shake_remaining_s - frame_dt)
-            t = shake_remaining_s / max(0.001, shake_total_s)
-            amp = (1.5 + 6.0 * shake_strength) * t
-            shake_x = int(random.uniform(-amp, amp))
-            shake_y = int(random.uniform(-amp, amp))
-        elif shake_remaining_s <= 0.0:
-            shake_remaining_s = 0.0
-            shake_total_s = 0.0
-            shake_strength = 0.0
-
-        target = screen
-        if mode == "playing" and screenshake_enabled and (shake_x != 0 or shake_y != 0):
-            if shake_surface is None or shake_surface.get_size() != screen.get_size():
-                shake_surface = pygame.Surface(screen.get_size())
-            target = shake_surface
+        target, shake_x, shake_y = update_screenshake_target(
+            state=screenshake,
+            frame_dt=frame_dt,
+            enabled=screenshake_enabled,
+            mode=mode,
+            screen=screen,
+        )
 
         # Render.
         if mode == "intro":
