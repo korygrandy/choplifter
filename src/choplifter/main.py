@@ -57,6 +57,7 @@ from .app.toast import ToastState
 from .app.session import create_mission_and_helicopter
 from .app.menu_helpers import cycle_index, move_pause_focus
 from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapshot
+from .app.doors import toggle_doors_with_logging
 
 
 def run() -> None:
@@ -117,31 +118,6 @@ def run() -> None:
     flashes_enabled = accessibility.flashes_enabled
     screenshake_enabled = accessibility.screenshake_enabled
 
-    def toggle_doors_with_logging() -> None:
-        at_base = mission.base.contains_point(helicopter.pos)
-        if not helicopter.grounded:
-            logger.info("DOORS: toggle blocked (not grounded)")
-            return
-
-        before = helicopter.doors_open
-        helicopter.toggle_doors()
-        after = helicopter.doors_open
-        if before != after:
-            if after:
-                audio.play_doors_open()
-            else:
-                audio.play_doors_close()
-            logger.info(
-                "DOORS: %s at_base=%s boarded=%d",
-                "OPEN" if after else "closed",
-                at_base,
-                boarded_count(mission),
-            )
-
-        if after and not at_base and boarded_count(mission) > 0:
-            logger.info("UNLOAD_BLOCKED: doors open but not in base zone")
-        if after and at_base and boarded_count(mission) == 0:
-            logger.info("UNLOAD: no boarded passengers")
 
     flags = 0
     if window.vsync:
@@ -406,7 +382,7 @@ def run() -> None:
                         helicopter.reverse_flip()
                 elif mode == "playing" and matches_key(event.key, controls.doors):
                     if not getattr(mission, "crash_active", False):
-                        toggle_doors_with_logging()
+                        toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count)
                 elif mode == "playing" and matches_key(event.key, controls.flare):
                     try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
                 elif mode == "playing" and matches_key(event.key, controls.fire):
@@ -565,7 +541,7 @@ def run() -> None:
 
                 if a_down and not prev_btn_a_down:
                     if not getattr(mission, "crash_active", False):
-                        toggle_doors_with_logging()
+                        toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count)
                 if y_down and not prev_btn_y_down:
                     if not getattr(mission, "crash_active", False):
                         helicopter.reverse_flip()
