@@ -383,7 +383,7 @@ def run() -> None:
                     selected_mission_index = cycle_index(selected_mission_index, menu_dir, len(mission_choices))
                     selected_mission_id = mission_choices[selected_mission_index][0]
                     audio.play_menu_select()
-                    apply_mission_preview()
+                    apply_mission_preview_wrapper()
                 if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
                     mode = "select_chopper"
                     set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")
