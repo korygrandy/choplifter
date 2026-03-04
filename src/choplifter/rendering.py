@@ -433,6 +433,9 @@ def draw_chopper_select_overlay(
     restart_selected: bool = False,
     show_restart_game: bool = False,
     restart_game_selected: bool = False,
+    show_mute: bool = False,
+    mute_selected: bool = False,
+    muted: bool = False,
 ) -> None:
     """Draw a simple chopper selection overlay.
 
@@ -541,6 +544,29 @@ def draw_chopper_select_overlay(
         )
 
         text = hint_font.render("Restart Game", True, (240, 240, 240) if restart_game_selected else (200, 200, 200))
+        screen.blit(text, (btn.centerx - text.get_width() // 2, btn.centery - text.get_height() // 2))
+
+    if show_mute:
+        btn_w = min(320, w - 80)
+        btn_h = 52
+        btn_x = w // 2 - btn_w // 2
+
+        base_y = box_top + box_h + 22
+        if show_restart:
+            base_y += btn_h + 12
+        if show_restart_game:
+            base_y += btn_h + 12
+
+        btn_y = base_y
+        btn = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+        panel = pygame.Surface((btn.width, btn.height), pygame.SRCALPHA)
+        panel.fill((20, 20, 20, 200) if mute_selected else (10, 10, 10, 180))
+        screen.blit(panel, btn.topleft)
+        pygame.draw.rect(screen, (240, 240, 240) if mute_selected else (160, 160, 160), btn, 4 if mute_selected else 2)
+
+        label = f"Mute: {'ON' if muted else 'OFF'}"
+        text = hint_font.render(label, True, (240, 240, 240) if mute_selected else (200, 200, 200))
         screen.blit(text, (btn.centerx - text.get_width() // 2, btn.centery - text.get_height() // 2))
 
 
@@ -699,9 +725,12 @@ def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: flo
     _draw_base(screen, mission, camera_x=camera_x)
     _draw_compounds(screen, mission, camera_x=camera_x)
     _draw_hostages(screen, mission, camera_x=camera_x)
+    if enable_particles:
+        _draw_jet_trail_particles(screen, mission, camera_x=camera_x)
     _draw_enemies(screen, mission, camera_x=camera_x)
     if enable_particles:
         _draw_burning_particles(screen, mission, camera_x=camera_x)
+        _draw_dust_storm_particles(screen, mission, camera_x=camera_x)
     _draw_projectiles(screen, mission, camera_x=camera_x)
 
     if mission.ended and mission.end_text:
@@ -835,7 +864,7 @@ def _draw_projectiles(screen: pygame.Surface, mission: MissionState, *, camera_x
         y = int(p.pos.y)
         if p.kind is ProjectileKind.BULLET:
             pygame.draw.circle(screen, (240, 240, 240), (x, y), 2)
-        elif p.kind is ProjectileKind.ENEMY_BULLET:
+        elif p.kind in (ProjectileKind.ENEMY_BULLET, ProjectileKind.ENEMY_ARTILLERY):
             pygame.draw.circle(screen, (200, 40, 40), (x, y), 2)
         else:
             pygame.draw.circle(screen, (35, 35, 35), (x, y), 4)
@@ -928,6 +957,62 @@ def _draw_burning_particles(screen: pygame.Surface, mission: MissionState, *, ca
 
         sprite.set_alpha(alpha)
         screen.blit(sprite, (x - sprite.get_width() // 2, y - sprite.get_height() // 2))
+
+
+def _draw_fx_particles(screen: pygame.Surface, particles: list[object], *, camera_x: float) -> None:
+    # Particles are in world-space; apply camera offset.
+    for p in particles:
+        pos = getattr(p, "pos", None)
+        if pos is None:
+            continue
+
+        x = int(float(pos.x) - camera_x)
+        y = int(float(pos.y))
+
+        age = float(getattr(p, "age", 0.0))
+        ttl = float(getattr(p, "ttl", 0.0))
+        t = age / max(0.001, ttl)
+
+        kind = str(getattr(p, "kind", "smoke"))
+        radius_f = float(getattr(p, "radius", 4.0))
+        radius = int(max(1.0, radius_f))
+
+        if kind == "ember":
+            alpha = int(240 * (1.0 - t))
+            sprite = _get_burn_sprite("ember", radius)
+        else:
+            alpha = int(120 * (1.0 - t) * (1.0 - t))
+            radius = int(max(1.0, radius_f * (1.0 + 0.45 * t)))
+            sprite = _get_burn_sprite("smoke", radius)
+
+        if alpha <= 0:
+            continue
+
+        sprite.set_alpha(alpha)
+        screen.blit(sprite, (x - sprite.get_width() // 2, y - sprite.get_height() // 2))
+
+
+def _draw_jet_trail_particles(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+    jet_trails = getattr(mission, "jet_trails", None)
+    if jet_trails is None:
+        return
+    _draw_fx_particles(screen, list(getattr(jet_trails, "particles", [])), camera_x=camera_x)
+
+
+def _draw_dust_storm_particles(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+    dust = getattr(mission, "dust_storm", None)
+    if dust is None:
+        return
+    _draw_fx_particles(screen, list(getattr(dust, "particles", [])), camera_x=camera_x)
+
+
+def draw_impact_sparks(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0, enable_particles: bool = True) -> None:
+    if not enable_particles:
+        return
+    sparks = getattr(mission, "impact_sparks", None)
+    if sparks is None:
+        return
+    _draw_fx_particles(screen, list(getattr(sparks, "particles", [])), camera_x=camera_x)
 
 
 def _get_burn_sprite(kind: str, radius: int) -> pygame.Surface:

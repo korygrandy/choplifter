@@ -7,6 +7,7 @@ import math
 import random
 
 from .burning_particles import BurningParticleSystem
+from .fx_particles import DustStormSystem, ImpactSparkSystem, JetTrailSystem
 from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
 from .settings import HelicopterSettings
@@ -55,6 +56,7 @@ class ProjectileKind(Enum):
     BULLET = 1
     BOMB = 2
     ENEMY_BULLET = 3
+    ENEMY_ARTILLERY = 4
 
 
 @dataclass
@@ -63,6 +65,7 @@ class Projectile:
     pos: Vec2
     vel: Vec2
     ttl: float
+    source: "EnemyKind | None" = None
     alive: bool = True
 
 
@@ -82,6 +85,8 @@ class Enemy:
     ttl: float = 999.0
     alive: bool = True
     entered_screen: bool = False
+    trail_enabled: bool = False
+    trail_spawn_accum: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -187,6 +192,8 @@ class MissionStats:
     lost_in_transit: int = 0
     enemies_destroyed: int = 0
     tanks_destroyed: int = 0
+    artillery_fired: int = 0
+    artillery_hits: int = 0
     jets_entered: int = 0
 
 
@@ -203,6 +210,9 @@ class MissionState:
     sentiment: float = 50.0
     tuning: MissionTuning = MissionTuning()
     burning: BurningParticleSystem = field(default_factory=BurningParticleSystem)
+    impact_sparks: ImpactSparkSystem = field(default_factory=ImpactSparkSystem)
+    jet_trails: JetTrailSystem = field(default_factory=JetTrailSystem)
+    dust_storm: DustStormSystem = field(default_factory=DustStormSystem)
     elapsed_seconds: float = 0.0
     pending_air_mine_pos: Vec2 | None = None
     pending_air_mine_seconds: float = 0.0
@@ -496,8 +506,11 @@ def update_mission(
 
     _update_enemies(mission, helicopter, dt, heli, logger)
 
-    # Burning particle effects (e.g., destroyed ground cannon/tank).
+    # Particle effects (world-space).
     mission.burning.update(dt)
+    mission.impact_sparks.update(dt)
+    mission.jet_trails.update(dt)
+    mission.dust_storm.update(dt, heli_pos=helicopter.pos, heli_vel=helicopter.vel, ground_y=heli.ground_y)
 
     _update_projectiles(mission, dt, heli, logger, helicopter)
     _update_compounds_and_release(mission, heli, logger)
@@ -567,9 +580,14 @@ def _update_projectiles(
             continue
 
         # Helicopter collision (enemy projectiles only).
-        if p.kind is ProjectileKind.ENEMY_BULLET:
+        if p.kind in (ProjectileKind.ENEMY_BULLET, ProjectileKind.ENEMY_ARTILLERY):
             if _hits_circle(p.pos, helicopter.pos, radius=26.0):
-                _damage_helicopter(mission, helicopter, 10.0, logger, source="ENEMY_BULLET")
+                if p.kind is ProjectileKind.ENEMY_ARTILLERY:
+                    mission.stats.artillery_hits += 1
+                    mission.impact_sparks.emit_hit(p.pos, p.vel)
+                    _damage_helicopter(mission, helicopter, 10.0, logger, source="ARTILLERY")
+                else:
+                    _damage_helicopter(mission, helicopter, 10.0, logger, source="ENEMY_BULLET")
                 p.alive = False
                 continue
 
@@ -606,7 +624,7 @@ def _update_projectiles(
             dy = h.pos.y - p.pos.y
             if dx * dx + dy * dy <= 12.0 * 12.0:
                 h.state = HostageState.KIA
-                if p.kind is ProjectileKind.ENEMY_BULLET:
+                if p.kind in (ProjectileKind.ENEMY_BULLET, ProjectileKind.ENEMY_ARTILLERY):
                     mission.stats.kia_by_enemy += 1
                 else:
                     mission.stats.kia_by_player += 1
@@ -1084,6 +1102,7 @@ def _update_enemies(
                 health=tuning.jet_health,
                 cooldown=0.6,
                 ttl=tuning.jet_ttl_s,
+                trail_enabled=(int(mission.elapsed_seconds * 1.7) % 2 == 0),
             )
         )
         if logger is not None:
@@ -1109,7 +1128,14 @@ def _update_enemies(
             ):
                 tank_cd = (tuning.tank_fire_base_cooldown_s / pressure) * (1.0 - 0.12 * difficulty)
                 e.cooldown = clamp(tank_cd, tuning.tank_fire_min_cooldown_s, tuning.tank_fire_max_cooldown_s)
-                _spawn_enemy_bullet_toward(mission, e.pos, helicopter.pos)
+                _spawn_enemy_bullet_toward(
+                    mission,
+                    e.pos,
+                    helicopter.pos,
+                    kind=ProjectileKind.ENEMY_ARTILLERY,
+                    source=EnemyKind.TANK,
+                )
+                mission.stats.artillery_fired += 1
                 if logger is not None:
                     logger.info("TANK_FIRE")
 
@@ -1126,7 +1152,13 @@ def _update_enemies(
             if abs(helicopter.pos.x - e.pos.x) <= tuning.jet_fire_range_x and e.cooldown <= 0.0:
                 jet_cd = (tuning.jet_fire_base_cooldown_s / pressure) * (1.0 - 0.10 * difficulty)
                 e.cooldown = clamp(jet_cd, tuning.jet_fire_min_cooldown_s, tuning.jet_fire_max_cooldown_s)
-                _spawn_enemy_bullet_toward(mission, e.pos, helicopter.pos)
+                _spawn_enemy_bullet_toward(mission, e.pos, helicopter.pos, source=EnemyKind.JET)
+
+            if e.entered_screen and e.trail_enabled:
+                e.trail_spawn_accum += dt * 18.0
+                while e.trail_spawn_accum >= 1.0:
+                    e.trail_spawn_accum -= 1.0
+                    mission.jet_trails.emit_trail(e.pos, e.vel)
 
             if _hits_circle(e.pos, helicopter.pos, radius=tuning.jet_collision_radius):
                 _damage_helicopter(mission, helicopter, tuning.jet_touch_damage, logger, source="JET")
@@ -1188,7 +1220,14 @@ def _mine_explode(
             mission.stats.kia_by_enemy += 1
 
 
-def _spawn_enemy_bullet_toward(mission: MissionState, start: Vec2, target: Vec2) -> None:
+def _spawn_enemy_bullet_toward(
+    mission: MissionState,
+    start: Vec2,
+    target: Vec2,
+    *,
+    kind: ProjectileKind = ProjectileKind.ENEMY_BULLET,
+    source: EnemyKind | None = None,
+) -> None:
     dx = target.x - start.x
     dy = target.y - start.y
     dist = math.hypot(dx, dy)
@@ -1198,7 +1237,13 @@ def _spawn_enemy_bullet_toward(mission: MissionState, start: Vec2, target: Vec2)
     vx = (dx / dist) * speed
     vy = (dy / dist) * speed
     mission.projectiles.append(
-        Projectile(kind=ProjectileKind.ENEMY_BULLET, pos=Vec2(start.x, start.y - 10.0), vel=Vec2(vx, vy), ttl=2.0)
+        Projectile(
+            kind=kind,
+            pos=Vec2(start.x, start.y - 10.0),
+            vel=Vec2(vx, vy),
+            ttl=2.0,
+            source=source,
+        )
     )
 
 
@@ -1240,7 +1285,7 @@ def _damage_helicopter(
         # Screen flash: set a short timer + color based on damage source.
         # (Rendering is gated by accessibility.flashes_enabled.)
         helicopter.damage_flash_seconds = 0.12
-        if source == "ENEMY_BULLET":
+        if source in ("ENEMY_BULLET", "ARTILLERY"):
             helicopter.damage_flash_rgb = (255, 40, 40)
         elif source == "JET":
             helicopter.damage_flash_rgb = (120, 120, 255)
