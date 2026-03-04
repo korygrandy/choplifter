@@ -39,15 +39,18 @@ class StormCloud:
             self.flash_timer = random.uniform(0.08, 0.18)
 
     def draw(self, surface):
-        base_color = (40, 40, 50) if not self.flash_on else (180, 180, 200)
-        alpha = 180 if not self.flash_on else 220
+        base_color = getattr(self, 'base_color_override', (40, 40, 50))
+        alpha = getattr(self, 'alpha_override', 180)
+        if self.flash_on:
+            base_color = (180, 180, 200)
+            alpha = 220
         for ox, oy, rw, rh in self.oval_offsets:
             cloud_surf = pygame.Surface((rw, rh), pygame.SRCALPHA)
             pygame.draw.ellipse(cloud_surf, (*base_color, alpha), (0, 0, rw, rh))
             surface.blit(cloud_surf, (int(self.x + ox - rw//2), int(self.y + oy - rh//2)))
 
 class StormCloudSystem:
-    def __init__(self, screen_w, screen_h, n_back=5, n_front=3):
+    def __init__(self, screen_w, screen_h, n_back=5, n_front=3, n_black=4):
         self.screen_w = screen_w
         self.screen_h = screen_h
         self.clouds: List[StormCloud] = []
@@ -58,13 +61,24 @@ class StormCloudSystem:
             speed = random.uniform(30, 60)
             size = (random.randint(120, 220), random.randint(40, 90))
             self.clouds.append(StormCloud(x, y, speed, 'back', size))
-        # Front layer clouds
+        # Black (obscuring) clouds above chopper (now in 'front' layer)
+        for _ in range(n_black):
+            x = random.randint(0, screen_w)
+            y = random.randint(int(screen_h * 0.3), int(screen_h * 0.7))
+            speed = random.uniform(80, 140)
+            size = (random.randint(160, 320), random.randint(80, 160))
+            cloud = StormCloud(x, y, speed, 'front', size)
+            # Override color for black clouds
+            cloud.base_color_override = (0, 0, 0)
+            cloud.alpha_override = 13  # 5% transparency (5% of 255 ≈ 13)
+            self.clouds.append(cloud)
+        # Semi-transparent clouds above chopper (now in 'black' layer)
         for _ in range(n_front):
             x = random.randint(0, screen_w)
             y = random.randint(int(screen_h * 0.55), int(screen_h * 0.8))
             speed = random.uniform(60, 110)
             size = (random.randint(140, 260), random.randint(60, 120))
-            self.clouds.append(StormCloud(x, y, speed, 'front', size))
+            self.clouds.append(StormCloud(x, y, speed, 'black', size))
 
     def update(self, dt):
         for c in self.clouds:
