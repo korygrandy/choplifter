@@ -58,6 +58,7 @@ from .app.session import create_mission_and_helicopter
 from .app.flow import apply_mission_preview, reset_game
 from .app.menu_helpers import cycle_index, move_pause_focus
 from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapshot
+from .app.accessibility_toggles import toggle_particles, toggle_flashes, toggle_screenshake
 from .app.doors import toggle_doors_with_logging
 
 
@@ -231,20 +232,17 @@ def run() -> None:
         prev_btn_lb_down = False
         prev_btn_back_down = False
 
-    def toggle_particles() -> None:
+    def toggle_particles_wrapper() -> None:
         nonlocal particles_enabled
-        particles_enabled = not particles_enabled
-        set_toast(f"Particles: {'ON' if particles_enabled else 'OFF'}")
+        particles_enabled = toggle_particles(particles_enabled, set_toast)
 
-    def toggle_flashes() -> None:
+    def toggle_flashes_wrapper() -> None:
         nonlocal flashes_enabled
-        flashes_enabled = not flashes_enabled
-        set_toast(f"Flashes: {'ON' if flashes_enabled else 'OFF'}")
+        flashes_enabled = toggle_flashes(flashes_enabled, set_toast)
 
-    def toggle_screenshake() -> None:
+    def toggle_screenshake_wrapper() -> None:
         nonlocal screenshake_enabled
-        screenshake_enabled = not screenshake_enabled
-        set_toast(f"Screenshake: {'ON' if screenshake_enabled else 'OFF'}")
+        screenshake_enabled = toggle_screenshake(screenshake_enabled, set_toast)
 
     running = True
     accumulator = 0.0
@@ -320,11 +318,11 @@ def run() -> None:
                         set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")
                 elif mode == "paused":
                     if event.key == pygame.K_F2:
-                        toggle_particles()
+                        toggle_particles_wrapper()
                     elif event.key == pygame.K_F3:
-                        toggle_flashes()
+                        toggle_flashes_wrapper()
                     elif event.key == pygame.K_F4:
-                        toggle_screenshake()
+                        toggle_screenshake_wrapper()
                     if event.key in (pygame.K_UP, pygame.K_w):
                         prev_pause_focus = pause_focus
                         pause_focus = move_pause_focus(pause_focus, -1)
@@ -482,11 +480,11 @@ def run() -> None:
 
                 # Accessibility toggles.
                 if x_down and not prev_btn_x_down:
-                    toggle_particles()
+                    toggle_particles_wrapper()
                 if y_down and not prev_btn_y_down:
-                    toggle_flashes()
+                    toggle_flashes_wrapper()
                 if rb_down and not prev_btn_rb_down:
-                    toggle_screenshake()
+                    toggle_screenshake_wrapper()
 
                 # Up/Down selects section.
                 if menu_vert != 0 and menu_vert != prev_menu_vert:
