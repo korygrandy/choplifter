@@ -195,6 +195,7 @@ class MissionStats:
     artillery_fired: int = 0
     artillery_hits: int = 0
     jets_entered: int = 0
+    mines_detonated: int = 0
 
 
 @dataclass
@@ -1223,6 +1224,8 @@ def _mine_explode(
 ) -> None:
     if logger is not None:
         logger.info("MINE: detonate")
+
+    mission.stats.mines_detonated += 1
 
     _damage_helicopter(mission, helicopter, mission.tuning.mine_damage, logger, source="AIR_MINE")
 
