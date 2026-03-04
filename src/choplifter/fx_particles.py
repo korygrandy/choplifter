@@ -233,7 +233,7 @@ class HelicopterDamageFxSystem:
     Uses FxParticle so existing rendering helper `_draw_fx_particles` can draw it.
 
     Damage is assumed to be a 0..100 scale.
-    - When remaining health <= 30% (damage >= 70): emit smoke.
+    - When remaining health <= 50% (damage >= 50): emit smoke.
     - When remaining health <= 10% (damage >= 90): emit embers + heavier smoke.
     """
 
@@ -269,11 +269,11 @@ class HelicopterDamageFxSystem:
 
         dmg = clamp(float(damage), 0.0, 100.0)
 
-        smoke_active = dmg >= 70.0
+        smoke_active = dmg >= 50.0
         fire_active = dmg >= 90.0
 
-        # Threshold mapping: 70..90 ramps up smoke, 90..100 adds embers.
-        smoke_strength = clamp((dmg - 70.0) / 30.0, 0.0, 1.0)
+        # Threshold mapping: 50..90 ramps up smoke, 90..100 adds embers.
+        smoke_strength = clamp((dmg - 50.0) / 40.0, 0.0, 1.0)
         fire_strength = clamp((dmg - 90.0) / 10.0, 0.0, 1.0)
 
         # Nothing to do until smoke threshold.
