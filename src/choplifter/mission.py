@@ -176,6 +176,8 @@ class MissionStats:
 
 @dataclass
 class MissionState:
+    # Mission identity (used for logging and mission-specific cutscenes).
+    mission_id: str
     compounds: list[Compound]
     hostages: list[Hostage]
     projectiles: list[Projectile]
@@ -183,6 +185,8 @@ class MissionState:
     base: BaseZone
     world_width: float = 1280.0
     bg_asset: str = "mission1-bg.jpg"
+    # One-shot cutscenes (ids) that have already been triggered this mission run.
+    cutscenes_played: set[str] = field(default_factory=set)
     stats: MissionStats = field(default_factory=MissionStats)
     sentiment: float = 50.0
     tuning: MissionTuning = MissionTuning()
@@ -235,12 +239,13 @@ class MissionState:
     @staticmethod
     def create_default(heli: HelicopterSettings) -> "MissionState":
         level = create_level_1_config()
-        return MissionState.create_from_level_config(heli, level)
+        return MissionState.create_from_level_config(heli, level, mission_id="city")
 
     @staticmethod
     def create_from_level_config(
         heli: HelicopterSettings,
         level: LevelConfig,
+        mission_id: str = "",
         world_width: float | None = None,
     ) -> "MissionState":
         if world_width is None:
@@ -307,6 +312,7 @@ class MissionState:
                 pending_mine_seconds = level.initial_air_mine_delay_s
 
         state = MissionState(
+            mission_id=(mission_id or "").strip().lower() or "city",
             compounds=compounds,
             hostages=hostages,
             projectiles=[],

@@ -51,7 +51,7 @@ class IntroVideoPlayer:
         IntroVideoPlayer._last_error = None
         try:
             if not path.exists():
-                IntroVideoPlayer._last_error = f"missing intro asset: {path}"
+                IntroVideoPlayer._last_error = f"missing video asset: {path}"
                 return None
 
             # Import lazily so the game still runs without video deps.
