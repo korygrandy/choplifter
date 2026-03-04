@@ -81,7 +81,10 @@ def _try_load_asset_sound(path: Path) -> pygame.mixer.Sound | None:
 BusName = Literal["sfx", "ui", "music"]
 
 
+
+
 @dataclass
+
 class AudioMixer:
     """Simple audio bus routing built on pygame mixer channels.
 
@@ -89,43 +92,38 @@ class AudioMixer:
     categories can play concurrently and later be mixed/controlled separately.
     """
 
-    buses: dict[BusName, list[pygame.mixer.Channel]]
-    active_loops: dict[str, pygame.mixer.Channel] = field(default_factory=dict)
-
-    @staticmethod
-    def try_create(*, num_channels: int = 24) -> "AudioMixer | None":
-        try:
-            pygame.mixer.set_num_channels(num_channels)
-
-            def _bus(start: int, count: int) -> list[pygame.mixer.Channel]:
-                return [pygame.mixer.Channel(i) for i in range(start, start + count)]
-
-            buses: dict[BusName, list[pygame.mixer.Channel]] = {
-                "sfx": _bus(0, 12),
-                "ui": _bus(12, 4),
-                "music": _bus(16, 8),
-            }
-            return AudioMixer(buses=buses)
-        except Exception:
-            return None
-
     def set_bus_volume(self, bus: BusName, volume: float) -> None:
-        vol = _clamp(volume, 0.0, 1.0)
-        for ch in self.buses.get(bus, []):
-            ch.set_volume(vol)
-
-    def play(self, sound: pygame.mixer.Sound, *, bus: BusName = "sfx") -> None:
+        """Set the volume for all channels in the specified bus."""
         channels = self.buses.get(bus, [])
         for ch in channels:
-            if not ch.get_busy():
-                ch.play(sound)
-                return
+            try:
+                ch.set_volume(volume)
+            except Exception:
+                pass
 
+    def __post_init__(self):
+        # Assign dedicated channels to each bus for proper routing
+        total_channels = 16
+        pygame.mixer.set_num_channels(total_channels)
+        # Example: 8 SFX, 2 UI, 6 music (flying loop, etc)
+        bus_layout = {
+            "sfx": list(range(0, 8)),
+            "ui": list(range(8, 10)),
+            "music": list(range(10, 16)),
+        }
+        self.buses = {bus: [pygame.mixer.Channel(idx) for idx in idxs] for bus, idxs in bus_layout.items()}
+        self.active_loops = {}
+
+    def play(self, sound: pygame.mixer.Sound, bus: BusName = "sfx") -> None:
+        """Play a one-shot sound on the specified bus."""
+        channels = self.buses.get(bus, [])
         if channels:
             # If the bus is saturated, steal the first channel.
             channels[0].play(sound)
         else:
             sound.play()
+
+        # ...existing code...
 
     def play_loop(self, sound: pygame.mixer.Sound, *, key: str, bus: BusName = "music", fade_in_ms: int = 500) -> None:
         if key in self.active_loops:
@@ -157,7 +155,13 @@ class AudioMixer:
 
 @dataclass
 class AudioBank:
+    # Ducking state variables (for audio ducking/fading)
+    _duck_remaining_s: float = field(default=0.0, init=False, repr=False)
+    _duck_total_s: float = field(default=0.0, init=False, repr=False)
+    _duck_min_factor: float = field(default=1.0, init=False, repr=False)
+    _duck_current_factor: float = field(default=1.0, init=False, repr=False)
     mixer: AudioMixer | None
+    _pause_menu_active: bool = field(default=False, init=False, repr=False)
     shoot: pygame.mixer.Sound | None
     bomb: pygame.mixer.Sound | None
     explosion: pygame.mixer.Sound | None
@@ -169,6 +173,102 @@ class AudioBank:
     artillery_impact_a: pygame.mixer.Sound | None
     artillery_impact_b: pygame.mixer.Sound | None
     jet_flyby: pygame.mixer.Sound | None
+    midair_collision: pygame.mixer.Sound | None
+    chopper_warning_beeps: pygame.mixer.Sound | None
+    doors_open: pygame.mixer.Sound | None
+    doors_close: pygame.mixer.Sound | None
+    board: pygame.mixer.Sound | None
+    rescue: pygame.mixer.Sound | None
+    crash: pygame.mixer.Sound | None
+    chopper_crash: pygame.mixer.Sound | None
+    flying_loop: pygame.mixer.Sound | None
+    menu_select: pygame.mixer.Sound | None
+    pause: pygame.mixer.Sound | None
+
+    def start_flying(self) -> None:
+        """Starts the helicopter flying loop sound if available."""
+        if hasattr(self, "mixer") and self.mixer is not None and self.flying_loop is not None:
+            self.mixer.play_loop(self.flying_loop, key="flying_loop", bus="music", fade_in_ms=500)
+        elif self.flying_loop is not None:
+            try:
+                self.flying_loop.play(loops=-1, fade_ms=500)
+            except Exception:
+                pass
+
+    def stop_flying(self) -> None:
+        """Stops the helicopter flying loop sound if active."""
+        if hasattr(self, "mixer") and self.mixer is not None:
+            self.mixer.stop_loop(key="flying_loop")
+        else:
+            # Fallback: stop all channels if no mixer
+            try:
+                pygame.mixer.stop()
+            except Exception:
+                pass
+    mine_explosion: pygame.mixer.Sound | None
+    flare_defense: pygame.mixer.Sound | None
+    artillery_shot: pygame.mixer.Sound | None
+    artillery_impact_a: pygame.mixer.Sound | None
+    artillery_impact_b: pygame.mixer.Sound | None
+    jet_flyby: pygame.mixer.Sound | None
+    midair_collision: pygame.mixer.Sound | None
+    chopper_warning_beeps: pygame.mixer.Sound | None
+    doors_open: pygame.mixer.Sound | None
+    doors_close: pygame.mixer.Sound | None
+    board: pygame.mixer.Sound | None
+    rescue: pygame.mixer.Sound | None
+    crash: pygame.mixer.Sound | None
+    chopper_crash: pygame.mixer.Sound | None
+    flying_loop: pygame.mixer.Sound | None
+    menu_select: pygame.mixer.Sound | None
+    pause: pygame.mixer.Sound | None
+
+    def stop_flying(self) -> None:
+        """Stops the helicopter flying loop sound if active."""
+        if hasattr(self, "mixer") and self.mixer is not None:
+            self.mixer.stop_loop(key="flying_loop")
+        else:
+            # Fallback: stop all channels if no mixer
+            try:
+                pygame.mixer.stop()
+            except Exception:
+                pass
+    explosion_small: pygame.mixer.Sound | None
+    explosion_big: pygame.mixer.Sound | None
+    mine_explosion: pygame.mixer.Sound | None
+    flare_defense: pygame.mixer.Sound | None
+    artillery_shot: pygame.mixer.Sound | None
+    artillery_impact_a: pygame.mixer.Sound | None
+    artillery_impact_b: pygame.mixer.Sound | None
+    jet_flyby: pygame.mixer.Sound | None
+    midair_collision: pygame.mixer.Sound | None
+    chopper_warning_beeps: pygame.mixer.Sound | None
+    doors_open: pygame.mixer.Sound | None
+    doors_close: pygame.mixer.Sound | None
+    board: pygame.mixer.Sound | None
+    rescue: pygame.mixer.Sound | None
+    crash: pygame.mixer.Sound | None
+    chopper_crash: pygame.mixer.Sound | None
+    flying_loop: pygame.mixer.Sound | None
+    menu_select: pygame.mixer.Sound | None
+    pause: pygame.mixer.Sound | None
+
+    def _play(self, sound: pygame.mixer.Sound | None, *, bus: BusName) -> None:
+        if sound is None:
+            return
+        if self.mixer is not None:
+            self.mixer.play(sound, bus=bus)
+        else:
+            sound.play()
+    explosion_big: pygame.mixer.Sound | None
+    mine_explosion: pygame.mixer.Sound | None
+    flare_defense: pygame.mixer.Sound | None
+    artillery_shot: pygame.mixer.Sound | None
+    artillery_impact_a: pygame.mixer.Sound | None
+    artillery_impact_b: pygame.mixer.Sound | None
+    jet_flyby: pygame.mixer.Sound | None
+    midair_collision: pygame.mixer.Sound | None
+    chopper_warning_beeps: pygame.mixer.Sound | None
     doors_open: pygame.mixer.Sound | None
     doors_close: pygame.mixer.Sound | None
     board: pygame.mixer.Sound | None
@@ -181,49 +281,22 @@ class AudioBank:
     _flying_active: bool = field(default=False, init=False, repr=False)
     _last_artillery_impact_variant: int = field(default=-1, init=False, repr=False)
     _muted: bool = field(default=False, init=False, repr=False)
-    _pause_menu_active: bool = field(default=False, init=False, repr=False)
-
-    _duck_remaining_s: float = field(default=0.0, init=False, repr=False)
-    _duck_total_s: float = field(default=0.0, init=False, repr=False)
-    _duck_min_factor: float = field(default=1.0, init=False, repr=False)
-    _duck_current_factor: float = field(default=1.0, init=False, repr=False)
-
     @staticmethod
-    def try_create() -> "AudioBank":
-        # No external assets: generate simple placeholder tones.
+    def try_create():
+        """
+        Attempts to create and return an AudioBank instance, loading all required sounds.
+        Returns the AudioBank object if successful, or a silent fallback if loading fails.
+        """
+        # Explicitly initialize the mixer and set channels for bus routing
         try:
-            if not pygame.mixer.get_init():
-                pygame.mixer.init()
+            pygame.mixer.quit()
         except Exception:
-            return AudioBank(
-                mixer=None,
-                shoot=None,
-                bomb=None,
-                explosion=None,
-                explosion_small=None,
-                explosion_big=None,
-                mine_explosion=None,
-                flare_defense=None,
-                artillery_shot=None,
-                artillery_impact_a=None,
-                artillery_impact_b=None,
-                jet_flyby=None,
-                doors_open=None,
-                doors_close=None,
-                board=None,
-                rescue=None,
-                crash=None,
-                chopper_crash=None,
-                flying_loop=None,
-                menu_select=None,
-                pause=None,
-            )
-
+            pass
+        pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+        pygame.mixer.set_num_channels(16)
         try:
-            mixer = AudioMixer.try_create()
+            mixer = AudioMixer()
             sample_rate = 22050
-
-            # Optional external assets (preferred when present).
             module_dir = Path(__file__).resolve().parent
             asset_dir = module_dir / "assets"
 
@@ -234,9 +307,6 @@ class AudioBank:
             bomb_b = _sine_pcm16(freq_hz=55.0, duration_s=0.22, volume=0.25, sample_rate=sample_rate, fade_out_s=0.10)
             bomb = pygame.mixer.Sound(buffer=_mix_pcm16([bomb_a, bomb_b], volume=0.75))
 
-            # Two distinct explosion flavors:
-            # - small: compound opening / light blast
-            # - big: tank destroyed / heavier boom
             exp_s_a = _sine_pcm16(freq_hz=110.0, duration_s=0.22, volume=0.28, sample_rate=sample_rate, fade_out_s=0.10)
             exp_s_b = _sine_pcm16(freq_hz=220.0, duration_s=0.14, volume=0.16, sample_rate=sample_rate, fade_out_s=0.08)
             explosion_small = pygame.mixer.Sound(buffer=_mix_pcm16([exp_s_a, exp_s_b], volume=0.80))
@@ -245,7 +315,6 @@ class AudioBank:
             exp_b_b = _sine_pcm16(freq_hz=110.0, duration_s=0.26, volume=0.22, sample_rate=sample_rate, fade_out_s=0.16)
             explosion_big = pygame.mixer.Sound(buffer=_mix_pcm16([exp_b_a, exp_b_b], volume=0.80))
 
-            # Backward compatible alias.
             explosion = explosion_big
 
             mine_explosion = _try_load_asset_sound(asset_dir / "mine-explosion.wav")
@@ -271,8 +340,126 @@ class AudioBank:
             artillery_impact_a = _try_load_asset_sound(asset_dir / "artillery-impact.wav")
             artillery_impact_b = _try_load_asset_sound(asset_dir / "alternate-artillery-impact.wav")
             jet_flyby = _try_load_asset_sound(asset_dir / "fighter-jet-flyby.wav")
+
             menu_select = _try_load_asset_sound(asset_dir / "menu-select.wav")
             pause = _try_load_asset_sound(asset_dir / "pause.wav")
+            midair_collision = _try_load_asset_sound(asset_dir / "midair-collission.wav")
+            chopper_warning_beeps = _try_load_asset_sound(asset_dir / "chopper-warning-beeps.wav")
+
+            explosion_big = _try_load_asset_sound(asset_dir / "explosion_big.wav") or explosion_big
+            explosion_small = _try_load_asset_sound(asset_dir / "explosion_small.wav") or explosion_small
+            shoot = (
+                _try_load_asset_sound(asset_dir / "gunfire.wav")
+                or _try_load_asset_sound(asset_dir / "shoot.wav")
+                or shoot
+            )
+            bomb = _try_load_asset_sound(asset_dir / "bomb.wav") or bomb
+            rescue = _try_load_asset_sound(asset_dir / "rescue.wav") or rescue
+            crash = _try_load_asset_sound(asset_dir / "crash.wav") or crash
+            chopper_crash = _try_load_asset_sound(asset_dir / "chopper-crash.wav")
+            doors_open = _try_load_asset_sound(asset_dir / "doors_open.wav") or doors_open
+            doors_close = _try_load_asset_sound(asset_dir / "doors_close.wav") or doors_close
+            board = _try_load_asset_sound(asset_dir / "board.wav") or board
+            flying_loop = _try_load_asset_sound(asset_dir / "chopper-flying.wav")
+
+            shoot.set_volume(0.35)
+            bomb.set_volume(0.45)
+            explosion_small.set_volume(0.45)
+            explosion_big.set_volume(0.60)
+            explosion.set_volume(0.60)
+            if mine_explosion is not None:
+                mine_explosion.set_volume(0.60)
+            if flare_defense is not None:
+                flare_defense.set_volume(0.60)
+            doors_open.set_volume(0.25)
+            doors_close.set_volume(0.25)
+            board.set_volume(0.22)
+            rescue.set_volume(0.40)
+            crash.set_volume(0.55)
+            if chopper_crash is not None:
+                chopper_crash.set_volume(0.70)
+            if artillery_shot is not None:
+                artillery_shot.set_volume(0.55)
+            if artillery_impact_a is not None:
+                artillery_impact_a.set_volume(0.55)
+            if artillery_impact_b is not None:
+                artillery_impact_b.set_volume(0.55)
+            if jet_flyby is not None:
+                jet_flyby.set_volume(0.55)
+            if flying_loop is not None:
+                flying_loop.set_volume(0.28)
+            if menu_select is not None:
+                menu_select.set_volume(0.45)
+            if pause is not None:
+                pause.set_volume(0.55)
+
+            return AudioBank(
+                mixer=mixer,
+                shoot=shoot,
+                bomb=bomb,
+                explosion=explosion,
+                explosion_small=explosion_small,
+                explosion_big=explosion_big,
+                mine_explosion=mine_explosion,
+                flare_defense=flare_defense,
+                artillery_shot=artillery_shot,
+                artillery_impact_a=artillery_impact_a,
+                artillery_impact_b=artillery_impact_b,
+                jet_flyby=jet_flyby,
+                doors_open=doors_open,
+                doors_close=doors_close,
+                board=board,
+                rescue=rescue,
+                crash=crash,
+                chopper_crash=chopper_crash,
+                flying_loop=flying_loop,
+                menu_select=menu_select,
+                pause=pause,
+                midair_collision=midair_collision,
+                chopper_warning_beeps=chopper_warning_beeps,
+            )
+        except Exception as e:
+            print(f"[AudioBank] Failed to initialize: {e}")
+            return AudioBank(
+                mixer=None,
+                shoot=None,
+                bomb=None,
+                explosion=None,
+                explosion_small=None,
+                explosion_big=None,
+                mine_explosion=None,
+                flare_defense=None,
+                artillery_shot=None,
+                artillery_impact_a=None,
+                artillery_impact_b=None,
+                jet_flyby=None,
+                doors_open=None,
+                doors_close=None,
+                board=None,
+                rescue=None,
+                crash=None,
+                chopper_crash=None,
+                flying_loop=None,
+                menu_select=None,
+                pause=None,
+                midair_collision=None,
+                chopper_warning_beeps=None,
+            )
+            r2 = _sine_pcm16(freq_hz=988.0, duration_s=0.10, volume=0.22, sample_rate=sample_rate)
+            rescue = pygame.mixer.Sound(buffer=_mix_pcm16([r1, r2], volume=0.85))
+
+            crash_a = _sine_pcm16(freq_hz=48.0, duration_s=0.40, volume=0.42, sample_rate=sample_rate, fade_out_s=0.25)
+            crash = pygame.mixer.Sound(buffer=crash_a)
+
+            artillery_shot = _try_load_asset_sound(asset_dir / "artillery-shot.wav")
+            artillery_impact_a = _try_load_asset_sound(asset_dir / "artillery-impact.wav")
+            artillery_impact_b = _try_load_asset_sound(asset_dir / "alternate-artillery-impact.wav")
+            jet_flyby = _try_load_asset_sound(asset_dir / "fighter-jet-flyby.wav")
+
+            menu_select = _try_load_asset_sound(asset_dir / "menu-select.wav")
+            pause = _try_load_asset_sound(asset_dir / "pause.wav")
+            midair_collision = _try_load_asset_sound(asset_dir / "midair-collission.wav")
+            chopper_warning_beeps = _try_load_asset_sound(asset_dir / "chopper-warning-beeps.wav")
 
             # Override placeholders with external files if provided.
             # (These are optional: game stays playable without them.)
@@ -325,92 +512,7 @@ class AudioBank:
             if pause is not None:
                 pause.set_volume(0.55)
 
-            return AudioBank(
-                mixer=mixer,
-                shoot=shoot,
-                bomb=bomb,
-                explosion=explosion,
-                explosion_small=explosion_small,
-                explosion_big=explosion_big,
-                mine_explosion=mine_explosion,
-                flare_defense=flare_defense,
-                artillery_shot=artillery_shot,
-                artillery_impact_a=artillery_impact_a,
-                artillery_impact_b=artillery_impact_b,
-                jet_flyby=jet_flyby,
-                doors_open=doors_open,
-                doors_close=doors_close,
-                board=board,
-                rescue=rescue,
-                crash=crash,
-                chopper_crash=chopper_crash,
-                flying_loop=flying_loop,
-                menu_select=menu_select,
-                pause=pause,
-            )
-        except Exception:
-            return AudioBank(
-                mixer=None,
-                shoot=None,
-                bomb=None,
-                explosion=None,
-                explosion_small=None,
-                explosion_big=None,
-                mine_explosion=None,
-                flare_defense=None,
-                artillery_shot=None,
-                artillery_impact_a=None,
-                artillery_impact_b=None,
-                jet_flyby=None,
-                doors_open=None,
-                doors_close=None,
-                board=None,
-                rescue=None,
-                crash=None,
-                chopper_crash=None,
-                flying_loop=None,
-                menu_select=None,
-                pause=None,
-            )
-
-    def start_flying(self) -> None:
-        if self._flying_active:
-            return
-        if self.flying_loop is None:
-            return
-        self._flying_active = True
-
-        if self.mixer is not None:
-            self.mixer.play_loop(self.flying_loop, key="chopper_flying", bus="music", fade_in_ms=500)
-        else:
-            self.flying_loop.play(loops=-1, fade_ms=500)
-
-    def stop_flying(self) -> None:
-        if not self._flying_active:
-            return
-        self._flying_active = False
-
-        if self.mixer is not None:
-            self.mixer.stop_loop(key="chopper_flying", fade_out_ms=650)
-        else:
-            # Best-effort: fade out all channels.
-            try:
-                pygame.mixer.fadeout(650)
-            except Exception:
-                pass
-
-    def _play(self, sound: pygame.mixer.Sound | None, *, bus: BusName) -> None:
-        if sound is None:
-            return
-        if self._muted:
-            return
-        # When the pause menu is active, mute gameplay sounds but still allow UI feedback.
-        if self._pause_menu_active and bus != "ui":
-            return
-        if self.mixer is not None:
-            self.mixer.play(sound, bus=bus)
-        else:
-            sound.play()
+            # ...existing code...
 
     def _apply_mute_state(self) -> None:
         # When muted, mute everything.
@@ -438,7 +540,31 @@ class AudioBank:
             else:
                 pygame.mixer.unpause()
         except Exception:
-            pass
+            return AudioBank(
+                mixer=None,
+                shoot=None,
+                bomb=None,
+                explosion=None,
+                explosion_small=None,
+                explosion_big=None,
+                mine_explosion=None,
+                flare_defense=None,
+                artillery_shot=None,
+                artillery_impact_a=None,
+                artillery_impact_b=None,
+                jet_flyby=None,
+                doors_open=None,
+                doors_close=None,
+                board=None,
+                rescue=None,
+                crash=None,
+                chopper_crash=None,
+                flying_loop=None,
+                menu_select=None,
+                pause=None,
+                midair_collision=None,
+                chopper_warning_beeps=None,
+            )
 
         # Best-effort duck for the non-bus fallback.
         if not self._pause_menu_active and not self._muted:
