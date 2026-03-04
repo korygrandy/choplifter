@@ -1324,22 +1324,23 @@ def _damage_helicopter(
     if helicopter.damage > before:
         # Cinematic feedback: stash a short-lived impulse for the renderer/audio layer.
         # (We only store the strongest impulse seen in a tick; the main loop consumes + clears it.)
-        base = clamp(float(amount) / 20.0, 0.0, 1.0)
+        # Normalize damage amounts (10 is common) so bullets don't feel overly punchy.
+        base = clamp(float(amount) / 25.0, 0.0, 1.0)
         if source in ("ENEMY_BULLET",):
-            shake = 0.20 + 0.35 * base
+            shake = 0.10 + 0.18 * base
         elif source in ("ARTILLERY",):
-            shake = 0.55 + 0.45 * base
+            shake = 0.35 + 0.35 * base
         elif source in ("AIR_MINE",):
-            shake = 0.70 + 0.30 * base
+            shake = 0.48 + 0.42 * base
         elif source in ("JET",):
-            shake = 0.50 + 0.50 * base
+            shake = 0.28 + 0.32 * base
         else:
-            shake = 0.30 + 0.45 * base
+            shake = 0.18 + 0.30 * base
 
         mission.feedback_shake_impulse = max(mission.feedback_shake_impulse, clamp(shake, 0.0, 1.0))
 
         # Subtle audio "duck" only for bigger impacts.
-        if source in ("ARTILLERY", "AIR_MINE", "JET"):
+        if source in ("ARTILLERY", "AIR_MINE", "JET") and shake >= 0.50:
             mission.feedback_duck_strength = max(mission.feedback_duck_strength, clamp(shake, 0.0, 1.0))
 
         # Screen flash: set a short timer + color based on damage source.

@@ -102,7 +102,7 @@ def run() -> None:
             return
 
         shake_strength = max(shake_strength, s)
-        duration_s = 0.10 + 0.18 * s
+        duration_s = 0.08 + 0.20 * s
         shake_remaining_s = max(shake_remaining_s, duration_s)
         shake_total_s = max(shake_total_s, shake_remaining_s)
     toast_message = ""
@@ -993,10 +993,10 @@ def run() -> None:
         # Screenshake offsets (render-time only; affects the whole frame).
         shake_x = 0
         shake_y = 0
-        if screenshake_enabled and shake_remaining_s > 0.0:
+        if mode == "playing" and screenshake_enabled and shake_remaining_s > 0.0:
             shake_remaining_s = max(0.0, shake_remaining_s - frame_dt)
             t = shake_remaining_s / max(0.001, shake_total_s)
-            amp = (2.0 + 7.0 * shake_strength) * t
+            amp = (1.5 + 6.0 * shake_strength) * t
             shake_x = int(random.uniform(-amp, amp))
             shake_y = int(random.uniform(-amp, amp))
         elif shake_remaining_s <= 0.0:
@@ -1005,7 +1005,7 @@ def run() -> None:
             shake_strength = 0.0
 
         target = screen
-        if screenshake_enabled and (shake_x != 0 or shake_y != 0):
+        if mode == "playing" and screenshake_enabled and (shake_x != 0 or shake_y != 0):
             if shake_surface is None or shake_surface.get_size() != screen.get_size():
                 shake_surface = pygame.Surface(screen.get_size())
             target = shake_surface
