@@ -259,7 +259,15 @@ def run() -> None:
                 prev_btn_y_down = False
                 prev_btn_back_down = False
             elif event.type == pygame.KEYDOWN:
-                mode, pause_focus, quit_flag = handle_keyboard_event(
+                (
+                    mode,
+                    pause_focus,
+                    quit_flag,
+                    selected_mission_index,
+                    selected_mission_id,
+                    selected_chopper_index,
+                    selected_chopper_asset,
+                ) = handle_keyboard_event(
                     event,
                     mode=mode,
                     controls=controls,
@@ -286,6 +294,10 @@ def run() -> None:
                     DebugSettings=DebugSettings,
                     boarded_count=boarded_count,
                     flares=flares,
+                    selected_mission_index=selected_mission_index,
+                    selected_mission_id=selected_mission_id,
+                    selected_chopper_index=selected_chopper_index,
+                    selected_chopper_asset=selected_chopper_asset,
                 )
                 if quit_flag:
                     running = False
