@@ -164,6 +164,7 @@ class AudioBank:
     explosion_small: pygame.mixer.Sound | None
     explosion_big: pygame.mixer.Sound | None
     mine_explosion: pygame.mixer.Sound | None
+    flare_defense: pygame.mixer.Sound | None
     artillery_shot: pygame.mixer.Sound | None
     artillery_impact_a: pygame.mixer.Sound | None
     artillery_impact_b: pygame.mixer.Sound | None
@@ -196,6 +197,7 @@ class AudioBank:
                 explosion_small=None,
                 explosion_big=None,
                 mine_explosion=None,
+                flare_defense=None,
                 artillery_shot=None,
                 artillery_impact_a=None,
                 artillery_impact_b=None,
@@ -240,6 +242,7 @@ class AudioBank:
             explosion = explosion_big
 
             mine_explosion = _try_load_asset_sound(asset_dir / "mine-explosion.wav")
+            flare_defense = _try_load_asset_sound(asset_dir / "flare-defense.wav")
 
             door_o = _sine_pcm16(freq_hz=392.0, duration_s=0.06, volume=0.22, sample_rate=sample_rate)
             door_c = _sine_pcm16(freq_hz=294.0, duration_s=0.06, volume=0.22, sample_rate=sample_rate)
@@ -290,6 +293,8 @@ class AudioBank:
             explosion.set_volume(0.60)
             if mine_explosion is not None:
                 mine_explosion.set_volume(0.60)
+            if flare_defense is not None:
+                flare_defense.set_volume(0.60)
             doors_open.set_volume(0.25)
             doors_close.set_volume(0.25)
             board.set_volume(0.22)
@@ -318,6 +323,7 @@ class AudioBank:
                 explosion_small=explosion_small,
                 explosion_big=explosion_big,
                 mine_explosion=mine_explosion,
+                flare_defense=flare_defense,
                 artillery_shot=artillery_shot,
                 artillery_impact_a=artillery_impact_a,
                 artillery_impact_b=artillery_impact_b,
@@ -340,6 +346,7 @@ class AudioBank:
                 explosion_small=None,
                 explosion_big=None,
                 mine_explosion=None,
+                flare_defense=None,
                 artillery_shot=None,
                 artillery_impact_a=None,
                 artillery_impact_b=None,
@@ -445,6 +452,9 @@ class AudioBank:
 
     def play_mine_explosion(self) -> None:
         self._play(self.mine_explosion, bus="sfx")
+
+    def play_flare_defense(self) -> None:
+        self._play(self.flare_defense, bus="sfx")
 
     def play_artillery_shot(self) -> None:
         self._play(self.artillery_shot, bus="sfx")

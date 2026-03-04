@@ -6,6 +6,7 @@
   "brake": ["left shift", "right shift"],
 
   "fire": ["space"],
+  "flare": ["f"],
   "doors": ["e"],
   "cycle_facing": ["tab"],
   "reverse_flip": ["r"],
