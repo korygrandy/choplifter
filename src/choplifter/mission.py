@@ -903,6 +903,8 @@ def _update_enemies(
             x = helicopter.pos.x + sign * tuning.mine_spawn_margin_x
             x = clamp(x, 40.0, mission.world_width - 40.0)
 
+            # The following block referenced 'e' which is not defined here. If collision logic is needed, it should be handled in the enemy update loop, not mine spawn logic.
+            # If you want to check for collisions between the helicopter and existing enemies, do so in the appropriate loop elsewhere.
             mission.enemies.append(
                 Enemy(
                     kind=EnemyKind.AIR_MINE,
@@ -1161,6 +1163,14 @@ def _damage_helicopter(
             helicopter.damage_flash_rgb = (255, 170, 60)
         else:
             helicopter.damage_flash_rgb = (255, 60, 60)
+
+        # Play warning beeps if damage crosses threshold (e.g., 70%)
+        if hasattr(mission, "audio") and mission.audio is not None:
+            try:
+                if before < 70.0 and helicopter.damage >= 70.0:
+                    mission.audio.play_chopper_warning_beeps()
+            except Exception:
+                pass
 
         if logger is not None:
             logger.debug(

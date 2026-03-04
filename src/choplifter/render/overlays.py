@@ -24,6 +24,9 @@ def draw_chopper_select_overlay(
     show_mute: bool = False,
     mute_selected: bool = False,
     muted: bool = False,
+    show_quit: bool = False,
+    quit_selected: bool = False,
+    quit_confirm: bool = False,
 ) -> None:
     """Draw a simple chopper selection overlay.
 
@@ -160,6 +163,45 @@ def draw_chopper_select_overlay(
         label = f"Mute: {'ON' if muted else 'OFF'}"
         text = hint_font.render(label, True, (240, 240, 240) if mute_selected else (200, 200, 200))
         screen.blit(text, (btn.centerx - text.get_width() // 2, btn.centery - text.get_height() // 2))
+
+    if show_quit:
+        btn_w = min(320, w - 80)
+        btn_h = 52
+        btn_x = w // 2 - btn_w // 2
+
+        base_y = box_top + box_h + 22
+        if show_restart:
+            base_y += btn_h + 12
+        if show_restart_game:
+            base_y += btn_h + 12
+        if show_mute:
+            base_y += btn_h + 12
+
+        btn_y = base_y
+        btn = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+        panel = pygame.Surface((btn.width, btn.height), pygame.SRCALPHA)
+        panel.fill((220, 40, 40, 220) if quit_selected else (80, 10, 10, 180))
+        screen.blit(panel, btn.topleft)
+        pygame.draw.rect(screen, (255, 80, 80) if quit_selected else (160, 80, 80), btn, 4 if quit_selected else 2)
+
+        label = "Quit Game"
+        text = hint_font.render(label, True, (255, 255, 255) if quit_selected else (220, 180, 180))
+        screen.blit(text, (btn.centerx - text.get_width() // 2, btn.centery - text.get_height() // 2))
+
+        # Confirmation overlay
+        if quit_selected and quit_confirm:
+            confirm_w = min(340, w - 100)
+            confirm_h = 70
+            confirm_x = w // 2 - confirm_w // 2
+            confirm_y = btn_y + btn_h + 16
+            confirm_rect = pygame.Rect(confirm_x, confirm_y, confirm_w, confirm_h)
+            confirm_panel = pygame.Surface((confirm_w, confirm_h), pygame.SRCALPHA)
+            confirm_panel.fill((40, 40, 40, 240))
+            screen.blit(confirm_panel, (confirm_x, confirm_y))
+            pygame.draw.rect(screen, (255, 80, 80), confirm_rect, 3)
+            confirm_text = hint_font.render("Press A again to confirm quit", True, (255, 255, 255))
+            screen.blit(confirm_text, (confirm_x + confirm_w // 2 - confirm_text.get_width() // 2, confirm_y + confirm_h // 2 - confirm_text.get_height() // 2))
 
 
 def draw_mission_select_overlay(
