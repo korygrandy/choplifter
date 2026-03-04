@@ -55,6 +55,7 @@ from .app.flares import FlareState, reset_flares, try_start_flare_salvo, update_
 from .app.gamepads import init_connected_joysticks, handle_joy_device_added, handle_joy_device_removed
 from .app.toast import ToastState
 from .app.session import create_mission_and_helicopter
+from .app.flow import apply_mission_preview, reset_game
 from .app.menu_helpers import cycle_index, move_pause_focus
 from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapshot
 from .app.doors import toggle_doors_with_logging
@@ -189,42 +190,38 @@ def run() -> None:
 
     prev_stats: MissionStatsSnapshot = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
 
-    def apply_mission_preview() -> None:
-        nonlocal helicopter, mission, accumulator
-        nonlocal prev_stats
-
-        mission, helicopter = create_mission_and_helicopter(
-            heli_settings=heli_settings,
-            mission_id=selected_mission_id,
-            chopper_asset=selected_chopper_asset,
+    def apply_mission_preview_wrapper() -> None:
+        nonlocal helicopter, mission, accumulator, prev_stats
+        mission, helicopter, accumulator, prev_stats = apply_mission_preview(
+            create_mission_and_helicopter,
+            heli_settings,
+            selected_mission_id,
+            selected_chopper_asset,
+            take_mission_stats_snapshot,
+            boarded_count,
+            sky_smoke,
+            audio,
+            set_toast,
+            mission,
         )
-        accumulator = 0.0
-        sky_smoke.reset()
-        audio.stop_flying()
-        prev_stats = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
 
-        bg = getattr(mission, "bg_asset", "")
-        if bg and not bg_asset_exists(bg):
-            set_toast(f"Missing background: {bg}")
-
-    def reset_game() -> None:
-        nonlocal helicopter, mission, accumulator
-        nonlocal selected_chopper_asset
-        nonlocal selected_mission_id
+    def reset_game_wrapper() -> None:
+        nonlocal helicopter, mission, accumulator, prev_stats
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_btn_rb_down, prev_btn_lb_down, prev_btn_back_down
-        nonlocal prev_stats
-        nonlocal flares
-
-        mission, helicopter = create_mission_and_helicopter(
-            heli_settings=heli_settings,
-            mission_id=selected_mission_id,
-            chopper_asset=selected_chopper_asset,
+        mission, helicopter, accumulator, prev_stats = reset_game(
+            create_mission_and_helicopter,
+            heli_settings,
+            selected_mission_id,
+            selected_chopper_asset,
+            take_mission_stats_snapshot,
+            boarded_count,
+            sky_smoke,
+            audio,
+            reset_flares,
+            logger,
+            flares,
         )
-        accumulator = 0.0
-        sky_smoke.reset()
-        audio.stop_flying()
-        prev_stats = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
         prev_btn_a_down = False
         prev_btn_b_down = False
         prev_btn_x_down = False
@@ -233,8 +230,6 @@ def run() -> None:
         prev_btn_rb_down = False
         prev_btn_lb_down = False
         prev_btn_back_down = False
-        reset_flares(flares)
-        logger.info("RESET: mission restarted")
 
     def toggle_particles() -> None:
         nonlocal particles_enabled
