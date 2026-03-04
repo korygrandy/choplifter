@@ -63,6 +63,53 @@ Also define:
 - **Home base / safe zone** position (classic: far right) and whether enemies can pursue into it (classic: yes).
 - **Hostage vulnerability rules:** whether enemies can target hostages on foot and what (if any) player weapons can harm hostages.
 
+### 4.3 Mission Objective Variants (MVP-Friendly)
+
+The current prototype already has the key counters to support objective variety with minimal new systems:
+- `mission.stats.saved` (rescue progress)
+- `mission.stats.tanks_destroyed` / `mission.stats.enemies_destroyed` (suppression progress)
+- `mission.elapsed_seconds` (time pressure)
+- Existing failure states: crash loss, out of fuel
+
+Start with a small set of objective “templates” that re-use the same level content (compounds + base zone + enemy spawners), so variety is authored mostly through config.
+
+**A) Classic Rescue (baseline)**
+- Win: rescue at least `N` hostages (prototype uses `N=20`).
+- Authoring knobs: `required_saved`, enemy tuning (jets/mines spawn), compound count.
+
+**B) Time-Window Rescue**
+- Win: rescue at least `N` within `T` seconds.
+- Lose: time expires (end text still uses `THE END`).
+- Authoring knobs: `time_limit_s`, `required_saved`, fuel drain (to force routing decisions).
+
+**C) Rescue + Threat Suppression (bonus target becomes required)**
+- Win: rescue at least `N` AND destroy at least `K` tanks (or `K` total enemies).
+- Authoring knobs: `required_saved`, `required_tanks_destroyed` (or `required_enemies_destroyed`).
+
+**D) Holdout Evac (survival clock)**
+- Premise: extraction is “hot”; you must survive until pickup window.
+- Win: survive `T` seconds after an event trigger (simple options: mission start, first compound opened, first hostage boarded).
+- Authoring knobs: `holdout_seconds`, spike enemy rates during the window.
+
+Later (after the above works):
+- **Sequential LZs** (extract from compound A then B, with different threat budgets)
+- **Vertical segment objective** (rooftop extraction) once vertical scrolling is introduced
+
+### 4.4 Objective System — Implementation Sketch (Prototype-Aligned)
+
+Keep the implementation minimal and data-driven:
+- Add an `objective_kind` plus a small set of numeric params to the mission/level config.
+- Replace the hard-coded win check (`saved >= 20`) with a function like `objective_complete(mission)`.
+
+Recommended first-pass config shape:
+- `required_saved: int`
+- `time_limit_s: float | None`
+- `required_tanks_destroyed: int | None`
+- `holdout_seconds: float | None` + `holdout_start: {mission_start|first_compound_opened|first_boarded}`
+
+HUD needs only one new line for MVP:
+- `Objective: Rescued 12/20` (+ optional `Time 01:34` or `Tanks 1/3` when relevant)
+
 ## 5) Systems (MVP vs Later)
 
 ### 5.0 Cutscenes / Intro Presentation
