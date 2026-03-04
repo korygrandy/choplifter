@@ -6,6 +6,7 @@ from typing import Any
 
 _enabled: bool = True
 _active_joystick: Any | None = None
+_pending_rumbles: list[dict[str, float | int]] = []
 
 
 def set_enabled(enabled: bool) -> None:
@@ -16,6 +17,28 @@ def set_enabled(enabled: bool) -> None:
 def set_active_joystick(joystick: Any | None) -> None:
     global _active_joystick
     _active_joystick = joystick
+
+
+def update(dt: float) -> None:
+    # Drive any queued rumble pulses.
+    # Keep it simple: countdown delays and fire when ready.
+    if not _pending_rumbles:
+        return
+    step = float(dt)
+    i = 0
+    while i < len(_pending_rumbles):
+        item = _pending_rumbles[i]
+        item["delay_s"] = float(item["delay_s"]) - step
+        if float(item["delay_s"]) > 0.0:
+            i += 1
+            continue
+
+        _rumble(
+            low=float(item["low"]),
+            high=float(item["high"]),
+            duration_ms=int(item["duration_ms"]),
+        )
+        _pending_rumbles.pop(i)
 
 
 def _clamp01(v: float) -> float:
@@ -68,6 +91,22 @@ def rumble_hit(*, amount: float, source: str | None = None, logger: logging.Logg
         duration_ms = 120
 
     _rumble(low=low, high=high, duration_ms=duration_ms, logger=logger)
+
+
+def rumble_mine_collision(*, logger: logging.Logger | None = None) -> None:
+    # Two sharp pulses for a mine impact.
+    # We queue the second pulse so we don't block the frame.
+    ok = _rumble(low=0.18, high=0.85, duration_ms=120, logger=logger)
+    if not ok:
+        return
+    _pending_rumbles.append(
+        {
+            "delay_s": 0.16,
+            "low": 0.14,
+            "high": 0.75,
+            "duration_ms": 120,
+        }
+    )
 
 
 def rumble_rough_landing(*, impact_vy: float, safe_vy: float, logger: logging.Logger | None = None) -> None:

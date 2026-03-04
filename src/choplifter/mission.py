@@ -225,6 +225,9 @@ class MissionState:
     crashes: int = 0
     invuln_seconds: float = 0.0
 
+    # One-time cutscene triggers (reset when mission is recreated).
+    hostage_cutscene_played: bool = False
+
     # Crash animation state (damage >= 100 triggers crash sequence).
     crash_active: bool = False
     crash_variant: int = 0  # 0=level spin, 1=tail-spin
@@ -1316,6 +1319,8 @@ def _damage_helicopter(
             helicopter.damage_flash_rgb = (255, 60, 60)
         if source == "ARTILLERY":
             haptics.rumble_artillery_hit(logger=logger)
+        elif source == "AIR_MINE":
+            haptics.rumble_mine_collision(logger=logger)
         else:
             haptics.rumble_hit(amount=amount, source=source, logger=logger)
     if logger is not None and int(before) != int(helicopter.damage):

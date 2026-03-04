@@ -213,9 +213,12 @@ def run() -> None:
     selected_chopper_asset = chopper_choices[selected_chopper_index][0]
 
     # Intro cutscene plays on every launch.
-    mode: str = "intro"  # intro | select_mission | select_chopper | playing | paused
+    mode: str = "intro"  # intro | select_mission | select_chopper | playing | paused | hostage_cutscene
     intro_t = 0.0
     intro_seconds = float(intro_video.duration_s) if (intro_video is not None and intro_video.duration_s > 0.5) else 4.25
+    hostage_cutscene_t = 0.0
+    hostage_cutscene_seconds = 0.0
+    hostage_cutscene_video: IntroVideoPlayer | None = None
     prev_menu_dir = 0
     prev_menu_vert = 0
     pause_focus: str = "choppers"  # choppers | restart_mission | restart_game | mute
@@ -264,6 +267,31 @@ def run() -> None:
         prev_artillery_hits = mission.stats.artillery_hits
         prev_jets_entered = mission.stats.jets_entered
         prev_mines_detonated = mission.stats.mines_detonated
+
+    hostage_cutscene_path = assets_dir / "hostage-rescue-cutscene.mpg"
+
+    def start_hostage_cutscene() -> None:
+        nonlocal mode, hostage_cutscene_t, hostage_cutscene_seconds, hostage_cutscene_video, accumulator
+        if mode != "playing":
+            return
+
+        # Pause gameplay audio while the cutscene runs.
+        audio.set_pause_menu_active(True)
+        hostage_cutscene_t = 0.0
+        hostage_cutscene_seconds = 6.0
+        try:
+            hostage_cutscene_video = IntroVideoPlayer.try_create(hostage_cutscene_path)
+            if (
+                hostage_cutscene_video is not None
+                and hostage_cutscene_video.duration_s is not None
+                and float(hostage_cutscene_video.duration_s) > 0.5
+            ):
+                hostage_cutscene_seconds = float(hostage_cutscene_video.duration_s)
+        except Exception:
+            hostage_cutscene_video = None
+
+        mode = "hostage_cutscene"
+        accumulator = 0.0
 
         bg = getattr(mission, "bg_asset", "")
         if bg and not bg_asset_exists(bg):
@@ -369,6 +397,14 @@ def run() -> None:
                     if intro_video is not None:
                         intro_video.close(immediate=True)
                         intro_video = None
+                elif mode == "hostage_cutscene":
+                    # Skip cutscene immediately on any key press (except quit which is handled above).
+                    mode = "playing"
+                    hostage_cutscene_t = 0.0
+                    audio.set_pause_menu_active(False)
+                    if hostage_cutscene_video is not None:
+                        hostage_cutscene_video.close(immediate=True)
+                        hostage_cutscene_video = None
                 elif mode == "select_chopper":
                     if event.key in (pygame.K_LEFT, pygame.K_a) or matches_key(event.key, controls.tilt_left):
                         selected_chopper_index = (selected_chopper_index - 1) % len(chopper_choices)
@@ -488,6 +524,7 @@ def run() -> None:
 
         active_js = get_active_joystick()
         haptics.set_active_joystick(active_js)
+        haptics.update(frame_dt)
         if active_js is not None:
             x_axis = axis_value(active_js, 0)
             deadzone = float(accessibility.gamepad_deadzone)
@@ -568,6 +605,23 @@ def run() -> None:
                     if intro_video is not None:
                         intro_video.close(immediate=True)
                         intro_video = None
+            elif mode == "hostage_cutscene":
+                skip_btn = (
+                    (a_down and not prev_btn_a_down)
+                    or (b_down and not prev_btn_b_down)
+                    or (x_down and not prev_btn_x_down)
+                    or (y_down and not prev_btn_y_down)
+                    or (start_down and not prev_btn_start_down)
+                    or (rb_down and not prev_btn_rb_down)
+                    or (lb_down and not prev_btn_lb_down)
+                )
+                if skip_btn:
+                    mode = "playing"
+                    hostage_cutscene_t = 0.0
+                    audio.set_pause_menu_active(False)
+                    if hostage_cutscene_video is not None:
+                        hostage_cutscene_video.close(immediate=True)
+                        hostage_cutscene_video = None
             elif mode == "select_mission":
                 if menu_dir != 0 and menu_dir != prev_menu_dir:
                     selected_mission_index = (selected_mission_index + menu_dir) % len(mission_choices)
@@ -735,6 +789,11 @@ def run() -> None:
                     audio.play_board()
                     prev_boarded = boarded_now
 
+                if boarded_now == heli_settings.capacity and not getattr(mission, "hostage_cutscene_played", False):
+                    mission.hostage_cutscene_played = True
+                    start_hostage_cutscene()
+                    break
+
                 open_compounds = sum(1 for c in mission.compounds if c.is_open)
                 if open_compounds > prev_open_compounds:
                     audio.play_explosion_small()
@@ -804,8 +863,26 @@ def run() -> None:
                     intro_video.close()
                     intro_video = None
 
+        if mode == "hostage_cutscene":
+            hostage_cutscene_t += frame_dt
+            if hostage_cutscene_video is not None:
+                hostage_cutscene_video.update(frame_dt)
+                if hostage_cutscene_video.done:
+                    mode = "playing"
+                    hostage_cutscene_t = 0.0
+                    audio.set_pause_menu_active(False)
+                    hostage_cutscene_video.close()
+                    hostage_cutscene_video = None
+            if hostage_cutscene_t >= hostage_cutscene_seconds:
+                mode = "playing"
+                hostage_cutscene_t = 0.0
+                audio.set_pause_menu_active(False)
+                if hostage_cutscene_video is not None:
+                    hostage_cutscene_video.close()
+                    hostage_cutscene_video = None
+
         # Visual-only sky particles.
-        if particles_enabled and mode != "intro":
+        if particles_enabled and mode not in ("intro", "hostage_cutscene"):
             sky_smoke.update(frame_dt, width=screen.get_width(), horizon_y=int(heli_settings.ground_y))
 
         # Side-scrolling camera (world x -> screen x).
@@ -825,6 +902,19 @@ def run() -> None:
                 draw_skip_overlay(screen, text=skip_hint)
             else:
                 draw_intro_cutscene(screen, intro_t, show_skip=True, skip_text=skip_hint)
+        elif mode == "hostage_cutscene":
+            if hostage_cutscene_video is not None:
+                hostage_cutscene_video.draw(screen)
+                draw_skip_overlay(screen, text=skip_hint)
+            else:
+                draw_intro_cutscene(
+                    screen,
+                    hostage_cutscene_t,
+                    title="HOSTAGE RESCUE",
+                    subtitle="All hostages aboard",
+                    show_skip=True,
+                    skip_text=skip_hint,
+                )
         else:
             # Background above the horizon.
             draw_sky(
