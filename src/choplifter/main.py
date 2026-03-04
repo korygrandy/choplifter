@@ -836,6 +836,10 @@ def run() -> None:
                         audio.stop_flying()
                 update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
 
+                if getattr(mission, "crash_impact_sfx_pending", False):
+                    audio.play_chopper_crash()
+                    mission.crash_impact_sfx_pending = False
+
                 helicopter.damage_flash_seconds = max(0.0, helicopter.damage_flash_seconds - tick.dt)
 
                 saved_delta = mission.stats.saved - prev_saved

@@ -174,6 +174,7 @@ class AudioBank:
     board: pygame.mixer.Sound | None
     rescue: pygame.mixer.Sound | None
     crash: pygame.mixer.Sound | None
+    chopper_crash: pygame.mixer.Sound | None
     flying_loop: pygame.mixer.Sound | None
     menu_select: pygame.mixer.Sound | None
     pause: pygame.mixer.Sound | None
@@ -207,6 +208,7 @@ class AudioBank:
                 board=None,
                 rescue=None,
                 crash=None,
+                chopper_crash=None,
                 flying_loop=None,
                 menu_select=None,
                 pause=None,
@@ -279,6 +281,7 @@ class AudioBank:
             bomb = _try_load_asset_sound(asset_dir / "bomb.wav") or bomb
             rescue = _try_load_asset_sound(asset_dir / "rescue.wav") or rescue
             crash = _try_load_asset_sound(asset_dir / "crash.wav") or crash
+            chopper_crash = _try_load_asset_sound(asset_dir / "chopper-crash.wav")
             doors_open = _try_load_asset_sound(asset_dir / "doors_open.wav") or doors_open
             doors_close = _try_load_asset_sound(asset_dir / "doors_close.wav") or doors_close
             board = _try_load_asset_sound(asset_dir / "board.wav") or board
@@ -300,6 +303,8 @@ class AudioBank:
             board.set_volume(0.22)
             rescue.set_volume(0.40)
             crash.set_volume(0.55)
+            if chopper_crash is not None:
+                chopper_crash.set_volume(0.70)
             if artillery_shot is not None:
                 artillery_shot.set_volume(0.55)
             if artillery_impact_a is not None:
@@ -333,6 +338,7 @@ class AudioBank:
                 board=board,
                 rescue=rescue,
                 crash=crash,
+                chopper_crash=chopper_crash,
                 flying_loop=flying_loop,
                 menu_select=menu_select,
                 pause=pause,
@@ -356,6 +362,7 @@ class AudioBank:
                 board=None,
                 rescue=None,
                 crash=None,
+                chopper_crash=None,
                 flying_loop=None,
                 menu_select=None,
                 pause=None,
@@ -494,6 +501,9 @@ class AudioBank:
 
     def play_crash(self) -> None:
         self._play(self.crash, bus="sfx")
+
+    def play_chopper_crash(self) -> None:
+        self._play(self.chopper_crash, bus="sfx")
 
     def play_jet_flyby(self) -> None:
         self._play(self.jet_flyby, bus="sfx")

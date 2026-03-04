@@ -235,6 +235,7 @@ class MissionState:
     crash_vel: Vec2 = field(default_factory=lambda: Vec2(0.0, 0.0))
     crash_impacted: bool = False
     crash_impact_seconds: float = 0.0
+    crash_impact_sfx_pending: bool = False
     jet_spawn_seconds: float = 4.0
     mine_spawn_seconds: float = 24.0
     unload_release_seconds: float = 0.0
@@ -1378,6 +1379,7 @@ def _handle_crash_and_respawn(
     mission.crash_seconds = 0.0
     mission.crash_impacted = False
     mission.crash_impact_seconds = 0.0
+    mission.crash_impact_sfx_pending = False
     mission.crash_origin = Vec2(float(helicopter.pos.x), float(helicopter.pos.y))
     mission.crash_vel = Vec2(float(helicopter.vel.x) * 0.45, float(helicopter.vel.y))
     mission.crash_variant = 0 if random.random() < 0.5 else 1
@@ -1431,6 +1433,7 @@ def _update_crash_sequence(
         if float(helicopter.pos.y) >= ground_contact_y:
             mission.crash_impacted = True
             mission.crash_impact_seconds = 0.0
+            mission.crash_impact_sfx_pending = True
             helicopter.pos = Vec2(float(helicopter.pos.x), ground_contact_y)
             helicopter.vel = Vec2(0.0, 0.0)
             mission.crash_vel = Vec2(0.0, 0.0)
@@ -1453,6 +1456,7 @@ def _update_crash_sequence(
 
     # Respawn.
     mission.crash_active = False
+    mission.crash_impact_sfx_pending = False
     helicopter.crashing = False
     helicopter.crash_hide = False
     helicopter.crash_roll_deg = 0.0
