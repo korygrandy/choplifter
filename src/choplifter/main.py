@@ -51,6 +51,7 @@ from .app.cutscenes import (
 from .app.state import CutsceneState, IntroCutsceneState, MissionCutsceneState
 from .app.input import get_active_joystick, read_gamepad
 from .app.feedback import ScreenShakeState, consume_mission_feedback, rough_landing_feedback, update_screenshake_target
+from .app.flares import FlareState, reset_flares, try_start_flare_salvo, update_flares
 
 
 def run() -> None:
@@ -207,13 +208,7 @@ def run() -> None:
     pause_focus: str = "choppers"  # choppers | restart_mission | restart_game | mute
     muted = False
 
-    flare_cooldown_s = 0.0
-    flare_salvo_remaining = 0
-    flare_salvo_timer_s = 0.0
-    flare_salvo_gap_s = 0.12
-    flare_front_remaining = 0
-    flare_front_timer_s = 0.0
-    flare_front_gap_s = 0.10
+    flares = FlareState()
 
     mission = MissionState.create_from_level_config(
         heli_settings,
@@ -278,8 +273,7 @@ def run() -> None:
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_btn_rb_down, prev_btn_lb_down, prev_btn_back_down
         nonlocal prev_crashes, prev_lost_in_transit, prev_saved, prev_boarded, prev_open_compounds, prev_tanks_destroyed, prev_artillery_fired, prev_artillery_hits, prev_jets_entered
-        nonlocal flare_cooldown_s, flare_salvo_remaining, flare_salvo_timer_s
-        nonlocal flare_front_remaining, flare_front_timer_s
+        nonlocal flares
 
         mission = MissionState.create_from_level_config(
             heli_settings,
@@ -312,69 +306,8 @@ def run() -> None:
         prev_btn_rb_down = False
         prev_btn_lb_down = False
         prev_btn_back_down = False
-        flare_cooldown_s = 0.0
-        flare_salvo_remaining = 0
-        flare_salvo_timer_s = 0.0
-        flare_front_remaining = 0
-        flare_front_timer_s = 0.0
+        reset_flares(flares)
         logger.info("RESET: mission restarted")
-
-    def _emit_flare_burst(*, dir_sign: float, y_min: float, y_max: float, facing_mult: float = 1.0, **emit_kwargs: object) -> None:
-        fx = float(getattr(helicopter.facing, "value", 1))
-        if fx == 0.0:
-            fx = 1.0
-        facing_sign = 1.0 if fx >= 0.0 else -1.0
-        offset_x = facing_sign * float(dir_sign) * random.uniform(18.0, 52.0)
-        offset_y = random.uniform(float(y_min), float(y_max))
-        spawn_pos = helicopter.pos + Vec2(offset_x, offset_y)
-        mission.flares.emit_fountain(spawn_pos, facing_x=fx * float(facing_mult), heli_vel=helicopter.vel, **emit_kwargs)
-
-    def _emit_flare_burst_behind() -> None:
-        _emit_flare_burst(dir_sign=-1.0, y_min=4.0, y_max=18.0)
-
-    def _emit_flare_burst_front() -> None:
-        # Emit forward (opposite of rear bursts) by flipping facing_x.
-        _emit_flare_burst(
-            dir_sign=1.0,
-            y_min=0.0,
-            y_max=14.0,
-            facing_mult=-1.0,
-            rotate_clockwise_deg=15.0,
-            # Longer, slower-fading front trails.
-            ttl_mult=1.55,
-            drag=0.992,
-            # Bias upward so gravity creates a clearer arc.
-            up_speed_min=-135.0,
-            up_speed_max=-15.0,
-            back_speed_mult=1.08,
-        )
-
-    def try_start_flare_salvo() -> None:
-        nonlocal flare_cooldown_s, flare_salvo_remaining, flare_salvo_timer_s
-        nonlocal flare_front_remaining, flare_front_timer_s
-
-        if getattr(mission, "crash_active", False):
-            return
-        if flare_cooldown_s > 0.0:
-            return
-        if flare_salvo_remaining > 0 or flare_front_remaining > 0:
-            return
-
-        try:
-            audio.play_flare_defense()
-            mission.flare_invuln_seconds = max(float(getattr(mission, "flare_invuln_seconds", 0.0)), 3.0)
-            _emit_flare_burst_front()
-            # Fire the front burst immediately, then delay the rear salvo.
-            flare_salvo_remaining = 3
-            flare_salvo_timer_s = 1.0
-            flare_front_remaining = 1
-            flare_front_timer_s = flare_front_gap_s
-            flare_cooldown_s = 5.0
-        except Exception:
-            flare_salvo_remaining = 0
-            flare_salvo_timer_s = 0.0
-            flare_front_remaining = 0
-            flare_front_timer_s = 0.0
 
     def toggle_particles() -> None:
         nonlocal particles_enabled
@@ -543,7 +476,7 @@ def run() -> None:
                     if not getattr(mission, "crash_active", False):
                         toggle_doors_with_logging()
                 elif mode == "playing" and matches_key(event.key, controls.flare):
-                    try_start_flare_salvo()
+                    try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
                 elif mode == "playing" and matches_key(event.key, controls.fire):
                     if not getattr(mission, "crash_active", False):
                         spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
@@ -709,7 +642,7 @@ def run() -> None:
                         audio.set_pause_menu_active(True)
 
                 if b_down and not prev_btn_b_down:
-                    try_start_flare_salvo()
+                    try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
 
                 if a_down and not prev_btn_a_down:
                     if not getattr(mission, "crash_active", False):
@@ -754,34 +687,7 @@ def run() -> None:
 
         while accumulator >= tick.dt:
             if mode == "playing":
-                flare_cooldown_s = max(0.0, flare_cooldown_s - tick.dt)
-                if getattr(mission, "crash_active", False):
-                    flare_salvo_remaining = 0
-                    flare_salvo_timer_s = 0.0
-                    flare_front_remaining = 0
-                    flare_front_timer_s = 0.0
-                elif flare_salvo_remaining > 0:
-                    flare_salvo_timer_s -= tick.dt
-                    while flare_salvo_remaining > 0 and flare_salvo_timer_s <= 0.0:
-                        try:
-                            _emit_flare_burst_behind()
-                        except Exception:
-                            flare_salvo_remaining = 0
-                            flare_salvo_timer_s = 0.0
-                            break
-                        flare_salvo_remaining -= 1
-                        flare_salvo_timer_s += flare_salvo_gap_s
-                if flare_front_remaining > 0 and not getattr(mission, "crash_active", False):
-                    flare_front_timer_s -= tick.dt
-                    while flare_front_remaining > 0 and flare_front_timer_s <= 0.0:
-                        try:
-                            _emit_flare_burst_front()
-                        except Exception:
-                            flare_front_remaining = 0
-                            flare_front_timer_s = 0.0
-                            break
-                        flare_front_remaining -= 1
-                        flare_front_timer_s += flare_front_gap_s
+                update_flares(flares, mission=mission, helicopter=helicopter, dt=tick.dt)
                 if getattr(mission, "crash_active", False):
                     # Crash animation drives the helicopter pose; stop the flight loop.
                     audio.stop_flying()
