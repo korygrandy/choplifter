@@ -7,7 +7,7 @@ import math
 import random
 
 from .burning_particles import BurningParticleSystem
-from .fx_particles import DustStormSystem, ExplosionSystem, HelicopterDamageFxSystem, ImpactSparkSystem, JetTrailSystem
+from .fx_particles import DustStormSystem, ExplosionSystem, FlareSystem, HelicopterDamageFxSystem, ImpactSparkSystem, JetTrailSystem
 from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
 from .settings import HelicopterSettings
@@ -216,6 +216,7 @@ class MissionState:
     dust_storm: DustStormSystem = field(default_factory=DustStormSystem)
     heli_damage_fx: HelicopterDamageFxSystem = field(default_factory=HelicopterDamageFxSystem)
     explosions: ExplosionSystem = field(default_factory=ExplosionSystem)
+    flares: FlareSystem = field(default_factory=FlareSystem)
     elapsed_seconds: float = 0.0
     pending_air_mine_pos: Vec2 | None = None
     pending_air_mine_seconds: float = 0.0
@@ -224,6 +225,7 @@ class MissionState:
     end_reason: str = ""
     crashes: int = 0
     invuln_seconds: float = 0.0
+    flare_invuln_seconds: float = 0.0
 
     # Crash animation state (damage >= 100 triggers crash sequence).
     crash_active: bool = False
@@ -233,6 +235,7 @@ class MissionState:
     crash_vel: Vec2 = field(default_factory=lambda: Vec2(0.0, 0.0))
     crash_impacted: bool = False
     crash_impact_seconds: float = 0.0
+    crash_impact_sfx_pending: bool = False
     jet_spawn_seconds: float = 4.0
     mine_spawn_seconds: float = 24.0
     unload_release_seconds: float = 0.0
@@ -511,6 +514,9 @@ def update_mission(
     if mission.invuln_seconds > 0.0:
         mission.invuln_seconds = max(0.0, mission.invuln_seconds - dt)
 
+    if mission.flare_invuln_seconds > 0.0:
+        mission.flare_invuln_seconds = max(0.0, mission.flare_invuln_seconds - dt)
+
     _update_fuel(mission, helicopter, dt, logger)
     if helicopter.fuel <= 0.0:
         _end_mission(mission, "THE END", "OUT OF FUEL", logger)
@@ -523,6 +529,7 @@ def update_mission(
     mission.dust_storm.update(dt, heli_pos=helicopter.pos, heli_vel=helicopter.vel, ground_y=heli.ground_y)
     mission.heli_damage_fx.update(dt, heli_pos=helicopter.pos, heli_vel=helicopter.vel, damage=helicopter.damage)
     mission.explosions.update(dt)
+    mission.flares.update(dt)
 
     # If we're in a crash animation, run the crash sequence and skip gameplay updates.
     if mission.crash_active:
@@ -1297,7 +1304,15 @@ def _damage_helicopter(
     logger: logging.Logger | None,
     source: str,
 ) -> None:
-    if mission.invuln_seconds > 0.0 or mission.ended or mission.crash_active:
+    if mission.ended or mission.crash_active:
+        return
+
+    # Respawn i-frames (blocks all damage).
+    if mission.invuln_seconds > 0.0:
+        return
+
+    # Flare i-frames (blocks only projectile/artillery damage).
+    if mission.flare_invuln_seconds > 0.0 and source in ("ENEMY_BULLET", "ARTILLERY"):
         return
 
     before = helicopter.damage
@@ -1364,6 +1379,7 @@ def _handle_crash_and_respawn(
     mission.crash_seconds = 0.0
     mission.crash_impacted = False
     mission.crash_impact_seconds = 0.0
+    mission.crash_impact_sfx_pending = False
     mission.crash_origin = Vec2(float(helicopter.pos.x), float(helicopter.pos.y))
     mission.crash_vel = Vec2(float(helicopter.vel.x) * 0.45, float(helicopter.vel.y))
     mission.crash_variant = 0 if random.random() < 0.5 else 1
@@ -1417,6 +1433,7 @@ def _update_crash_sequence(
         if float(helicopter.pos.y) >= ground_contact_y:
             mission.crash_impacted = True
             mission.crash_impact_seconds = 0.0
+            mission.crash_impact_sfx_pending = True
             helicopter.pos = Vec2(float(helicopter.pos.x), ground_contact_y)
             helicopter.vel = Vec2(0.0, 0.0)
             mission.crash_vel = Vec2(0.0, 0.0)
@@ -1439,6 +1456,7 @@ def _update_crash_sequence(
 
     # Respawn.
     mission.crash_active = False
+    mission.crash_impact_sfx_pending = False
     helicopter.crashing = False
     helicopter.crash_hide = False
     helicopter.crash_roll_deg = 0.0
@@ -1453,6 +1471,7 @@ def _update_crash_sequence(
     helicopter.facing = Facing.LEFT
     helicopter.pos = Vec2(mission.base.pos.x + mission.base.width * 0.5, heli.ground_y - 120.0)
     mission.invuln_seconds = 2.0
+    mission.flare_invuln_seconds = 0.0
 
     if logger is not None:
         logger.info("RESPAWN: invuln=%.1fs fuel=%.0f", mission.invuln_seconds, helicopter.fuel)

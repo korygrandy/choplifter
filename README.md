@@ -80,6 +80,7 @@ Notes:
 - Cycle facing: Tab
 - Reverse flip: R
 - Fire: Space (side-facing = bullet, forward-facing = bomb)
+- Flares (defense): F
 - Toggle doors (only when grounded): E
 - Toggle debug overlay: F1
 
@@ -125,8 +126,9 @@ If you connect an Xbox-style controller, the game will show an on-screen toast w
 - Left trigger: lift down
 - A: toggle doors (only when grounded)
 - X: fire
-- Y: cycle facing
-- B: reverse flip
+- Y: reverse flip
+- B: flares (defense)
+- Back/Select: cycle facing
 - D-pad: optional discrete tilt/lift
 
 ### How to rescue (prototype)

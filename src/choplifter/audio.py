@@ -164,6 +164,7 @@ class AudioBank:
     explosion_small: pygame.mixer.Sound | None
     explosion_big: pygame.mixer.Sound | None
     mine_explosion: pygame.mixer.Sound | None
+    flare_defense: pygame.mixer.Sound | None
     artillery_shot: pygame.mixer.Sound | None
     artillery_impact_a: pygame.mixer.Sound | None
     artillery_impact_b: pygame.mixer.Sound | None
@@ -173,6 +174,7 @@ class AudioBank:
     board: pygame.mixer.Sound | None
     rescue: pygame.mixer.Sound | None
     crash: pygame.mixer.Sound | None
+    chopper_crash: pygame.mixer.Sound | None
     flying_loop: pygame.mixer.Sound | None
     menu_select: pygame.mixer.Sound | None
     pause: pygame.mixer.Sound | None
@@ -196,6 +198,7 @@ class AudioBank:
                 explosion_small=None,
                 explosion_big=None,
                 mine_explosion=None,
+                flare_defense=None,
                 artillery_shot=None,
                 artillery_impact_a=None,
                 artillery_impact_b=None,
@@ -205,6 +208,7 @@ class AudioBank:
                 board=None,
                 rescue=None,
                 crash=None,
+                chopper_crash=None,
                 flying_loop=None,
                 menu_select=None,
                 pause=None,
@@ -240,6 +244,7 @@ class AudioBank:
             explosion = explosion_big
 
             mine_explosion = _try_load_asset_sound(asset_dir / "mine-explosion.wav")
+            flare_defense = _try_load_asset_sound(asset_dir / "flare-defense.wav")
 
             door_o = _sine_pcm16(freq_hz=392.0, duration_s=0.06, volume=0.22, sample_rate=sample_rate)
             door_c = _sine_pcm16(freq_hz=294.0, duration_s=0.06, volume=0.22, sample_rate=sample_rate)
@@ -276,6 +281,7 @@ class AudioBank:
             bomb = _try_load_asset_sound(asset_dir / "bomb.wav") or bomb
             rescue = _try_load_asset_sound(asset_dir / "rescue.wav") or rescue
             crash = _try_load_asset_sound(asset_dir / "crash.wav") or crash
+            chopper_crash = _try_load_asset_sound(asset_dir / "chopper-crash.wav")
             doors_open = _try_load_asset_sound(asset_dir / "doors_open.wav") or doors_open
             doors_close = _try_load_asset_sound(asset_dir / "doors_close.wav") or doors_close
             board = _try_load_asset_sound(asset_dir / "board.wav") or board
@@ -290,11 +296,15 @@ class AudioBank:
             explosion.set_volume(0.60)
             if mine_explosion is not None:
                 mine_explosion.set_volume(0.60)
+            if flare_defense is not None:
+                flare_defense.set_volume(0.60)
             doors_open.set_volume(0.25)
             doors_close.set_volume(0.25)
             board.set_volume(0.22)
             rescue.set_volume(0.40)
             crash.set_volume(0.55)
+            if chopper_crash is not None:
+                chopper_crash.set_volume(0.70)
             if artillery_shot is not None:
                 artillery_shot.set_volume(0.55)
             if artillery_impact_a is not None:
@@ -318,6 +328,7 @@ class AudioBank:
                 explosion_small=explosion_small,
                 explosion_big=explosion_big,
                 mine_explosion=mine_explosion,
+                flare_defense=flare_defense,
                 artillery_shot=artillery_shot,
                 artillery_impact_a=artillery_impact_a,
                 artillery_impact_b=artillery_impact_b,
@@ -327,6 +338,7 @@ class AudioBank:
                 board=board,
                 rescue=rescue,
                 crash=crash,
+                chopper_crash=chopper_crash,
                 flying_loop=flying_loop,
                 menu_select=menu_select,
                 pause=pause,
@@ -340,6 +352,7 @@ class AudioBank:
                 explosion_small=None,
                 explosion_big=None,
                 mine_explosion=None,
+                flare_defense=None,
                 artillery_shot=None,
                 artillery_impact_a=None,
                 artillery_impact_b=None,
@@ -349,6 +362,7 @@ class AudioBank:
                 board=None,
                 rescue=None,
                 crash=None,
+                chopper_crash=None,
                 flying_loop=None,
                 menu_select=None,
                 pause=None,
@@ -446,6 +460,9 @@ class AudioBank:
     def play_mine_explosion(self) -> None:
         self._play(self.mine_explosion, bus="sfx")
 
+    def play_flare_defense(self) -> None:
+        self._play(self.flare_defense, bus="sfx")
+
     def play_artillery_shot(self) -> None:
         self._play(self.artillery_shot, bus="sfx")
 
@@ -484,6 +501,9 @@ class AudioBank:
 
     def play_crash(self) -> None:
         self._play(self.crash, bus="sfx")
+
+    def play_chopper_crash(self) -> None:
+        self._play(self.chopper_crash, bus="sfx")
 
     def play_jet_flyby(self) -> None:
         self._play(self.jet_flyby, bus="sfx")

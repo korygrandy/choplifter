@@ -55,6 +55,7 @@ class Controls:
     reverse_flip: tuple[int, ...]
     doors: tuple[int, ...]
     fire: tuple[int, ...]
+    flare: tuple[int, ...]
 
     @staticmethod
     def defaults() -> "Controls":
@@ -71,6 +72,7 @@ class Controls:
             reverse_flip=(pygame.K_r,),
             doors=(pygame.K_e,),
             fire=(pygame.K_SPACE,),
+            flare=(pygame.K_f,),
         )
 
 
@@ -125,6 +127,7 @@ def load_controls(*, logger: logging.Logger | None = None) -> Controls:
         reverse_flip=override("reverse_flip", controls.reverse_flip),
         doors=override("doors", controls.doors),
         fire=override("fire", controls.fire),
+        flare=override("flare", controls.flare),
     )
 
 

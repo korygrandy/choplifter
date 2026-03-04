@@ -1026,6 +1026,15 @@ def _draw_explosion_particles(screen: pygame.Surface, mission: MissionState, *, 
     _draw_fx_particles(screen, list(getattr(explosions, "particles", [])), camera_x=camera_x)
 
 
+def draw_flares(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0, enable_particles: bool = True) -> None:
+    if not enable_particles:
+        return
+    flares = getattr(mission, "flares", None)
+    if flares is None:
+        return
+    _draw_fx_particles(screen, list(getattr(flares, "particles", [])), camera_x=camera_x)
+
+
 def draw_helicopter_damage_fx(
     screen: pygame.Surface,
     mission: MissionState,
