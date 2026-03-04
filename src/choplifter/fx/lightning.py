@@ -59,4 +59,20 @@ class LightningSystem:
         import pygame
         for strike in self.strikes:
             if strike.active:
-                pygame.draw.line(surface, color, (strike.x, strike.y_start), (strike.x, strike.y_end), 4)
+                # Draw a jagged, tree-like lightning bolt
+                num_segments = 12
+                x = strike.x
+                y = strike.y_start
+                y_end = strike.y_end
+                segment_length = (y_end - y) / num_segments
+                points = [(x, y)]
+                for i in range(1, num_segments):
+                    # Random horizontal offset for jaggedness
+                    offset = random.randint(-18, 18)
+                    new_x = x + offset
+                    new_y = y + segment_length
+                    points.append((new_x, new_y))
+                    x, y = new_x, new_y
+                points.append((strike.x, y_end))  # End at original x, bottom
+                # Draw the segments
+                pygame.draw.lines(surface, color, False, points, 4)
