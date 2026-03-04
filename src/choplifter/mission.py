@@ -7,6 +7,7 @@ import random
 
 from .burning_particles import BurningParticleSystem
 from .fx_particles import DustStormSystem, ExplosionSystem, FlareSystem, HelicopterDamageFxSystem, ImpactSparkSystem, JetTrailSystem
+import pygame
 from .game_types import EnemyKind, HostageState, ProjectileKind
 from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
@@ -1001,6 +1002,11 @@ def _update_enemies(
 
             if _hits_circle(e.pos, helicopter.pos, radius=tuning.jet_collision_radius):
                 _damage_helicopter(mission, helicopter, tuning.jet_touch_damage, logger, source="JET")
+                if hasattr(mission, "audio") and mission.audio is not None:
+                    try:
+                        mission.audio.play_midair_collision()
+                    except Exception:
+                        pass
 
         elif e.kind is EnemyKind.AIR_MINE:
             to_heli = Vec2(helicopter.pos.x - e.pos.x, helicopter.pos.y - e.pos.y)
@@ -1165,10 +1171,13 @@ def _damage_helicopter(
             helicopter.damage_flash_rgb = (255, 60, 60)
 
         # Play warning beeps if damage crosses threshold (e.g., 70%)
-        if hasattr(mission, "audio") and mission.audio is not None:
+        if hasattr(mission, "audio") and mission.audio is not None and mission.audio.chopper_warning_beeps is not None:
             try:
+                # Start looping as soon as damage >= 70
                 if before < 70.0 and helicopter.damage >= 70.0:
-                    mission.audio.play_chopper_warning_beeps()
+                    ch = pygame.mixer.Channel(7)
+                    if not ch.get_busy():
+                        ch.play(mission.audio.chopper_warning_beeps, loops=-1)
             except Exception:
                 pass
 
@@ -1282,6 +1291,12 @@ def _update_crash_sequence(
         # Clamp into world bounds.
         helicopter.pos = Vec2(clamp(float(helicopter.pos.x), 0.0, float(mission.world_width)), float(helicopter.pos.y))
 
+        # --- Play warning beeps in a loop during crash spin ---
+        if hasattr(mission, "audio") and mission.audio is not None and mission.audio.chopper_warning_beeps is not None:
+            ch = pygame.mixer.Channel(7)
+            if not ch.get_busy():
+                ch.play(mission.audio.chopper_warning_beeps, loops=-1)
+
         if float(helicopter.pos.y) >= ground_contact_y:
             mission.crash_impacted = True
             mission.crash_impact_seconds = 0.0
@@ -1289,6 +1304,12 @@ def _update_crash_sequence(
             helicopter.pos = Vec2(float(helicopter.pos.x), ground_contact_y)
             helicopter.vel = Vec2(0.0, 0.0)
             mission.crash_vel = Vec2(0.0, 0.0)
+
+            # Stop warning beeps on ground contact
+            try:
+                pygame.mixer.Channel(7).stop()
+            except Exception:
+                pass
 
             # Explosion on impact.
             impact_pos = Vec2(float(helicopter.pos.x), float(heli.ground_y) - 10.0)

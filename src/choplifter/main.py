@@ -429,7 +429,7 @@ def run() -> None:
                 # A activates current focus.
                 if a_down and not prev_btn_a_down:
                     if pause_focus == "restart_mission":
-                        reset_game()
+                        reset_game_wrapper()
                         mode = "playing"
                         audio.play_pause_toggle()
                         audio.set_pause_menu_active(False)
