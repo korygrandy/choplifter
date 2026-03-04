@@ -438,6 +438,9 @@ def draw_chopper_select_overlay(
     restart_selected: bool = False,
     show_restart_game: bool = False,
     restart_game_selected: bool = False,
+    show_cutscenes: bool = False,
+    cutscenes_selected: bool = False,
+    cutscenes_enabled: bool = True,
     show_mute: bool = False,
     mute_selected: bool = False,
     muted: bool = False,
@@ -561,6 +564,8 @@ def draw_chopper_select_overlay(
             base_y += btn_h + 12
         if show_restart_game:
             base_y += btn_h + 12
+        if show_cutscenes:
+            base_y += btn_h + 12
 
         btn_y = base_y
         btn = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
@@ -572,6 +577,34 @@ def draw_chopper_select_overlay(
 
         label = f"Mute: {'ON' if muted else 'OFF'}"
         text = hint_font.render(label, True, (240, 240, 240) if mute_selected else (200, 200, 200))
+        screen.blit(text, (btn.centerx - text.get_width() // 2, btn.centery - text.get_height() // 2))
+
+    if show_cutscenes:
+        btn_w = min(320, w - 80)
+        btn_h = 52
+        btn_x = w // 2 - btn_w // 2
+
+        base_y = box_top + box_h + 22
+        if show_restart:
+            base_y += btn_h + 12
+        if show_restart_game:
+            base_y += btn_h + 12
+
+        btn_y = base_y
+        btn = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+        panel = pygame.Surface((btn.width, btn.height), pygame.SRCALPHA)
+        panel.fill((20, 20, 20, 200) if cutscenes_selected else (10, 10, 10, 180))
+        screen.blit(panel, btn.topleft)
+        pygame.draw.rect(
+            screen,
+            (240, 240, 240) if cutscenes_selected else (160, 160, 160),
+            btn,
+            4 if cutscenes_selected else 2,
+        )
+
+        label = f"Cut-scenes: {'ON' if cutscenes_enabled else 'OFF'}"
+        text = hint_font.render(label, True, (240, 240, 240) if cutscenes_selected else (200, 200, 200))
         screen.blit(text, (btn.centerx - text.get_width() // 2, btn.centery - text.get_height() // 2))
 
 

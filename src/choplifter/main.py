@@ -221,8 +221,9 @@ def run() -> None:
     hostage_cutscene_video: IntroVideoPlayer | None = None
     prev_menu_dir = 0
     prev_menu_vert = 0
-    pause_focus: str = "choppers"  # choppers | restart_mission | restart_game | mute
+    pause_focus: str = "choppers"  # choppers | restart_mission | restart_game | cutscenes | mute
     muted = False
+    cutscenes_enabled = True
 
     mission = MissionState.create_from_level_config(heli_settings, get_mission_config_by_id(selected_mission_id))
     helicopter = Helicopter.spawn(
@@ -273,6 +274,8 @@ def run() -> None:
     def start_hostage_cutscene() -> None:
         nonlocal mode, hostage_cutscene_t, hostage_cutscene_seconds, hostage_cutscene_video, accumulator
         if mode != "playing":
+            return
+        if not cutscenes_enabled:
             return
 
         # Pause gameplay audio while the cutscene runs.
@@ -442,6 +445,8 @@ def run() -> None:
                     if event.key in (pygame.K_UP, pygame.K_w):
                         prev_pause_focus = pause_focus
                         if pause_focus == "mute":
+                            pause_focus = "cutscenes"
+                        elif pause_focus == "cutscenes":
                             pause_focus = "restart_game"
                         elif pause_focus == "restart_game":
                             pause_focus = "restart_mission"
@@ -456,6 +461,8 @@ def run() -> None:
                         elif pause_focus == "restart_mission":
                             pause_focus = "restart_game"
                         elif pause_focus == "restart_game":
+                            pause_focus = "cutscenes"
+                        elif pause_focus == "cutscenes":
                             pause_focus = "mute"
                         if pause_focus != prev_pause_focus:
                             audio.play_menu_select()
@@ -481,6 +488,8 @@ def run() -> None:
                             set_toast("Restart Game")
                             audio.play_pause_toggle()
                             audio.set_pause_menu_active(False)
+                        elif pause_focus == "cutscenes":
+                            cutscenes_enabled = not cutscenes_enabled
                         elif pause_focus == "mute":
                             muted = not muted
                             audio.set_muted(muted)
@@ -651,6 +660,8 @@ def run() -> None:
                     prev_pause_focus = pause_focus
                     if menu_vert < 0:
                         if pause_focus == "mute":
+                            pause_focus = "cutscenes"
+                        elif pause_focus == "cutscenes":
                             pause_focus = "restart_game"
                         elif pause_focus == "restart_game":
                             pause_focus = "restart_mission"
@@ -662,6 +673,8 @@ def run() -> None:
                         elif pause_focus == "restart_mission":
                             pause_focus = "restart_game"
                         elif pause_focus == "restart_game":
+                            pause_focus = "cutscenes"
+                        elif pause_focus == "cutscenes":
                             pause_focus = "mute"
                     if pause_focus != prev_pause_focus:
                         audio.play_menu_select()
@@ -686,6 +699,8 @@ def run() -> None:
                         set_toast("Restart Game")
                         audio.play_pause_toggle()
                         audio.set_pause_menu_active(False)
+                    elif pause_focus == "cutscenes":
+                        cutscenes_enabled = not cutscenes_enabled
                     elif pause_focus == "mute":
                         muted = not muted
                         audio.set_muted(muted)
@@ -789,8 +804,7 @@ def run() -> None:
                     audio.play_board()
                     prev_boarded = boarded_now
 
-                if boarded_now == heli_settings.capacity and not getattr(mission, "hostage_cutscene_played", False):
-                    mission.hostage_cutscene_played = True
+                if cutscenes_enabled and boarded_now == heli_settings.capacity and boarded_delta > 0:
                     start_hostage_cutscene()
                     break
 
@@ -947,6 +961,9 @@ def run() -> None:
                     show_mute=True,
                     mute_selected=(pause_focus == "mute"),
                     muted=muted,
+                    show_cutscenes=True,
+                    cutscenes_selected=(pause_focus == "cutscenes"),
+                    cutscenes_enabled=cutscenes_enabled,
                     show_restart=True,
                     restart_selected=(pause_focus == "restart_mission"),
                     show_restart_game=True,

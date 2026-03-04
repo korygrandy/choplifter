@@ -225,9 +225,6 @@ class MissionState:
     crashes: int = 0
     invuln_seconds: float = 0.0
 
-    # One-time cutscene triggers (reset when mission is recreated).
-    hostage_cutscene_played: bool = False
-
     # Crash animation state (damage >= 100 triggers crash sequence).
     crash_active: bool = False
     crash_variant: int = 0  # 0=level spin, 1=tail-spin
