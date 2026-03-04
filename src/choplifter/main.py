@@ -50,6 +50,7 @@ from .app.cutscenes import (
 )
 from .app.state import CutsceneState, IntroCutsceneState, MissionCutsceneState
 from .app.input import get_active_joystick, read_gamepad
+from .app.feedback import ScreenShakeState, consume_mission_feedback, rough_landing_feedback, update_screenshake_target
 
 
 def run() -> None:
@@ -89,31 +90,7 @@ def run() -> None:
     joysticks: dict[int, pygame.joystick.Joystick] = {}
 
     # Cinematic feedback (screenshake + audio duck).
-    shake_remaining_s = 0.0
-    shake_total_s = 0.0
-    shake_strength = 0.0
-    shake_surface: pygame.Surface | None = None
-
-    def _clamp01(v: float) -> float:
-        if v < 0.0:
-            return 0.0
-        if v > 1.0:
-            return 1.0
-        return v
-
-    def add_screenshake(strength: float) -> None:
-        nonlocal shake_remaining_s, shake_total_s, shake_strength
-        if not screenshake_enabled:
-            return
-
-        s = _clamp01(float(strength))
-        if s <= 0.0:
-            return
-
-        shake_strength = max(shake_strength, s)
-        duration_s = 0.08 + 0.20 * s
-        shake_remaining_s = max(shake_remaining_s, duration_s)
-        shake_total_s = max(shake_total_s, shake_remaining_s)
+    screenshake = ScreenShakeState()
     toast_message = ""
     toast_seconds = 0.0
 
@@ -836,34 +813,25 @@ def run() -> None:
                         )
 
                         # Cinematic feedback on rough landings.
-                        vy = abs(float(helicopter.last_landing_vy))
-                        safe = max(0.001, float(physics.safe_landing_vy))
-                        if vy > safe and mission.invuln_seconds <= 0.0 and not mission.ended:
-                            severity = (vy - safe) / (safe * 1.25)
-                            severity = _clamp01(severity)
-                            add_screenshake(0.35 + 0.65 * severity)
-                            if severity >= 0.60:
-                                audio.trigger_duck(strength=0.45 + 0.55 * severity)
+                        rough_landing_feedback(
+                            state=screenshake,
+                            landing_vy=float(helicopter.last_landing_vy),
+                            safe_landing_vy=float(physics.safe_landing_vy),
+                            invuln_seconds=float(mission.invuln_seconds),
+                            ended=bool(mission.ended),
+                            audio=audio,
+                            screenshake_enabled=screenshake_enabled,
+                        )
                         audio.stop_flying()
                 update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
 
                 # Consume cinematic feedback impulses produced by mission damage events.
-                shake_impulse = float(getattr(mission, "feedback_shake_impulse", 0.0))
-                if shake_impulse > 0.0:
-                    add_screenshake(shake_impulse)
-                    mission.feedback_shake_impulse = 0.0
-                duck_strength = float(getattr(mission, "feedback_duck_strength", 0.0))
-                if duck_strength > 0.0:
-                    # Only apply duck for bigger impacts.
-                    if duck_strength >= 0.55:
-                        audio.trigger_duck(strength=duck_strength)
-                    mission.feedback_duck_strength = 0.0
-
-                if getattr(mission, "crash_impact_sfx_pending", False):
-                    add_screenshake(1.0)
-                    audio.trigger_duck(strength=1.0)
-                    audio.play_chopper_crash()
-                    mission.crash_impact_sfx_pending = False
+                consume_mission_feedback(
+                    state=screenshake,
+                    mission=mission,
+                    audio=audio,
+                    screenshake_enabled=screenshake_enabled,
+                )
 
                 helicopter.damage_flash_seconds = max(0.0, helicopter.damage_flash_seconds - tick.dt)
 
@@ -974,24 +942,13 @@ def run() -> None:
         audio.update(frame_dt)
 
         # Screenshake offsets (render-time only; affects the whole frame).
-        shake_x = 0
-        shake_y = 0
-        if mode == "playing" and screenshake_enabled and shake_remaining_s > 0.0:
-            shake_remaining_s = max(0.0, shake_remaining_s - frame_dt)
-            t = shake_remaining_s / max(0.001, shake_total_s)
-            amp = (1.5 + 6.0 * shake_strength) * t
-            shake_x = int(random.uniform(-amp, amp))
-            shake_y = int(random.uniform(-amp, amp))
-        elif shake_remaining_s <= 0.0:
-            shake_remaining_s = 0.0
-            shake_total_s = 0.0
-            shake_strength = 0.0
-
-        target = screen
-        if mode == "playing" and screenshake_enabled and (shake_x != 0 or shake_y != 0):
-            if shake_surface is None or shake_surface.get_size() != screen.get_size():
-                shake_surface = pygame.Surface(screen.get_size())
-            target = shake_surface
+        target, shake_x, shake_y = update_screenshake_target(
+            state=screenshake,
+            frame_dt=frame_dt,
+            enabled=screenshake_enabled,
+            mode=mode,
+            screen=screen,
+        )
 
         # Render.
         if mode == "intro":
