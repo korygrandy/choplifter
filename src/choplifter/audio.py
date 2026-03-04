@@ -84,6 +84,7 @@ BusName = Literal["sfx", "ui", "music"]
 
 
 @dataclass
+
 class AudioMixer:
     """Simple audio bus routing built on pygame mixer channels.
 
@@ -91,12 +92,27 @@ class AudioMixer:
     categories can play concurrently and later be mixed/controlled separately.
     """
 
+    def set_bus_volume(self, bus: BusName, volume: float) -> None:
+        """Set the volume for all channels in the specified bus."""
+        channels = self.buses.get(bus, [])
+        for ch in channels:
+            try:
+                ch.set_volume(volume)
+            except Exception:
+                pass
+
     def __post_init__(self):
-        # Initialize audio buses and active loops if not already present
-        if not hasattr(self, 'buses'):
-            self.buses = {"sfx": [], "ui": [], "music": []}
-        if not hasattr(self, 'active_loops'):
-            self.active_loops = {}
+        # Assign dedicated channels to each bus for proper routing
+        total_channels = 16
+        pygame.mixer.set_num_channels(total_channels)
+        # Example: 8 SFX, 2 UI, 6 music (flying loop, etc)
+        bus_layout = {
+            "sfx": list(range(0, 8)),
+            "ui": list(range(8, 10)),
+            "music": list(range(10, 16)),
+        }
+        self.buses = {bus: [pygame.mixer.Channel(idx) for idx in idxs] for bus, idxs in bus_layout.items()}
+        self.active_loops = {}
 
     def play(self, sound: pygame.mixer.Sound, bus: BusName = "sfx") -> None:
         """Play a one-shot sound on the specified bus."""
@@ -145,11 +161,50 @@ class AudioBank:
     _duck_min_factor: float = field(default=1.0, init=False, repr=False)
     _duck_current_factor: float = field(default=1.0, init=False, repr=False)
     mixer: AudioMixer | None
+    _pause_menu_active: bool = field(default=False, init=False, repr=False)
     shoot: pygame.mixer.Sound | None
     bomb: pygame.mixer.Sound | None
     explosion: pygame.mixer.Sound | None
     explosion_small: pygame.mixer.Sound | None
     explosion_big: pygame.mixer.Sound | None
+    mine_explosion: pygame.mixer.Sound | None
+    flare_defense: pygame.mixer.Sound | None
+    artillery_shot: pygame.mixer.Sound | None
+    artillery_impact_a: pygame.mixer.Sound | None
+    artillery_impact_b: pygame.mixer.Sound | None
+    jet_flyby: pygame.mixer.Sound | None
+    midair_collision: pygame.mixer.Sound | None
+    chopper_warning_beeps: pygame.mixer.Sound | None
+    doors_open: pygame.mixer.Sound | None
+    doors_close: pygame.mixer.Sound | None
+    board: pygame.mixer.Sound | None
+    rescue: pygame.mixer.Sound | None
+    crash: pygame.mixer.Sound | None
+    chopper_crash: pygame.mixer.Sound | None
+    flying_loop: pygame.mixer.Sound | None
+    menu_select: pygame.mixer.Sound | None
+    pause: pygame.mixer.Sound | None
+
+    def start_flying(self) -> None:
+        """Starts the helicopter flying loop sound if available."""
+        if hasattr(self, "mixer") and self.mixer is not None and self.flying_loop is not None:
+            self.mixer.play_loop(self.flying_loop, key="flying_loop", bus="music", fade_in_ms=500)
+        elif self.flying_loop is not None:
+            try:
+                self.flying_loop.play(loops=-1, fade_ms=500)
+            except Exception:
+                pass
+
+    def stop_flying(self) -> None:
+        """Stops the helicopter flying loop sound if active."""
+        if hasattr(self, "mixer") and self.mixer is not None:
+            self.mixer.stop_loop(key="flying_loop")
+        else:
+            # Fallback: stop all channels if no mixer
+            try:
+                pygame.mixer.stop()
+            except Exception:
+                pass
     mine_explosion: pygame.mixer.Sound | None
     flare_defense: pygame.mixer.Sound | None
     artillery_shot: pygame.mixer.Sound | None
@@ -232,6 +287,13 @@ class AudioBank:
         Attempts to create and return an AudioBank instance, loading all required sounds.
         Returns the AudioBank object if successful, or a silent fallback if loading fails.
         """
+        # Explicitly initialize the mixer and set channels for bus routing
+        try:
+            pygame.mixer.quit()
+        except Exception:
+            pass
+        pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+        pygame.mixer.set_num_channels(16)
         try:
             mixer = AudioMixer()
             sample_rate = 22050
