@@ -52,6 +52,7 @@ from .app.state import CutsceneState, IntroCutsceneState, MissionCutsceneState
 from .app.input import get_active_joystick, read_gamepad
 from .app.feedback import ScreenShakeState, consume_mission_feedback, rough_landing_feedback, update_screenshake_target
 from .app.flares import FlareState, reset_flares, try_start_flare_salvo, update_flares
+from .app.gamepads import init_connected_joysticks, handle_joy_device_added, handle_joy_device_removed
 
 
 def run() -> None:
@@ -109,14 +110,7 @@ def run() -> None:
         toast_message = message
         toast_seconds = 3.0
 
-    for i in range(pygame.joystick.get_count()):
-        js = pygame.joystick.Joystick(i)
-        js.init()
-        joysticks[js.get_instance_id()] = js
-        name = js.get_name() or "Gamepad"
-        logger.info("GAMEPAD_CONNECTED: %s", name)
-        logger.info("GAMEPAD_INFO: axes=%d buttons=%d hats=%d", js.get_numaxes(), js.get_numbuttons(), js.get_numhats())
-        set_toast(f"Gamepad connected: {name}")
+    joysticks = init_connected_joysticks(logger=logger, set_toast=set_toast)
 
     particles_enabled = accessibility.particles_enabled
     flashes_enabled = accessibility.flashes_enabled
@@ -339,18 +333,9 @@ def run() -> None:
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.JOYDEVICEADDED:
-                js = pygame.joystick.Joystick(event.device_index)
-                js.init()
-                joysticks[js.get_instance_id()] = js
-                name = js.get_name() or "Gamepad"
-                logger.info("GAMEPAD_CONNECTED: %s", name)
-                logger.info("GAMEPAD_INFO: axes=%d buttons=%d hats=%d", js.get_numaxes(), js.get_numbuttons(), js.get_numhats())
-                set_toast(f"Gamepad connected: {name}")
+                handle_joy_device_added(event.device_index, joysticks=joysticks, logger=logger, set_toast=set_toast)
             elif event.type == pygame.JOYDEVICEREMOVED:
-                removed = joysticks.pop(event.instance_id, None)
-                name = removed.get_name() if removed is not None else "Gamepad"
-                logger.info("GAMEPAD_DISCONNECTED: %s", name)
-                set_toast(f"Gamepad disconnected: {name}")
+                handle_joy_device_removed(event.instance_id, joysticks=joysticks, logger=logger, set_toast=set_toast)
                 prev_btn_a_down = False
                 prev_btn_b_down = False
                 prev_btn_x_down = False
