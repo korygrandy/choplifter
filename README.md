@@ -45,6 +45,15 @@ The C64 version was ported by Dane Bigham and published by Brøderbund. It is of
 
 ## Prototype (WIP)
 
+
+## New in 2026: Weather/Particle SFX, Debug Mode, and Input Lockout
+
+- **Weather/Particle SFX:** Robust Rain, Fog, Dust, and Lightning systems with tunable parameters and visual feedback.
+- **Debug Mode:** Press F3 in-game to toggle debug mode (overlay appears). Use F5/F6 to cycle weather for rapid testing. Debug state persists across pause/unpause.
+- **Input Disablement:** All player input is locked when the mission ends, preventing accidental actions post-completion.
+
+---
+
 This repo now contains a small Python/Pygame prototype scaffold (Milestone A).
 
 Milestone B adds a basic rescue loop (compounds → hostages → boarding → unload at base → “THE END” at 20 saved).

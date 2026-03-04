@@ -10,6 +10,9 @@ The remake is built to be **logically faithful** to the classic feel (tight arca
 - **Game Loop:** Fixed-step simulation (60Hz) with rendering decoupled
 - **Core Loop:** Locate compounds, open them (combat), pick up hostages (doors + grounded), return to base, repeat
 - **Threats (Implemented):** Ground armor, fast air threats, and homing air mines
+- **Weather/Particle SFX:** Robust Rain, Fog, Dust, and Lightning systems with tunable parameters and visual feedback.
+- **Debug Mode:** In-game toggle (F3) and weather cycling (F5/F6) for rapid developer testing; overlay and state persist across pause/unpause.
+- **Input Disablement:** All player input is locked on mission end to prevent accidental actions.
 - **UX:** Gamepad support, mission restart/pause flows, chopper selection, accessibility toggles
 
 ## Why It’s Compelling

@@ -1,5 +1,13 @@
 # Choplifter Sequel — Game Plan (Working Doc)
 
+---
+
+**2026 Update:**
+- Robust weather/particle SFX (Rain, Fog, Dust, Lightning) are now implemented and tunable.
+- In-game debug mode (F3 toggle, F5/F6 weather cycling) is available for rapid developer testing.
+- Input is disabled on mission end to prevent accidental actions.
+See LLM_HANDOFF.md for developer workflow and debug/testing instructions.
+
 ## 0) Goals & Non-Goals
 
 **Goal:** Build a *sequel* that preserves the original’s signature feel (tilt-to-accelerate inertia flight + tense rescues) while adding modern mission variety and a small amount of systemic consequence.

@@ -73,16 +73,20 @@ The LLM should prioritize the following modern implementation strategies:
 
 This section is for future LLMs working on the *actual* code in this repository.
 
+
 ### What exists today
 
 - Python + Pygame prototype with a playable rescue loop (open compounds → board hostages → unload at base → win at 20 saved).
+- **Robust weather/particle SFX systems:** Rain, Fog, Dust, and Lightning, all with tunable parameters and visual feedback.
+- **Debug mode:** Toggle with F3; cycle weather with F5/F6 for rapid developer testing. Debug overlay is visible in-game and persists across pause/unpause.
+- **Input disablement on mission end:** All player input is locked when the mission ends, ensuring no accidental actions post-completion.
 - Intro cutscene video playback (with optional audio extraction/playback) and a skip hint.
 - Windows packaging via PyInstaller (both onefile and onedir builds).
 
 ### Entry points & layout
 
 - Entrypoint: `run.py` imports `src.choplifter.main:run`.
-- Game loop/state: `src/choplifter/main.py`.
+- Game loop/state: `src/choplifter/main.py` (now includes weather/particle SFX, debug mode, and input disablement logic).
 - App helpers (early modularization): `src/choplifter/app/` (cutscene state + helpers).
 - Mission/rescue logic: `src/choplifter/mission.py`.
 - Mission configs/tuning: `src/choplifter/mission_configs.py` (LevelConfig + MissionTuning + `get_mission_config_by_id`).
@@ -130,3 +134,19 @@ This section is for future LLMs working on the *actual* code in this repository.
 - Rescue loop readability: HUD displays grounded/doors state during missions.
 - Hostage movement: when hostages begin moving to the helicopter, the game mixes a more controlled “queue” behavior with an occasional chaotic rush. This is controlled by `MissionTuning` fields in `src/choplifter/mission.py`:
 	- `hostage_controlled_*`, `hostage_chaotic_*`, `hostage_chaos_probability`
+
+### Weather/Particle SFX & Debug Mode (2026 Developer Workflow)
+
+- **Weather/particle SFX:**
+	- Rain, Fog, Dust, and Lightning systems are modular and tunable.
+	- Weather can be cycled in debug mode for rapid visual testing.
+	- Lightning disables HUD/targeting for a short duration, with a visual overlay and toast notification.
+- **Debug mode:**
+	- Toggle with F3 (in-game overlay appears).
+	- Cycle weather with F5/F6 (wraps through all weather modes).
+	- Debug mode and weather state persist across pause/unpause.
+- **Input disablement:**
+	- When the mission ends, all player input is disabled until the next mission or restart.
+- **Developer workflow:**
+	- Use debug mode to test weather/particle effects and input lockout.
+	- All features are documented in this handoff and in-game overlays/toasts.
