@@ -983,13 +983,20 @@ def _draw_fx_particles(screen: pygame.Surface, particles: list[object], *, camer
         radius_f = float(getattr(p, "radius", 4.0))
         radius = int(max(1.0, radius_f))
 
+        intensity = float(getattr(p, "intensity", 1.0))
+        if not math.isfinite(intensity):
+            intensity = 1.0
+        intensity = max(0.0, intensity)
+
         if kind == "ember":
-            alpha = int(240 * (1.0 - t))
+            alpha = int(240 * (1.0 - t) * intensity)
             sprite = _get_burn_sprite("ember", radius)
         else:
-            alpha = int(120 * (1.0 - t) * (1.0 - t))
+            alpha = int(120 * (1.0 - t) * (1.0 - t) * intensity)
             radius = int(max(1.0, radius_f * (1.0 + 0.45 * t)))
             sprite = _get_burn_sprite("smoke", radius)
+
+        alpha = max(0, min(255, alpha))
 
         if alpha <= 0:
             continue
