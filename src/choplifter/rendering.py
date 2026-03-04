@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 import math
+from typing import TYPE_CHECKING
 import pygame
 
 from .helicopter import Facing, Helicopter
-from .mission import EnemyKind, HostageState, MissionState, ProjectileKind
+from .game_types import EnemyKind, HostageState, ProjectileKind
+
+if TYPE_CHECKING:
+    from .mission import MissionState
 
 
 _HUD_FONT: pygame.font.Font | None = None

@@ -1,28 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
 import logging
 import math
 import random
 
 from .burning_particles import BurningParticleSystem
 from .fx_particles import DustStormSystem, ExplosionSystem, FlareSystem, HelicopterDamageFxSystem, ImpactSparkSystem, JetTrailSystem
+from .game_types import EnemyKind, HostageState, ProjectileKind
 from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
 from .settings import HelicopterSettings
 from . import haptics
-
-
-class HostageState(Enum):
-    IDLE = 0
-    PANIC = 1
-    MOVING_TO_LZ = 2
-    WAITING = 3
-    BOARDED = 4
-    EXITING = 5
-    SAVED = 6
-    KIA = 7
 
 
 @dataclass
@@ -52,13 +41,6 @@ class Compound:
         )
 
 
-class ProjectileKind(Enum):
-    BULLET = 1
-    BOMB = 2
-    ENEMY_BULLET = 3
-    ENEMY_ARTILLERY = 4
-
-
 @dataclass
 class Projectile:
     kind: ProjectileKind
@@ -67,12 +49,6 @@ class Projectile:
     ttl: float
     source: "EnemyKind | None" = None
     alive: bool = True
-
-
-class EnemyKind(Enum):
-    TANK = 1
-    JET = 2
-    AIR_MINE = 3
 
 
 @dataclass
