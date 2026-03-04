@@ -95,6 +95,8 @@ from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapsho
 from .app.accessibility_toggles import toggle_particles, toggle_flashes, toggle_screenshake
 from .app.doors import toggle_doors_with_logging
 
+import random
+
 
 def run() -> None:
     debug_mode = False
@@ -895,7 +897,31 @@ def run() -> None:
                         pygame.draw.circle(target, (120, 120, 255), (int(p.pos.x), int(p.pos.y)), 2)
                 if weather_mode == "fog":
                     for p in fog.particles:
-                        pygame.draw.circle(target, (200, 200, 200, 60), (int(p.pos.x), int(p.pos.y)), int(p.radius))
+                        # Draw fog as long, semi-transparent ovals (ellipses)
+                        oval_width = int(p.radius * 2.5)
+                        oval_height = int(p.radius * 0.7)
+                        alpha = 32  # ~12.5% opacity
+                        fog_color = (220, 220, 220, alpha)
+                        oval_surf = pygame.Surface((oval_width, oval_height), pygame.SRCALPHA)
+                        pygame.draw.ellipse(oval_surf, fog_color, (0, 0, oval_width, oval_height))
+                        # Center the oval at the particle position
+                        target.blit(oval_surf, (int(p.pos.x - oval_width // 2), int(p.pos.y - oval_height // 2)))
+
+                    # Add long horizontal fog streaks with variance
+                    streak_count = 4
+                    for i in range(streak_count):
+                        # Randomize streak position and size each frame for subtle movement
+                        area_width = target.get_width()
+                        area_height = int(target.get_height() * 0.7)
+                        streak_x = random.randint(0, area_width - 1)
+                        streak_y = random.randint(int(area_height * 0.2), int(area_height * 0.8))
+                        streak_width = random.randint(int(area_width * 0.25), int(area_width * 0.5))
+                        streak_height = random.randint(10, 18)
+                        streak_alpha = random.randint(22, 38)  # 9-15% opacity
+                        streak_color = (210, 210, 210, streak_alpha)
+                        streak_surf = pygame.Surface((streak_width, streak_height), pygame.SRCALPHA)
+                        pygame.draw.ellipse(streak_surf, streak_color, (0, 0, streak_width, streak_height))
+                        target.blit(streak_surf, (streak_x, streak_y))
                 if weather_mode == "dust":
                     for p in dust.particles:
                         pygame.draw.circle(target, (180, 160, 120, 80), (int(p.pos.x), int(p.pos.y)), int(p.radius))
