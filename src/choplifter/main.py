@@ -612,12 +612,16 @@ def run() -> None:
                     selected_chopper_index = cycle_index(selected_chopper_index, menu_dir, len(chopper_choices))
                     selected_chopper_asset = chopper_choices[selected_chopper_index][0]
                     audio.play_menu_select()
+                # Gamepad: A/Start to select, B/Back to go back
                 if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
                     mode = "playing"
                     set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
                     if selected_mission_id == "city":
                         play_satellite_reallocating()
                     reset_game_wrapper()
+                elif (b_down and not prev_btn_b_down) or (back_down and not prev_btn_back_down):
+                    mode = "select_mission"
+                    set_toast("Back to Mission Select")
             elif mode == "intro":
                 skip_btn = (
                     (a_down and not prev_btn_a_down)
