@@ -435,6 +435,16 @@ def run() -> None:
                 if mode == "mission_end" or mission.ended:
                     # Only allow restart/menu keys in mission_end mode (handled elsewhere if needed)
                     continue
+                # --- Handle quit confirmation in pause menu for keyboard ---
+                if mode == "paused" and quit_confirm:
+                    if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                        logger.info(f"PAUSE MENU: Keyboard confirm quit (Enter/Space) on quit_confirm, exiting game")
+                        running = False
+                        continue
+                    elif event.key == pygame.K_ESCAPE:
+                        logger.info(f"PAUSE MENU: Keyboard cancel quit (Escape) on quit_confirm, returning to pause menu")
+                        quit_confirm = False
+                        continue
                 # F3 toggles debug mode (keyboard only)
                 if event.key == pygame.K_F3:
                     debug_mode = not debug_mode
@@ -456,6 +466,8 @@ def run() -> None:
                     selected_mission_id,
                     selected_chopper_index,
                     selected_chopper_asset,
+                    debug,
+                    quit_confirm
                 ) = handle_keyboard_event(
                     event,
                     mode=mode,
@@ -486,7 +498,9 @@ def run() -> None:
                     selected_mission_index=selected_mission_index,
                     selected_mission_id=selected_mission_id,
                     selected_chopper_index=selected_chopper_index,
-                    selected_chopper_asset=selected_chopper_asset
+                    selected_chopper_asset=selected_chopper_asset,
+                    debug=debug,
+                    quit_confirm=quit_confirm
                 )
             elif event.type == pygame.JOYBUTTONDOWN:
                 # Debug: print which button was pressed
@@ -605,13 +619,40 @@ def run() -> None:
                 set_toast(f"Debug overlay: {'ON' if debug.show_overlay else 'OFF'}")
 
 
-            # --- GAMEPAD PAUSE BUTTON HANDLING ---
-            # Allow Start button to open pause menu in playing mode
+
+            # --- GAMEPAD PAUSE BUTTON HANDLING (fixed: require release before unpause) ---
+            # Only allow Start to unpause if it was released after pausing
+            if start_down and not prev_btn_start_down:
+                logger.info(f"GAMEPAD: Start button pressed (start_down={start_down}, prev_btn_start_down={prev_btn_start_down}, mode={mode})")
+
+            # Track if we just paused with Start, to require release before unpause
+            if 'just_paused_with_start' not in locals():
+                just_paused_with_start = False
+
             if mode == "playing" and (start_down and not prev_btn_start_down):
+                logger.info(f"PAUSE: Gamepad Start pressed, entering pause menu (mode=playing)")
                 mode = "paused"
                 pause_focus = "choppers"
                 audio.play_pause_toggle()
                 audio.set_pause_menu_active(True)
+                just_paused_with_start = True
+            elif mode != "playing" and (start_down and not prev_btn_start_down):
+                logger.info(f"GAMEPAD: Start button pressed but pause not triggered (mode={mode})")
+
+            # Only allow unpause with Start if it was released after pausing
+            if mode == "paused":
+                # Start/B resumes, but Start only if it was released after pausing
+                can_unpause_with_start = (not start_down and prev_btn_start_down and just_paused_with_start) or (not just_paused_with_start)
+                if ((start_down and not prev_btn_start_down and not just_paused_with_start) or (b_down and not prev_btn_b_down)):
+                    logger.info(f"UNPAUSE: Gamepad Start or B pressed, resuming game (mode=paused)")
+                    mode = "playing"
+                    audio.play_pause_toggle()
+                    audio.set_pause_menu_active(False)
+                    quit_confirm = False
+                    just_paused_with_start = False
+                # Reset just_paused_with_start when Start is released
+                if not start_down and prev_btn_start_down and just_paused_with_start:
+                    just_paused_with_start = False
 
             if mode == "select_chopper":
                 if menu_dir != 0 and menu_dir != prev_menu_dir:
@@ -658,14 +699,6 @@ def run() -> None:
                     mode = "select_chopper"
                     set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")
             elif mode == "paused":
-
-                # Start/B resumes.
-                if (start_down and not prev_btn_start_down) or (b_down and not prev_btn_b_down):
-                    mode = "playing"
-                    audio.play_pause_toggle()
-                    audio.set_pause_menu_active(False)
-                    quit_confirm = False
-
                 # Accessibility toggles.
                 if x_down and not prev_btn_x_down:
                     toggle_particles_wrapper()
@@ -673,7 +706,6 @@ def run() -> None:
                     toggle_flashes_wrapper()
                 if rb_down and not prev_btn_rb_down:
                     toggle_screenshake_wrapper()
-
 
                 # Up/Down selects section.
                 if menu_vert != 0 and menu_vert != prev_menu_vert:
@@ -695,12 +727,14 @@ def run() -> None:
                 # A activates current focus.
                 if a_down and not prev_btn_a_down:
                     if pause_focus == "restart_mission":
+                        logger.info(f"PAUSE MENU: A pressed on restart_mission")
                         reset_game_wrapper()
                         mode = "playing"
                         audio.play_pause_toggle()
                         audio.set_pause_menu_active(False)
                         quit_confirm = False
                     elif pause_focus == "restart_game":
+                        logger.info(f"PAUSE MENU: A pressed on restart_game")
                         mode = "select_mission"
                         pause_focus = "choppers"
                         set_toast("Restart Game")
@@ -708,64 +742,30 @@ def run() -> None:
                         audio.set_pause_menu_active(False)
                         quit_confirm = False
                     elif pause_focus == "mute":
+                        logger.info(f"PAUSE MENU: A pressed on mute (muted={not muted})")
                         muted = not muted
                         audio.set_muted(muted)
                         quit_confirm = False
                     elif pause_focus == "quit":
                         if not quit_confirm:
+                            logger.info(f"PAUSE MENU: A pressed on quit, showing confirmation dialog")
                             quit_confirm = True
-                        # Only call handle_keyboard_event with supported arguments
-                        # Only call handle_keyboard_event for keyboard events
-                        if hasattr(event, "key"):
-                            result = handle_keyboard_event(
-                                event,
-                                mode=mode,
-                                controls=controls,
-                                mission=mission,
-                                helicopter=helicopter,
-                                audio=audio,
-                                logger=logger,
-                                chopper_choices=chopper_choices,
-                                mission_choices=mission_choices,
-                                pause_focus=pause_focus,
-                                muted=muted,
-                                set_toast=set_toast,
-                                reset_game=reset_game_wrapper,
-                                apply_mission_preview=apply_mission_preview_wrapper,
-                                skip_intro=lambda: skip_intro(cutscenes.intro),
-                                skip_mission_cutscene=lambda: skip_mission_cutscene(cutscenes.mission),
-                                toggle_particles_wrapper=toggle_particles_wrapper,
-                                toggle_flashes_wrapper=toggle_flashes_wrapper,
-                                toggle_screenshake_wrapper=toggle_screenshake_wrapper,
-                                spawn_projectile_from_helicopter_logged=spawn_projectile_from_helicopter_logged,
-                                try_start_flare_salvo=try_start_flare_salvo,
-                                toggle_doors_with_logging=toggle_doors_with_logging,
-                                Facing=Facing,
-                                DebugSettings=DebugSettings,
-                                boarded_count=boarded_count,
-                                flares=flares,
-                                selected_mission_index=selected_mission_index,
-                                selected_mission_id=selected_mission_id,
-                                selected_chopper_index=selected_chopper_index,
-                                selected_chopper_asset=selected_chopper_asset
-                            )
-                            # Pad result to always have 7 values
-                            if not isinstance(result, tuple):
-                                result = (result,)
-                            if len(result) < 7:
-                                result = result + (None,) * (7 - len(result))
-                            (
-                                mode,
-                                pause_focus,
-                                muted,
-                                selected_mission_index,
-                                selected_mission_id,
-                                selected_chopper_index,
-                                selected_chopper_asset,
-                            ) = result
                         else:
-                            # For gamepad events, just close the quit_confirm dialog and return to pause menu
+                            logger.info(f"PAUSE MENU: A pressed on quit_confirm, exiting game (gamepad A)")
+                            running = False
+
+                # Keyboard support for quit_confirm (Enter/Space to confirm, Escape to cancel)
+                if quit_confirm and hasattr(event, "key"):
+                    if event.type == pygame.KEYDOWN:
+                        if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                            logger.info(f"PAUSE MENU: Keyboard confirm quit (Enter/Space) on quit_confirm, exiting game")
+                            running = False
+                        elif event.key == pygame.K_ESCAPE:
+                            logger.info(f"PAUSE MENU: Keyboard cancel quit (Escape) on quit_confirm, returning to pause menu")
                             quit_confirm = False
+                if b_down and not prev_btn_b_down and quit_confirm:
+                    logger.info(f"PAUSE MENU: B pressed on quit_confirm, canceling quit and returning to pause menu")
+                    quit_confirm = False
 
                 if b_down and not prev_btn_b_down:
                     try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
