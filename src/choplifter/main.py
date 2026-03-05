@@ -92,6 +92,7 @@ import random
 
 
 def run() -> None:
+    vip_kia_overlay_timer = 0.0
     from .render.world import toggle_thermal_mode
 
     def set_debug_weather_mode(mode):
@@ -298,6 +299,12 @@ def run() -> None:
     while running:
         frame_dt = clock.tick(120) / 1000.0
         accumulator += frame_dt
+
+        # --- VIP KIA overlay logic ---
+        if hasattr(mission, "hostages"):
+            vip_hostage = next((h for h in mission.hostages if getattr(h, "is_vip", False)), None)
+            if vip_hostage and vip_hostage.state.name == "KIA" and vip_kia_overlay_timer <= 0.0:
+                vip_kia_overlay_timer = 3.0  # Show for 3 seconds
 
         # Weather cycling (optional: cycle weather every N seconds)
         if not debug_mode:
@@ -1016,6 +1023,24 @@ def run() -> None:
                     target.blit(overlay_surf, (0, 0))
                 else:
                     draw_hud(target, mission, helicopter)
+
+                # Draw VIP KIA overlay if timer is active
+                if vip_kia_overlay_timer > 0.0:
+                    vip_kia_overlay_timer -= frame_dt
+                    font = pygame.font.SysFont("consolas", 36)
+                    text = font.render("MISSION FAILED. VIP target KIA.", True, (255, 32, 32))
+                    # Fade in/out: full alpha for most of duration, fade last 0.5s and first 0.5s
+                    if vip_kia_overlay_timer < 0.5:
+                        alpha = int(255 * (vip_kia_overlay_timer / 0.5))
+                    elif vip_kia_overlay_timer > 2.5:
+                        alpha = int(255 * (3.0 - vip_kia_overlay_timer) / 0.5)
+                    else:
+                        alpha = 255
+                    overlay = pygame.Surface((screen.get_width(), 60), pygame.SRCALPHA)
+                    overlay.fill((0, 0, 0, int(alpha * 0.5)))
+                    text.set_alpha(alpha)
+                    overlay.blit(text, ((screen.get_width() - text.get_width()) // 2, 10))
+                    target.blit(overlay, (0, screen.get_height() // 2 - 30))
             elif mode == "select_mission":
                 draw_mission_select_overlay(target, mission_choices, selected_mission_index)
             elif mode == "select_chopper":
