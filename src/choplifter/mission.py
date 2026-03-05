@@ -1338,7 +1338,7 @@ def _handle_crash_and_respawn(
             logger.info("LOST_IN_TRANSIT: +%d (total=%d)", lost_this_crash, mission.stats.lost_in_transit)
 
     if mission.crashes >= 3:
-        _end_mission(mission, "THE END", "AIRCRAFT LOST", logger)
+        _end_mission(mission, "THE END", f"CRASHED {mission.crashes} TIMES", logger)
         return
 
     # Begin crash animation.

@@ -229,7 +229,7 @@ def _draw_end(
         f"Sentiment: {int(sentiment)}",
         "Press Enter (or Start) to restart",
     ]
-    y = rect.bottom + 18
+    y = rect.bottom + 19
     for line in lines:
         s = small.render(line, True, (235, 235, 235))
         r = s.get_rect(center=(screen.get_width() // 2, y))

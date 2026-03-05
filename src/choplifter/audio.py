@@ -160,6 +160,16 @@ class AudioMixer:
 
 @dataclass
 class AudioBank:
+    def stop_chopper_warning_beeps(self) -> None:
+        """Stops the chopper warning beeps sound effect immediately (channel 7)."""
+        try:
+            if self.mixer is not None:
+                # Stop dedicated channel 7 (used for warning beeps)
+                pygame.mixer.Channel(7).stop()
+            elif self.chopper_warning_beeps is not None:
+                pygame.mixer.Channel(7).stop()
+        except Exception:
+            pass
     def play_hostage_scream(self) -> None:
         """Play a random male or female scream SFX if available."""
         # Lazy-load scream sounds if not already loaded
