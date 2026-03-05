@@ -211,13 +211,13 @@ class MissionState:
         hostages_total = max(64, hostage_index)
         hostages = [Hostage(state=HostageState.IDLE, pos=Vec2(-9999.0, -9999.0)) for _ in range(hostages_total)]
 
-        # --- VIP (HVT) logic: For City Center Siege, mark a random hostage in the first compound as VIP ---
+        # --- VIP (HVT) logic: For City Center Siege, mark a random hostage in a random compound as VIP ---
         import random
         vip_index = -1
         if mission_id.lower() in ("city", "city_center", "citycenter", "mission1", "m1") and compounds:
-            first_compound = compounds[0]
-            start = first_compound.hostage_start
-            count = first_compound.hostage_count
+            vip_compound = random.choice(compounds)
+            start = vip_compound.hostage_start
+            count = vip_compound.hostage_count
             if count > 0:
                 vip_index = random.randint(start, start + count - 1)
                 hostages[vip_index].is_vip = True

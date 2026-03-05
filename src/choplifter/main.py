@@ -26,6 +26,7 @@ import random
 import pygame
 
 from .audio import AudioBank
+from .audio_extra import play_satellite_reallocating
 from .accessibility import load_accessibility
 from .controls import load_controls, matches_key, pressed
 from .debug_overlay import DebugOverlay
@@ -227,6 +228,9 @@ def run() -> None:
 
     flares = FlareState()
 
+
+
+
     mission, helicopter = create_mission_and_helicopter(
         heli_settings=heli_settings,
         mission_id=selected_mission_id,
@@ -304,13 +308,17 @@ def run() -> None:
         # --- VIP KIA overlay logic ---
         if hasattr(mission, "hostages"):
             vip_hostage = next((h for h in mission.hostages if getattr(h, "is_vip", False)), None)
-            if (
-                vip_hostage and vip_hostage.state.name == "KIA"
-                and vip_kia_overlay_timer <= 0.0
-                and not vip_kia_overlay_shown
-            ):
-                vip_kia_overlay_timer = 3.0  # Show for 3 seconds
-                vip_kia_overlay_shown = True
+            if vip_hostage:
+                if vip_hostage.state.name != "KIA":
+                    # Reset overlay flag if VIP is alive again (new mission, respawn, etc.)
+                    vip_kia_overlay_shown = False
+                elif (
+                    vip_hostage.state.name == "KIA"
+                    and vip_kia_overlay_timer <= 0.0
+                    and not vip_kia_overlay_shown
+                ):
+                    vip_kia_overlay_timer = 3.0  # Show for 3 seconds
+                    vip_kia_overlay_shown = True
 
         # Weather cycling (optional: cycle weather every N seconds)
         if not debug_mode:
@@ -605,6 +613,8 @@ def run() -> None:
                 if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
                     mode = "playing"
                     set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
+                    if selected_mission_id == "city":
+                        play_satellite_reallocating()
                     reset_game_wrapper()
             elif mode == "intro":
                 skip_btn = (
@@ -671,6 +681,8 @@ def run() -> None:
                 if a_down and not prev_btn_a_down:
                     if pause_focus == "restart_mission":
                         logger.info(f"PAUSE MENU: A pressed on restart_mission")
+                        if selected_mission_id == "city":
+                            play_satellite_reallocating()
                         reset_game_wrapper()
                         mode = "playing"
                         audio.play_pause_toggle()
