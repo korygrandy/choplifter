@@ -93,6 +93,7 @@ import random
 
 def run() -> None:
     vip_kia_overlay_timer = 0.0
+    vip_kia_overlay_shown = False
     from .render.world import toggle_thermal_mode
 
     def set_debug_weather_mode(mode):
@@ -303,8 +304,13 @@ def run() -> None:
         # --- VIP KIA overlay logic ---
         if hasattr(mission, "hostages"):
             vip_hostage = next((h for h in mission.hostages if getattr(h, "is_vip", False)), None)
-            if vip_hostage and vip_hostage.state.name == "KIA" and vip_kia_overlay_timer <= 0.0:
+            if (
+                vip_hostage and vip_hostage.state.name == "KIA"
+                and vip_kia_overlay_timer <= 0.0
+                and not vip_kia_overlay_shown
+            ):
                 vip_kia_overlay_timer = 3.0  # Show for 3 seconds
+                vip_kia_overlay_shown = True
 
         # Weather cycling (optional: cycle weather every N seconds)
         if not debug_mode:
@@ -1037,7 +1043,8 @@ def run() -> None:
                     else:
                         alpha = 255
                     overlay = pygame.Surface((screen.get_width(), 60), pygame.SRCALPHA)
-                    overlay.fill((0, 0, 0, int(alpha * 0.5)))
+                    bg_alpha = max(0, min(255, int(alpha * 0.5)))
+                    overlay.fill((0, 0, 0, bg_alpha))
                     text.set_alpha(alpha)
                     overlay.blit(text, ((screen.get_width() - text.get_width()) // 2, 10))
                     target.blit(overlay, (0, screen.get_height() // 2 - 30))
