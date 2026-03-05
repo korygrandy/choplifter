@@ -33,6 +33,7 @@ class Hostage:
     move_speed: float = 0.0
     vel: Vec2 = field(default_factory=lambda: Vec2(0.0, 0.0))
     fall_angle: float = 0.0  # For tumbling animation when falling
+    is_vip: bool = False  # True if this hostage is the VIP (HVT)
 
 
 @dataclass
@@ -115,6 +116,7 @@ class MissionState:
     base: BaseZone
     world_width: float = 1280.0
     bg_asset: str = "mission1-bg.jpg"
+    vip_index: int = -1  # Index in hostages list for the VIP (HVT), -1 if none
     # One-shot cutscenes (ids) that have already been triggered this mission run.
     cutscenes_played: set[str] = field(default_factory=set)
     stats: MissionStats = field(default_factory=MissionStats)
@@ -208,6 +210,17 @@ class MissionState:
 
         hostages_total = max(64, hostage_index)
         hostages = [Hostage(state=HostageState.IDLE, pos=Vec2(-9999.0, -9999.0)) for _ in range(hostages_total)]
+
+        # --- VIP (HVT) logic: For City Center Siege, mark a random hostage in the first compound as VIP ---
+        import random
+        vip_index = -1
+        if mission_id.lower() in ("city", "city_center", "citycenter", "mission1", "m1") and compounds:
+            first_compound = compounds[0]
+            start = first_compound.hostage_start
+            count = first_compound.hostage_count
+            if count > 0:
+                vip_index = random.randint(start, start + count - 1)
+                hostages[vip_index].is_vip = True
 
         base_w = level.base_width
         base_h = level.base_height
@@ -362,6 +375,12 @@ def update_mission(
     _update_compounds_and_release(mission, heli, logger)
     _update_hostages(mission, helicopter, dt, heli)
     _handle_unload(mission, helicopter, heli, dt)
+
+    # --- Mission Success: VIP rescued ---
+    # If the VIP is present and has been SAVED, trigger mission success immediately
+    vip_hostage = next((h for h in mission.hostages if getattr(h, "is_vip", False)), None)
+    if vip_hostage is not None and vip_hostage.state is HostageState.SAVED and not mission.ended:
+        _end_mission(mission, "THE END", "VIP RESCUED SUCCESS", logger)
 
     _handle_crash_and_respawn(mission, helicopter, dt, heli, logger)
     if mission.ended:

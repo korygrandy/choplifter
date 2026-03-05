@@ -89,8 +89,19 @@ def _draw_hostages(screen: pygame.Surface, mission: MissionState, *, camera_x: f
             pygame.draw.circle(screen, color, (x, y), 4)
             continue
 
-        # Old style: simple person dot (beige with dark outline)
-        pygame.draw.circle(screen, (245, 235, 210), (x, y), 5)
+        # --- VIP marker ---
+        if getattr(h, "is_vip", False):
+            # Draw a gold star or ring above the VIP's head
+            pygame.draw.circle(screen, (255, 215, 0), (x, y - 10), 6, 2)  # gold ring
+            # Optionally, add a small white dot in the center for extra highlight
+            pygame.draw.circle(screen, (255, 255, 255), (x, y - 10), 2)
+
+        # Old style: simple person dot (beige with dark outline), or purple for VIP
+        if getattr(h, "is_vip", False):
+            body_color = (160, 60, 200)  # Purple
+        else:
+            body_color = (245, 235, 210)  # Beige
+        pygame.draw.circle(screen, body_color, (x, y), 5)
         pygame.draw.circle(screen, (25, 25, 25), (x, y), 5, 1)
 
         # Tiny accent for EXITING so it's visually distinct.
