@@ -431,8 +431,17 @@ def run() -> None:
                 prev_btn_y_down = False
                 prev_btn_back_down = False
             elif event.type == pygame.KEYDOWN:
-                # Prevent pause/menu input if mission ended or in mission_end mode
+                # In mission_end mode, allow Pause/Esc to open the pause menu, and Enter to restart
                 if mode == "mission_end" or mission.ended:
+                    if event.key in (pygame.K_ESCAPE, pygame.K_PAUSE):
+                        mode = "paused"
+                        set_toast("Pause menu opened (Game End)")
+                        continue
+                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        reset_game_wrapper()
+                        mode = "playing"
+                        set_toast("Mission restarted (Enter)")
+                        continue
                     # Only allow restart/menu keys in mission_end mode (handled elsewhere if needed)
                     continue
                 # --- Handle quit confirmation in pause menu for keyboard ---
@@ -507,8 +516,13 @@ def run() -> None:
                 if logger:
                     logger.info(f"GAMEPAD BUTTONDOWN: button={event.button}")
                 # Map gamepad buttons to actions
-                # X (2): fire, B (1): flare, A (0): doors, Y (3): reverse, Back (6): facing
-                if mode == "playing":
+                # X (2): fire, B (1): flare, A (0): doors, Y (3): reverse, Back (6): facing, Start (7): pause/restart
+                if mode == "mission_end":
+                    if event.button == 7:  # Start button
+                        reset_game_wrapper()
+                        mode = "playing"
+                        set_toast("Mission restarted (Start button)")
+                elif mode == "playing":
                     if event.button == 2:  # X button: fire
                         if logger:
                             logger.info(f"DEBUG: Fire button pressed (button=2) in playing mode")
