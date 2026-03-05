@@ -76,7 +76,6 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
 
 
 def _draw_hostages(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
-    thermal_mode = getattr(_draw_hostages, "thermal_mode", False)
     for h in mission.hostages:
         if h.state in (HostageState.IDLE, HostageState.BOARDED):
             continue
@@ -85,21 +84,14 @@ def _draw_hostages(screen: pygame.Surface, mission: MissionState, *, camera_x: f
         y = int(h.pos.y)
 
         if h.state is HostageState.KIA:
-            color = (120, 10, 10) if not thermal_mode else (80, 0, 0)
+            # KIA: dark red
+            color = (80, 0, 0)
             pygame.draw.circle(screen, color, (x, y), 4)
             continue
 
-        if thermal_mode:
-            # Draw as bright white with glow
-            for r, a in [(10, 30), (7, 80), (5, 180)]:
-                s = pygame.Surface((r*2, r*2), pygame.SRCALPHA)
-                pygame.draw.circle(s, (255, 80, 0, a), (r, r), r)
-                screen.blit(s, (x-r, y-r), special_flags=pygame.BLEND_RGBA_ADD)
-            pygame.draw.circle(screen, (255, 255, 255), (x, y), 4)
-        else:
-            # Simple person dot.
-            pygame.draw.circle(screen, (245, 235, 210), (x, y), 5)
-            pygame.draw.circle(screen, (25, 25, 25), (x, y), 5, 1)
+        # Old style: simple person dot (beige with dark outline)
+        pygame.draw.circle(screen, (245, 235, 210), (x, y), 5)
+        pygame.draw.circle(screen, (25, 25, 25), (x, y), 5, 1)
 
         # Tiny accent for EXITING so it's visually distinct.
         if h.state is HostageState.EXITING:
