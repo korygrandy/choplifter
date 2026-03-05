@@ -37,18 +37,37 @@ def _draw_fx_particles(screen: pygame.Surface, particles: list[object], *, camer
         if kind == "ember":
             alpha = int(240 * (1.0 - t) * intensity)
             sprite = _get_burn_sprite("ember", radius)
-        else:
+            sprite.set_alpha(alpha)
+            screen.blit(sprite, (x - sprite.get_width() // 2, y - sprite.get_height() // 2))
+        elif kind == "smoke":
             alpha = int(120 * (1.0 - t) * (1.0 - t) * intensity)
             radius = int(max(1.0, radius_f * (1.0 + 0.45 * t)))
-            sprite = _get_burn_sprite("smoke", radius)
+            color = getattr(p, "color", None)
+            def clamp255(v):
+                try:
+                    return max(0, min(255, int(round(v))))
+                except Exception:
+                    return 0
 
-        alpha = max(0, min(255, alpha))
-
-        if alpha <= 0:
-            continue
-
-        sprite.set_alpha(alpha)
-        screen.blit(sprite, (x - sprite.get_width() // 2, y - sprite.get_height() // 2))
+            if (
+                isinstance(color, tuple)
+                and len(color) == 3
+                and all(isinstance(c, (int, float)) for c in color)
+            ):
+                draw_color = tuple(clamp255(c) for c in color) + (clamp255(alpha),)
+            else:
+                draw_color = (120, 120, 120, clamp255(alpha))
+            s = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+            pygame.draw.circle(s, draw_color, (radius, radius), radius)
+            s.set_alpha(clamp255(alpha))
+            screen.blit(s, (x - radius, y - radius))
+        else:
+            # Fallback for any other kind (future-proofing)
+            alpha = int(120 * (1.0 - t) * (1.0 - t) * intensity)
+            radius = int(max(1.0, radius_f * (1.0 + 0.45 * t)))
+            sprite = _get_burn_sprite(kind, radius)
+            sprite.set_alpha(alpha)
+            screen.blit(sprite, (x - sprite.get_width() // 2, y - sprite.get_height() // 2))
 
 
 def draw_jet_trail_particles(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:

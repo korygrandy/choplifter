@@ -23,3 +23,7 @@ Thumbs.db
 /pyinstaller-build/
 /pyinstaller-dist/
 /*.spec
+
+# Ignore all dist folders at any level
+/dist/
+**/dist/
