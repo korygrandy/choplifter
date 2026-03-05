@@ -22,7 +22,11 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
         audio.play_pause_toggle()
         audio.set_pause_menu_active(False)
     elif matches_key(event.key, controls.quit):
-        return mode, pause_focus, True  # running = False
+        # Always return a 9-tuple, using current values for unchanged fields
+        return (
+            mode, pause_focus, True, selected_mission_index, selected_mission_id,
+            selected_chopper_index, selected_chopper_asset, debug, quit_confirm
+        )
     elif mode == "cutscene":
         mode = "playing"
         skip_mission_cutscene()
