@@ -89,13 +89,6 @@ def _draw_hostages(screen: pygame.Surface, mission: MissionState, *, camera_x: f
             pygame.draw.circle(screen, color, (x, y), 4)
             continue
 
-        # --- VIP marker ---
-        if getattr(h, "is_vip", False):
-            # Draw a gold star or ring above the VIP's head
-            pygame.draw.circle(screen, (255, 215, 0), (x, y - 10), 6, 2)  # gold ring
-            # Optionally, add a small white dot in the center for extra highlight
-            pygame.draw.circle(screen, (255, 255, 255), (x, y - 10), 2)
-
         # Old style: simple person dot (beige with dark outline), or purple for VIP
         if getattr(h, "is_vip", False):
             body_color = (160, 60, 200)  # Purple
@@ -110,6 +103,13 @@ def _draw_hostages(screen: pygame.Surface, mission: MissionState, *, camera_x: f
         # Falling: draw with a blue trail
         if h.state is HostageState.FALLING:
             pygame.draw.line(screen, (80, 180, 255), (x, y-8), (x, y), 2)
+
+        # --- VIP marker (drawn last, always on top) ---
+        if getattr(h, "is_vip", False):
+            # Draw a gold ring above the VIP's head
+            pygame.draw.circle(screen, (255, 215, 0), (x, y - 10), 6, 2)  # gold ring
+            # Optionally, add a small white dot in the center for extra highlight
+            pygame.draw.circle(screen, (255, 255, 255), (x, y - 10), 2)
 def toggle_thermal_mode():
     global thermal_mode
     thermal_mode = not thermal_mode
