@@ -431,6 +431,10 @@ def run() -> None:
                 prev_btn_y_down = False
                 prev_btn_back_down = False
             elif event.type == pygame.KEYDOWN:
+                # Prevent pause/menu input if mission ended or in mission_end mode
+                if mode == "mission_end" or mission.ended:
+                    # Only allow restart/menu keys in mission_end mode (handled elsewhere if needed)
+                    continue
                 # F3 toggles debug mode (keyboard only)
                 if event.key == pygame.K_F3:
                     debug_mode = not debug_mode
@@ -485,6 +489,9 @@ def run() -> None:
                     selected_chopper_asset=selected_chopper_asset
                 )
             elif event.type == pygame.JOYBUTTONDOWN:
+                # Debug: print which button was pressed
+                if logger:
+                    logger.info(f"GAMEPAD BUTTONDOWN: button={event.button}")
                 # Map gamepad buttons to actions
                 # X (2): fire, B (1): flare, A (0): doors, Y (3): reverse, Back (6): facing
                 if mode == "playing":
@@ -510,7 +517,6 @@ def run() -> None:
                     elif event.button == 6:  # Back button: facing
                         if not getattr(mission, "crash_active", False):
                             helicopter.cycle_facing()
-                # The following block was incorrectly indented and is now commented out for review.
                 # audio=audio,
                 # logger=logger,
                 # chopper_choices=chopper_choices,
@@ -538,8 +544,12 @@ def run() -> None:
                 # selected_chopper_asset=selected_chopper_asset,
                 # debug=debug
                 # )
+            # Quit confirmation: if quit_confirm is True and A is pressed, exit; if B is pressed, cancel
             if quit_confirm:
-                running = False
+                if a_down and not prev_btn_a_down:
+                    running = False
+                elif b_down and not prev_btn_b_down:
+                    quit_confirm = False
 
         keys = pygame.key.get_pressed()
         kb_tilt_left = pressed(keys, controls.tilt_left)
@@ -555,6 +565,7 @@ def run() -> None:
 
         active_js = get_active_joystick(joysticks)
         haptics.set_active_joystick(active_js)
+
         if active_js is not None:
             gp = read_gamepad(
                 active_js,
@@ -577,10 +588,30 @@ def run() -> None:
             lb_down = gp.lb_down
             back_down = gp.back_down
 
+            # --- DEBUG: Print all button states when any button is pressed ---
+            if any([
+                a_down, b_down, x_down, y_down, start_down, rb_down, lb_down, back_down
+            ]):
+                try:
+                    num_buttons = active_js.get_numbuttons()
+                    button_states = [active_js.get_button(i) for i in range(num_buttons)]
+                    logger.info(f"GAMEPAD BUTTONS: {[f'B{i}={v}' for i,v in enumerate(button_states)]}")
+                except Exception as e:
+                    logger.info(f"GAMEPAD BUTTONS: error {e}")
+
             # Debug overlay toggle (gamepad).
             if lb_down and not prev_btn_lb_down:
                 debug = DebugSettings(show_overlay=not debug.show_overlay)
                 set_toast(f"Debug overlay: {'ON' if debug.show_overlay else 'OFF'}")
+
+
+            # --- GAMEPAD PAUSE BUTTON HANDLING ---
+            # Allow Start button to open pause menu in playing mode
+            if mode == "playing" and (start_down and not prev_btn_start_down):
+                mode = "paused"
+                pause_focus = "choppers"
+                audio.play_pause_toggle()
+                audio.set_pause_menu_active(True)
 
             if mode == "select_chopper":
                 if menu_dir != 0 and menu_dir != prev_menu_dir:
@@ -683,23 +714,58 @@ def run() -> None:
                     elif pause_focus == "quit":
                         if not quit_confirm:
                             quit_confirm = True
-                        (
-                            running,
-                            debug,
-                            weather_mode,
-                            accessibility,
-                            accessibility_mode,
-                            accessibility_toggles,
-                        ) = handle_keyboard_event(
-                            event,
-                            running=running,
-                            weather_mode=weather_mode,
-                            accessibility=accessibility,
-                            accessibility_mode=accessibility_mode,
-                            accessibility_toggles=accessibility_toggles,
-                            audio=audio
-                        )
-                        quit_confirm = False
+                        # Only call handle_keyboard_event with supported arguments
+                        # Only call handle_keyboard_event for keyboard events
+                        if hasattr(event, "key"):
+                            result = handle_keyboard_event(
+                                event,
+                                mode=mode,
+                                controls=controls,
+                                mission=mission,
+                                helicopter=helicopter,
+                                audio=audio,
+                                logger=logger,
+                                chopper_choices=chopper_choices,
+                                mission_choices=mission_choices,
+                                pause_focus=pause_focus,
+                                muted=muted,
+                                set_toast=set_toast,
+                                reset_game=reset_game_wrapper,
+                                apply_mission_preview=apply_mission_preview_wrapper,
+                                skip_intro=lambda: skip_intro(cutscenes.intro),
+                                skip_mission_cutscene=lambda: skip_mission_cutscene(cutscenes.mission),
+                                toggle_particles_wrapper=toggle_particles_wrapper,
+                                toggle_flashes_wrapper=toggle_flashes_wrapper,
+                                toggle_screenshake_wrapper=toggle_screenshake_wrapper,
+                                spawn_projectile_from_helicopter_logged=spawn_projectile_from_helicopter_logged,
+                                try_start_flare_salvo=try_start_flare_salvo,
+                                toggle_doors_with_logging=toggle_doors_with_logging,
+                                Facing=Facing,
+                                DebugSettings=DebugSettings,
+                                boarded_count=boarded_count,
+                                flares=flares,
+                                selected_mission_index=selected_mission_index,
+                                selected_mission_id=selected_mission_id,
+                                selected_chopper_index=selected_chopper_index,
+                                selected_chopper_asset=selected_chopper_asset
+                            )
+                            # Pad result to always have 7 values
+                            if not isinstance(result, tuple):
+                                result = (result,)
+                            if len(result) < 7:
+                                result = result + (None,) * (7 - len(result))
+                            (
+                                mode,
+                                pause_focus,
+                                muted,
+                                selected_mission_index,
+                                selected_mission_id,
+                                selected_chopper_index,
+                                selected_chopper_asset,
+                            ) = result
+                        else:
+                            # For gamepad events, just close the quit_confirm dialog and return to pause menu
+                            quit_confirm = False
 
                 if b_down and not prev_btn_b_down:
                     try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
@@ -942,6 +1008,7 @@ def run() -> None:
             draw_intro(cutscenes.intro, target, skip_hint=skip_hint)
         elif mode == "cutscene":
             draw_mission_cutscene(cutscenes.mission, target, skip_hint=skip_hint)
+
         else:
             # Background above the horizon.
             draw_sky(
@@ -1014,7 +1081,7 @@ def run() -> None:
                 draw_mission_select_overlay(target, mission_choices, selected_mission_index)
             elif mode == "select_chopper":
                 draw_chopper_select_overlay(target, chopper_choices, selected_chopper_index)
-            else:
+            elif mode == "paused":
                 draw_chopper_select_overlay(
                     target,
                     chopper_choices,
