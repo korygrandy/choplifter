@@ -260,6 +260,8 @@ def run() -> None:
         nonlocal helicopter, mission, accumulator, prev_stats
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_btn_rb_down, prev_btn_lb_down, prev_btn_back_down
+        # Stop chopper warning beeps on game reset
+        audio.stop_chopper_warning_beeps()
         mission, helicopter, accumulator, prev_stats = reset_game(
             create_mission_and_helicopter,
             heli_settings,
@@ -771,8 +773,9 @@ def run() -> None:
             if mode == "playing":
                 update_flares(flares, mission=mission, helicopter=helicopter, dt=tick.dt)
                 if getattr(mission, "crash_active", False):
-                    # Crash animation drives the helicopter pose; stop the flight loop.
+                    # Crash animation drives the helicopter pose; stop the flight loop and warning beeps.
                     audio.stop_flying()
+                    audio.stop_chopper_warning_beeps()
                 else:
                     was_grounded = helicopter.grounded
                     # If the helicopter starts airborne, there may be no ground->air transition
@@ -815,6 +818,8 @@ def run() -> None:
 
                 # If mission ended, switch to mission_end mode to disable input.
                 if mission.ended:
+                    # Stop chopper warning beeps immediately on mission end
+                    audio.stop_chopper_warning_beeps()
                     mode = "mission_end"
                     continue
 
