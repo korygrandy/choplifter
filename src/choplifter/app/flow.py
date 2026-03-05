@@ -50,4 +50,5 @@ def reset_game(
     prev_stats = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
     reset_flares(flares)
     logger.info("RESET: mission restarted")
+    logger.info(f"DOORS: after reset | doors_open={helicopter.doors_open}")
     return mission, helicopter, accumulator, prev_stats

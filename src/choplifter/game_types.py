@@ -12,6 +12,7 @@ class HostageState(Enum):
     EXITING = 5
     SAVED = 6
     KIA = 7
+    FALLING = 8
 
 
 class ProjectileKind(Enum):
