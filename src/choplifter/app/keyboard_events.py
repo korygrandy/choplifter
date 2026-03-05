@@ -6,7 +6,7 @@ from src.choplifter.controls import matches_key, pressed
 from src.choplifter.app.menu_helpers import cycle_index, move_pause_focus
 
 
-def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any, mission: Any, helicopter: Any, audio: Any, logger: Any, chopper_choices: list, mission_choices: list, pause_focus: str, muted: bool, set_toast: Callable, reset_game: Callable, apply_mission_preview: Callable, skip_intro: Callable, skip_mission_cutscene: Callable, toggle_particles_wrapper: Callable, toggle_flashes_wrapper: Callable, toggle_screenshake_wrapper: Callable, spawn_projectile_from_helicopter_logged: Callable, try_start_flare_salvo: Callable, toggle_doors_with_logging: Callable, Facing: Any, DebugSettings: Any, boarded_count: Any, flares: Any, selected_mission_index: int, selected_mission_id: str, selected_chopper_index: int, selected_chopper_asset: str) -> tuple[str, str, bool, int, str, int, str]:
+def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any, mission: Any, helicopter: Any, audio: Any, logger: Any, chopper_choices: list, mission_choices: list, pause_focus: str, muted: bool, set_toast: Callable, reset_game: Callable, apply_mission_preview: Callable, skip_intro: Callable, skip_mission_cutscene: Callable, toggle_particles_wrapper: Callable, toggle_flashes_wrapper: Callable, toggle_screenshake_wrapper: Callable, spawn_projectile_from_helicopter_logged: Callable, try_start_flare_salvo: Callable, toggle_doors_with_logging: Callable, Facing: Any, DebugSettings: Any, boarded_count: Any, flares: Any, selected_mission_index: int, selected_mission_id: str, selected_chopper_index: int, selected_chopper_asset: str, debug: Any, quit_confirm: bool) -> tuple[str, str, bool, int, str, int, str, Any, bool]:
     """
     Handles keyboard events and returns updated (mode, pause_focus, muted).
     """
@@ -98,6 +98,12 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
             elif pause_focus == "mute":
                 muted = not muted
                 audio.set_muted(muted)
+            elif pause_focus == "quit":
+                # Open quit confirmation dialog when Enter/Space pressed on Quit
+                if not quit_confirm:
+                    quit_confirm = True
+                    if logger:
+                        logger.info(f"PAUSE MENU: Keyboard pressed on quit, showing confirmation dialog")
             else:
                 mode = "playing"
                 audio.play_pause_toggle()
@@ -129,4 +135,5 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
                 audio.play_bomb()
             else:
                 audio.play_shoot()
-    return mode, pause_focus, muted, selected_mission_index, selected_mission_id, selected_chopper_index, selected_chopper_asset
+    # Return quit_confirm as part of the tuple so main.py can update it
+    return mode, pause_focus, muted, selected_mission_index, selected_mission_id, selected_chopper_index, selected_chopper_asset, debug, quit_confirm

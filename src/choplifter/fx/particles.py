@@ -13,3 +13,4 @@ class FxParticle:
     ttl: float
     radius: float
     kind: str  # "ember" | "smoke"
+    color: tuple[int, int, int] | None = None  # Optional RGB color for smoke
