@@ -431,11 +431,11 @@ def run() -> None:
                 prev_btn_y_down = False
                 prev_btn_back_down = False
             elif event.type == pygame.KEYDOWN:
-                # F3 toggles debug mode
+                # F3 toggles debug mode (keyboard only)
                 if event.key == pygame.K_F3:
                     debug_mode = not debug_mode
                     set_toast(f"Debug mode: {'ON' if debug_mode else 'OFF'} (F3)")
-                # F5/F6 cycle weather if debug mode is on
+                # F5/F6 cycle weather if debug mode is on (keyboard only)
                 elif debug_mode and event.key == pygame.K_F5:
                     debug_weather_index = (debug_weather_index + 1) % len(debug_weather_modes)
                     set_debug_weather_mode(debug_weather_modes[debug_weather_index])
@@ -484,6 +484,32 @@ def run() -> None:
                     selected_chopper_index=selected_chopper_index,
                     selected_chopper_asset=selected_chopper_asset
                 )
+            elif event.type == pygame.JOYBUTTONDOWN:
+                # Map gamepad buttons to actions
+                # X (2): fire, B (1): flare, A (0): doors, Y (3): reverse, Back (6): facing
+                if mode == "playing":
+                    if event.button == 2:  # X button: fire
+                        if logger:
+                            logger.info(f"DEBUG: Fire button pressed (button=2) in playing mode")
+                        if not getattr(mission, "crash_active", False):
+                            spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
+                            if helicopter.facing is Facing.FORWARD:
+                                audio.play_bomb()
+                            else:
+                                audio.play_shoot()
+                    elif event.button == 1:  # B button: flare
+                        if logger:
+                            logger.info(f"DEBUG: Flare button pressed (button=1) in playing mode")
+                        try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
+                    elif event.button == 0:  # A button: doors
+                        if not getattr(mission, "crash_active", False):
+                            toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count)
+                    elif event.button == 3:  # Y button: reverse
+                        if not getattr(mission, "crash_active", False):
+                            helicopter.reverse_flip()
+                    elif event.button == 6:  # Back button: facing
+                        if not getattr(mission, "crash_active", False):
+                            helicopter.cycle_facing()
                 # The following block was incorrectly indented and is now commented out for review.
                 # audio=audio,
                 # logger=logger,
