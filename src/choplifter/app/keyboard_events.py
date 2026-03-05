@@ -46,6 +46,9 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
             mode = "playing"
             set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
             reset_game()
+        elif event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+            mode = "select_mission"
+            set_toast("Back to Mission Select")
     elif mode == "select_mission":
         if event.key in (pygame.K_LEFT, pygame.K_a):
             selected_mission_index = cycle_index(selected_mission_index, -1, len(mission_choices))
