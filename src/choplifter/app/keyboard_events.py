@@ -11,6 +11,8 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
     Handles keyboard events and returns updated (mode, pause_focus, muted).
     """
     if mode == "playing" and event.key == pygame.K_ESCAPE:
+        if logger:
+            logger.info("DEBUG: Pause requested (ESCAPE) in playing mode")
         mode = "paused"
         pause_focus = "choppers"
         audio.play_pause_toggle()
@@ -115,8 +117,12 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
         if not getattr(mission, "crash_active", False):
             toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count)
     elif mode == "playing" and matches_key(event.key, controls.flare):
+        if logger:
+            logger.info(f"DEBUG: Flare key pressed (key={event.key}) in playing mode")
         try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
     elif mode == "playing" and matches_key(event.key, controls.fire):
+        if logger:
+            logger.info(f"DEBUG: Fire key pressed (key={event.key}) in playing mode")
         if not getattr(mission, "crash_active", False):
             spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
             if helicopter.facing is Facing.FORWARD:
