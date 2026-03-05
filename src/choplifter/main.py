@@ -92,6 +92,8 @@ import random
 
 
 def run() -> None:
+    from .render.world import toggle_thermal_mode
+
     def set_debug_weather_mode(mode):
         nonlocal weather_mode, weather_timer, weather_duration
         weather_mode = mode
@@ -99,9 +101,6 @@ def run() -> None:
         weather_duration = 9999.0  # Prevent auto-cycling
 
     debug_mode = False
-
-    # Initialize accessibility_mode and accessibility_toggles to avoid UnboundLocalError
-    # accessibility_mode and accessibility_toggles will be initialized after accessibility is loaded
     debug_weather_modes = ["clear", "rain", "fog", "dust", "storm"]
     debug_weather_index = 0
     window = WindowSettings()
@@ -129,7 +128,6 @@ def run() -> None:
 
     controls = load_controls(logger=logger)
     accessibility = load_accessibility(logger=logger)
-    # Now safe to initialize accessibility_mode and accessibility_toggles
     accessibility_mode = getattr(accessibility, 'mode', None)
     accessibility_toggles = getattr(accessibility, 'toggles', None)
     haptics.set_enabled(accessibility.rumble_enabled)
@@ -188,99 +186,9 @@ def run() -> None:
     # --- Weather/particle systems ---
     rain = RainSystem()
     fog = FogSystem()
-
     dust = DustStormSystem()
     lightning = LightningSystem(area_width=window.width, area_height=window.height)
     storm_clouds = StormCloudSystem(window.width, window.height)
-
-    weather_mode = random.choice(["clear", "rain", "fog", "dust", "storm"])
-    weather_timer = 0.0
-    weather_duration = random.uniform(18, 40)
-    hud_disabled_timer = 0.0
-    window = WindowSettings()
-    tick = FixedTickSettings()
-    physics = load_physics_settings()
-    heli_settings = HelicopterSettings()
-    debug = DebugSettings()
-
-    pygame.init()
-    logger = create_session_logger()
-
-    # Window icon (taskbar/alt-tab). This does not change the .exe file icon.
-    try:
-        module_dir = Path(__file__).resolve().parent
-        icon_path = module_dir / "assets" / "chopper-one.png"
-        icon = pygame.image.load(str(icon_path))
-        try:
-            icon = pygame.transform.smoothscale(icon, (32, 32))
-        except Exception:
-            pass
-        pygame.display.set_icon(icon)
-        logger.info("WINDOW_ICON: %s", icon_path.as_posix())
-    except Exception as e:
-        logger.info("WINDOW_ICON: failed (%s)", type(e).__name__)
-
-    controls = load_controls(logger=logger)
-    accessibility = load_accessibility(logger=logger)
-    haptics.set_enabled(accessibility.rumble_enabled)
-    audio = AudioBank.try_create()
-    logger.info("Controls: SPACE fire | F flare | E doors (grounded) | TAB facing | R reverse | F1 debug")
-    logger.info("Rescue: open compound, land near hostages, E doors to load; land at base and E to unload")
-    logger.info("Gamepad: Left stick tilt | Triggers lift | A doors | X fire | Y reverse | B flare | Back facing | D-pad optional")
-
-    # Gamepad detection (connect/disconnect notifications).
-    pygame.joystick.init()
-    joysticks: dict[int, pygame.joystick.Joystick] = {}
-
-    # Cinematic feedback (screenshake + audio duck).
-    screenshake = ScreenShakeState()
-    toast = ToastState()
-
-    prev_btn_a_down = False
-    prev_btn_b_down = False
-    prev_btn_x_down = False
-    prev_btn_y_down = False
-    prev_btn_start_down = False
-    prev_btn_rb_down = False
-    prev_btn_lb_down = False
-    prev_btn_back_down = False
-
-    def set_toast(message: str) -> None:
-        toast.set(message)
-
-    joysticks = init_connected_joysticks(logger=logger, set_toast=set_toast)
-
-    particles_enabled = accessibility.particles_enabled
-    flashes_enabled = accessibility.flashes_enabled
-    screenshake_enabled = accessibility.screenshake_enabled
-
-
-    flags = 0
-    if window.vsync:
-        # VSYNC is honored on some platforms/drivers.
-        flags |= pygame.SCALED
-
-    screen = pygame.display.set_mode((window.width, window.height), flags)
-    pygame.display.set_caption(window.title)
-
-    # Optional video intro asset (falls back to the in-engine title card if missing/unavailable).
-    module_dir = Path(__file__).resolve().parent
-    assets_dir = module_dir / "assets"
-    cutscenes = CutsceneState(intro=IntroCutsceneState(), mission=MissionCutsceneState())
-    init_intro_cutscene(cutscenes.intro, assets_dir=assets_dir, logger=logger)
-
-    # Hostage rescue cutscene config/lookup now in app.cutscene_config
-
-    clock = pygame.time.Clock()
-    overlay = DebugOverlay()
-
-    sky_smoke = SkySmokeSystem()
-
-    # Weather/particle systems (initialized after mission/heli for correct area sizing)
-    rain = RainSystem()
-    fog = FogSystem()
-    dust = DustStormSystem()
-    lightning = LightningSystem(area_width=window.width, area_height=window.height)
 
     weather_mode = random.choice(["clear", "rain", "fog", "dust", "storm"])
     weather_timer = 0.0
@@ -384,6 +292,9 @@ def run() -> None:
     running = True
     accumulator = 0.0
 
+    # Track doors state before cutscene
+    doors_open_before_cutscene = False
+
     while running:
         frame_dt = clock.tick(120) / 1000.0
         accumulator += frame_dt
@@ -419,7 +330,11 @@ def run() -> None:
         )
 
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+            # Toggle thermal mode with T key
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_t:
+                toggle_thermal_mode()
+                set_toast("Thermal mode toggled (T)")
+            elif event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.JOYDEVICEADDED:
                 handle_joy_device_added(event.device_index, joysticks=joysticks, logger=logger, set_toast=set_toast)
@@ -617,15 +532,16 @@ def run() -> None:
             back_down = gp.back_down
 
             # --- DEBUG: Print all button states when any button is pressed ---
-            if any([
-                a_down, b_down, x_down, y_down, start_down, rb_down, lb_down, back_down
-            ]):
-                try:
-                    num_buttons = active_js.get_numbuttons()
-                    button_states = [active_js.get_button(i) for i in range(num_buttons)]
-                    logger.info(f"GAMEPAD BUTTONS: {[f'B{i}={v}' for i,v in enumerate(button_states)]}")
-                except Exception as e:
-                    logger.info(f"GAMEPAD BUTTONS: error {e}")
+            # (Suppressed to avoid log spam)
+            # if any([
+            #     a_down, b_down, x_down, y_down, start_down, rb_down, lb_down, back_down
+            # ]):
+            #     try:
+            #         num_buttons = active_js.get_numbuttons()
+            #         button_states = [active_js.get_button(i) for i,v in enumerate(button_states)]
+            #         logger.info(f"GAMEPAD BUTTONS: {[f'B{i}={v}' for i,v in enumerate(button_states)]}")
+            #     except Exception as e:
+            #         logger.info(f"GAMEPAD BUTTONS: error {e}")
 
             # Debug overlay toggle (gamepad).
             if lb_down and not prev_btn_lb_down:
@@ -910,6 +826,8 @@ def run() -> None:
                         cutscene_config.HOSTAGE_RESCUE_CUTSCENE_DEFAULT_ASSET,
                         cutscene_config.HOSTAGE_RESCUE_CUTSCENE_BY_MISSION,
                     )
+                    # Save doors state before cutscene
+                    doors_open_before_cutscene = helicopter.doors_open
                     if start_mission_cutscene(
                         cutscenes.mission,
                         cutscene_path=cutscene_path,
@@ -977,6 +895,10 @@ def run() -> None:
         if mode == "cutscene":
             if update_mission_cutscene(cutscenes.mission, frame_dt):
                 mode = "playing"
+                # Restore doors state after cutscene and log
+                prev_state = helicopter.doors_open
+                helicopter.doors_open = doors_open_before_cutscene
+                logger.info(f"DOORS: restored after cutscene | was_open={prev_state} | restored_open={helicopter.doors_open}")
 
         # Visual-only sky particles.
         if particles_enabled and mode not in ("intro", "cutscene"):

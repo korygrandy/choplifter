@@ -36,7 +36,7 @@ def create_session_logger(logs_dir: str | os.PathLike | None = None) -> logging.
     if logger.handlers:
         return logger
 
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
 
     if logs_dir is None:
         candidates = [_default_logs_dir(), Path("logs"), Path(tempfile.gettempdir()) / "Choplifter" / "logs"]
@@ -61,16 +61,18 @@ def create_session_logger(logs_dir: str | os.PathLike | None = None) -> logging.
 
     formatter = logging.Formatter("%(asctime)s.%(msecs)03d %(levelname)s %(message)s", datefmt="%H:%M:%S")
 
+
     fh: logging.Handler | None = None
     try:
         fh = logging.FileHandler(file_path, encoding="utf-8")
-        fh.setLevel(logging.INFO)
+        fh.setLevel(logging.DEBUG)
         fh.setFormatter(formatter)
     except Exception:
         fh = None
 
+
     sh = logging.StreamHandler()
-    sh.setLevel(logging.INFO)
+    sh.setLevel(logging.DEBUG)
     sh.setFormatter(formatter)
 
     if fh is not None:

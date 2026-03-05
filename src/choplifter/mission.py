@@ -31,6 +31,8 @@ class Hostage:
     health: float = 100.0
     saved_slot: int = -1
     move_speed: float = 0.0
+    vel: Vec2 = field(default_factory=lambda: Vec2(0.0, 0.0))
+    fall_angle: float = 0.0  # For tumbling animation when falling
 
 
 @dataclass
@@ -138,6 +140,12 @@ class MissionState:
     # Cinematic feedback impulses consumed by the main loop.
     feedback_shake_impulse: float = 0.0
     feedback_duck_strength: float = 0.0
+
+    # Hostage fall timer and state for ejection logic
+    doors_open_maxvel_timer: float = 0.0
+    next_fall_time: float = 0.0
+    _prev_fall_eligible: bool = False
+    _last_fall_time: float = 0.0
 
     # Crash animation state (damage >= 100 triggers crash sequence).
     crash_active: bool = False
@@ -542,6 +550,85 @@ def _update_compounds_and_release(mission: MissionState, heli: HelicopterSetting
 
 
 def _update_hostages(mission: MissionState, helicopter: Helicopter, dt: float, heli: HelicopterSettings) -> None:
+    gravity = 900.0  # px/sec^2
+    import logging
+    logger = logging.getLogger("choplifter")
+
+    # --- Falling logic ---
+    for h in mission.hostages:
+        if h.state is HostageState.FALLING:
+            h.vel.y += gravity * dt
+            h.pos.x += h.vel.x * dt
+            h.pos.y += h.vel.y * dt
+            # Animate tumbling as they fall
+            h.fall_angle += 720.0 * dt  # 2 full spins per second
+            # If hits ground, mark as KIA
+            if h.pos.y >= heli.ground_y - 6.0:
+                h.pos.y = heli.ground_y - 6.0
+                h.state = HostageState.KIA
+                h.fall_angle = 0.0  # Reset angle on impact
+            continue
+
+    # --- Hostage ejection logic: only one every 4-6s, only after 1s at max velocity with doors open ---
+    # max_speed_x = getattr(heli, 'max_speed_x', 400.0)  # fallback default
+    # at_max_vel = abs(helicopter.vel.x) >= 0.98 * max_speed_x
+    now = getattr(mission, 'elapsed_seconds', 0.0)
+
+    # Track previous eligibility state for logging
+    prev_eligible = getattr(mission, '_prev_fall_eligible', None)
+    eligible = helicopter.doors_open and not helicopter.grounded
+
+    # --- DEBUG: Log eligibility and timer state every frame when doors are open and airborne ---
+    if helicopter.doors_open and not helicopter.grounded:
+        logger.debug(
+            f"[FALL DEBUG] eligible={eligible} | vel.x={helicopter.vel.x:.2f} | doors_open_maxvel_timer={mission.doors_open_maxvel_timer:.2f} | now={now:.2f} | next_fall_time={getattr(mission, 'next_fall_time', 0.0):.2f} | elapsed={getattr(mission, 'elapsed_seconds', 0.0):.2f}"
+        )
+
+    if eligible:
+        mission.doors_open_maxvel_timer += dt
+        if mission.doors_open_maxvel_timer > 1.0:
+            if now >= getattr(mission, 'next_fall_time', 0.0):
+                boarded_hostages = [h for h in mission.hostages if h.state is HostageState.BOARDED]
+                if boarded_hostages:
+                    h = random.choice(boarded_hostages)
+                    h.state = HostageState.FALLING
+                    h.pos = Vec2(helicopter.pos.x, helicopter.pos.y + 10.0)
+                    h.vel = Vec2(random.uniform(-60, 60), random.uniform(-80, -120))
+                    mission.stats.lost_in_transit += 1
+                    # Play scream SFX when a hostage falls
+                    if hasattr(mission, "audio") and mission.audio is not None:
+                        try:
+                            mission.audio.play_hostage_scream()
+                        except Exception:
+                            pass
+                    # Log when a hostage actually falls
+                    if hasattr(mission, '_last_fall_time'):
+                        last_fall = mission._last_fall_time
+                        actual_interval = now - last_fall
+                        logger.info(f"[HOSTAGE FALL] Hostage fell | interval={actual_interval:.2f}s | now={now:.2f} | next_fall_time={mission.next_fall_time:.2f} | doors_open_maxvel_timer={mission.doors_open_maxvel_timer:.2f}")
+                    else:
+                        logger.info(f"[HOSTAGE FALL] First fall | now={now:.2f} | next_fall_time={mission.next_fall_time:.2f} | doors_open_maxvel_timer={mission.doors_open_maxvel_timer:.2f}")
+                    mission._last_fall_time = now
+                    # Schedule next fall in 2-2.5 seconds
+                    mission.next_fall_time = now + random.uniform(2.0, 2.5)
+    else:
+        # Only log timer reset if eligibility just changed from True to False
+        if prev_eligible:
+            reason = []
+            if not helicopter.doors_open:
+                reason.append("doors closed")
+            if helicopter.grounded:
+                reason.append("grounded")
+            # if not at_max_vel:
+            #     reason.append("not at max velocity")
+            logger.info(f"[HOSTAGE FALL] Timer reset due to {', '.join(reason)} | now={now:.2f} | doors_open_maxvel_timer={mission.doors_open_maxvel_timer:.2f}")
+        mission.doors_open_maxvel_timer = 0.0
+        # Reset next_fall_time so timer doesn't accumulate while not eligible
+        mission.next_fall_time = now + random.uniform(2.0, 2.5)
+
+    # Track eligibility for next frame
+    mission._prev_fall_eligible = eligible
+
     capacity = heli.capacity
     boarded = boarded_count(mission)
 

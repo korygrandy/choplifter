@@ -160,6 +160,20 @@ class AudioMixer:
 
 @dataclass
 class AudioBank:
+    def play_hostage_scream(self) -> None:
+        """Play a random male or female scream SFX if available."""
+        # Lazy-load scream sounds if not already loaded
+        if not hasattr(self, '_hostage_scream_sounds'):
+            import os
+            module_dir = Path(__file__).resolve().parent
+            asset_dir = module_dir / "assets"
+            male = _try_load_asset_sound(asset_dir / "male-scream.wav")
+            female = _try_load_asset_sound(asset_dir / "female-scream.wav")
+            self._hostage_scream_sounds = [s for s in (male, female) if s is not None]
+        if not self._hostage_scream_sounds:
+            return
+        sound = random.choice(self._hostage_scream_sounds)
+        self._play(sound, bus="sfx")
     def play_midair_collision(self) -> None:
         # Use SFX channel 6 (never interrupted)
         if self.mixer is not None:
