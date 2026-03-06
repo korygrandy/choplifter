@@ -5,7 +5,7 @@ import random
 from typing import Callable
 
 from .game_types import HostageState
-from .helicopter import Helicopter
+from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
 from .mission_state import MissionState
 from .settings import HelicopterSettings
@@ -209,3 +209,87 @@ def _update_hostages(
                     h.state = HostageState.WAITING
                     h.move_speed = 0.0
                     moving_to_lz = max(0, moving_to_lz - 1)
+
+
+def _handle_unload(mission: MissionState, helicopter: Helicopter, heli: HelicopterSettings, dt: float) -> None:
+    # Unload rule: must be grounded at base and doors open.
+    if not helicopter.grounded or not helicopter.doors_open:
+        mission.unload_release_seconds = 0.0
+        return
+
+    if not mission.base.contains_point(helicopter.pos):
+        mission.unload_release_seconds = 0.0
+        return
+
+    mission.unload_release_seconds = max(0.0, mission.unload_release_seconds - dt)
+    if mission.unload_release_seconds > 0.0:
+        return
+
+    # Release one passenger at a time so the player can see them exit.
+    boarded = next((h for h in mission.hostages if h.state is HostageState.BOARDED), None)
+    if boarded is None:
+        return
+
+    door_offset_x = 0.0
+    if helicopter.facing is Facing.LEFT:
+        door_offset_x = -18.0
+    elif helicopter.facing is Facing.RIGHT:
+        door_offset_x = 18.0
+
+    boarded.state = HostageState.EXITING
+    boarded.saved_slot = mission.next_saved_slot
+    mission.next_saved_slot += 1
+    boarded.pos = Vec2(helicopter.pos.x + door_offset_x, heli.ground_y - 6.0)
+
+    mission.unload_release_seconds = 0.22
+
+
+def hostage_crush_check(
+    mission: MissionState,
+    helicopter: Helicopter,
+    last_landing_vy: float,
+    *,
+    safe_landing_vy: float,
+    on_foot_fn: Callable[..., bool],
+) -> None:
+    # Called on a landing event. If the landing was hard and a hostage is under the helicopter, crush them.
+    if mission.ended:
+        return
+
+    if abs(last_landing_vy) <= safe_landing_vy:
+        return
+
+    crush_radius = 28.0
+    r2 = crush_radius * crush_radius
+
+    for h in mission.hostages:
+        if not on_foot_fn(h):
+            continue
+        dx = h.pos.x - helicopter.pos.x
+        dy = h.pos.y - helicopter.pos.y
+        if dx * dx + dy * dy <= r2:
+            h.state = HostageState.KIA
+            mission.stats.kia_by_player += 1
+
+
+def hostage_crush_check_logged(
+    mission: MissionState,
+    helicopter: Helicopter,
+    last_landing_vy: float,
+    *,
+    safe_landing_vy: float,
+    logger: logging.Logger | None,
+    on_foot_fn: Callable[..., bool],
+) -> None:
+    before = mission.stats.kia_by_player
+    hostage_crush_check(
+        mission,
+        helicopter,
+        last_landing_vy,
+        safe_landing_vy=safe_landing_vy,
+        on_foot_fn=on_foot_fn,
+    )
+    if logger is None:
+        return
+    if mission.stats.kia_by_player != before:
+        logger.info("CRUSH: hard landing killed %d hostage(s)", mission.stats.kia_by_player - before)
