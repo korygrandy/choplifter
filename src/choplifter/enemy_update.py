@@ -1,14 +1,17 @@
 from __future__ import annotations
-import math
-from .entities import Enemy
-from .game_types import EnemyKind, ProjectileKind
-from .math2d import Vec2, clamp
-from .settings import HelicopterSettings
-from .mission_helpers import _difficulty_scale
-from .mission_state import MissionState
-from .entities import Projectile
-from .helicopter import Helicopter, Facing
+
 import logging
+import math
+from typing import Callable
+
+from .entities import Enemy, Projectile
+from .game_types import EnemyKind, ProjectileKind
+from .helicopter import Facing, Helicopter
+from .math2d import Vec2, clamp
+from .mission_helpers import _difficulty_scale, _hits_circle
+from .mission_state import MissionState
+from .settings import HelicopterSettings
+
 
 def _update_enemies(
     mission: MissionState,
@@ -16,6 +19,10 @@ def _update_enemies(
     dt: float,
     heli: HelicopterSettings,
     logger: logging.Logger | None,
+    *,
+    mine_explode: Callable[[MissionState, Vec2, Helicopter, logging.Logger | None], None],
+    spawn_enemy_bullet_toward: Callable[..., None],
+    damage_helicopter: Callable[[MissionState, Helicopter, float, logging.Logger | None, str], None],
 ) -> None:
     difficulty = _difficulty_scale(mission.sentiment)
     tuning = mission.tuning
@@ -141,7 +148,7 @@ def _update_enemies(
                 elif e.mrad_state == "deploying":
                     # Animate launcher_angle from 0 (horizontal) to pi/2 (vertical)
                     deploy_speed = 1.5  # radians/sec
-                    ext_speed = 1.2     # extension per second
+                    ext_speed = 1.2  # extension per second
                     target_angle = math.pi / 2
                     angle_done = False
                     ext_done = False
@@ -174,11 +181,14 @@ def _update_enemies(
                         # Offset missile 30px left relative to BARAK sprite
                         missile_pos = Vec2(
                             e.pos.x - 40 + launcher_length * math.cos(e.launcher_angle),
-                            e.pos.y - 28.0 - launcher_length * math.sin(e.launcher_angle)
+                            e.pos.y - 28.0 - launcher_length * math.sin(e.launcher_angle),
                         )
                         missile_angle = e.launcher_angle  # Should be vertical (pi/2)
                         missile_speed = 120.0
-                        missile_vel = Vec2(math.cos(missile_angle) * missile_speed, -abs(math.sin(missile_angle)) * missile_speed)
+                        missile_vel = Vec2(
+                            math.cos(missile_angle) * missile_speed,
+                            -abs(math.sin(missile_angle)) * missile_speed,
+                        )
                         mission.projectiles.append(
                             Projectile(
                                 kind=ProjectileKind.ENEMY_BULLET,  # Use ENEMY_BULLET for now; can define new kind if needed
@@ -208,22 +218,98 @@ def _update_enemies(
             dx = helicopter.pos.x - e.pos.x
             dy = helicopter.pos.y - e.pos.y
             target_angle = math.atan2(dy, dx)
+
             # Smoothly interpolate turret_angle toward target_angle (shortest path)
-            def angle_diff(a, b):
-                d = a - b
-                while d > math.pi:
-                    d -= 2 * math.pi
-                while d < -math.pi:
-                    d += 2 * math.pi
+            def angle_diff(a: float, b: float) -> float:
+                d = (b - a + math.pi) % (2 * math.pi) - math.pi
                 return d
-            diff = angle_diff(target_angle, e.turret_angle)
-            max_turn = 1.8 * dt
-            if abs(diff) < max_turn:
+
+            max_turn_speed = 2.5  # radians/sec, tune as needed
+            angle_delta = angle_diff(e.turret_angle, target_angle)
+            max_step = max_turn_speed * dt
+            if abs(angle_delta) < max_step:
                 e.turret_angle = target_angle
             else:
-                e.turret_angle += max_turn if diff > 0 else -max_turn
-            # Clamp to [-pi, pi]
-            if e.turret_angle > math.pi:
-                e.turret_angle -= 2 * math.pi
-            elif e.turret_angle < -math.pi:
-                e.turret_angle += 2 * math.pi
+                e.turret_angle += max_step if angle_delta > 0 else -max_step
+                # Keep angle in [-pi, pi]
+                e.turret_angle = (e.turret_angle + math.pi) % (2 * math.pi) - math.pi
+
+            if (
+                abs(dx) <= tuning.tank_fire_range_x
+                and helicopter.pos.y <= heli.ground_y - tuning.tank_fire_min_altitude_clearance_y
+                and e.cooldown <= 0.0
+            ):
+                tank_cd = (tuning.tank_fire_base_cooldown_s / pressure) * (1.0 - 0.12 * difficulty)
+                e.cooldown = clamp(tank_cd, tuning.tank_fire_min_cooldown_s, tuning.tank_fire_max_cooldown_s)
+                spawn_enemy_bullet_toward(
+                    mission,
+                    e.pos,
+                    helicopter.pos,
+                    kind=ProjectileKind.ENEMY_ARTILLERY,
+                    source=EnemyKind.TANK,
+                )
+                mission.stats.artillery_fired += 1
+                if logger is not None:
+                    logger.info("TANK_FIRE")
+
+        elif e.kind is EnemyKind.JET:
+            e.pos.x += e.vel.x * dt
+            e.pos.y += e.vel.y * dt
+
+            if not e.entered_screen and 0.0 <= e.pos.x <= mission.world_width:
+                e.entered_screen = True
+                mission.stats.jets_entered += 1
+                if logger is not None:
+                    logger.info("JET: entered")
+
+            if abs(helicopter.pos.x - e.pos.x) <= tuning.jet_fire_range_x and e.cooldown <= 0.0:
+                jet_cd = (tuning.jet_fire_base_cooldown_s / pressure) * (1.0 - 0.10 * difficulty)
+                e.cooldown = clamp(jet_cd, tuning.jet_fire_min_cooldown_s, tuning.jet_fire_max_cooldown_s)
+                spawn_enemy_bullet_toward(mission, e.pos, helicopter.pos, source=EnemyKind.JET)
+
+            if e.entered_screen and e.trail_enabled:
+                e.trail_spawn_accum += dt * 18.0
+                while e.trail_spawn_accum >= 1.0:
+                    e.trail_spawn_accum -= 1.0
+                    mission.jet_trails.emit_trail(e.pos, e.vel)
+
+            if _hits_circle(e.pos, helicopter.pos, radius=tuning.jet_collision_radius):
+                damage_helicopter(mission, helicopter, tuning.jet_touch_damage, logger, source="JET")
+                if hasattr(mission, "audio") and mission.audio is not None:
+                    try:
+                        mission.audio.play_midair_collision()
+                    except Exception:
+                        pass
+
+        elif e.kind is EnemyKind.AIR_MINE:
+            to_heli = Vec2(helicopter.pos.x - e.pos.x, helicopter.pos.y - e.pos.y)
+            dist = math.hypot(to_heli.x, to_heli.y)
+            if dist > 0.001:
+                nx = to_heli.x / dist
+                ny = to_heli.y / dist
+            else:
+                nx, ny = 0.0, 0.0
+
+            desired_speed = clamp(
+                (tuning.mine_base_speed * pressure) * (1.0 + 0.15 * difficulty),
+                tuning.mine_min_speed,
+                tuning.mine_max_speed,
+            )
+            desired_vx = nx * desired_speed
+            desired_vy = ny * desired_speed
+            steer = tuning.mine_steer
+            e.vel.x += (desired_vx - e.vel.x) * steer * dt
+            e.vel.y += (desired_vy - e.vel.y) * steer * dt
+
+            e.pos.x += e.vel.x * dt
+            e.pos.y += e.vel.y * dt
+
+            # Keep mines in the playable air space.
+            e.pos.x = clamp(e.pos.x, 20.0, mission.world_width - 20.0)
+            e.pos.y = clamp(e.pos.y, 50.0, heli.ground_y - 60.0)
+
+            if _hits_circle(e.pos, helicopter.pos, radius=tuning.mine_touch_radius):
+                mine_explode(mission, e.pos, helicopter, logger)
+                e.alive = False
+
+    mission.enemies = [e for e in mission.enemies if e.alive]
