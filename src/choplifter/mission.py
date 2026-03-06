@@ -63,6 +63,12 @@ class Projectile:
     source: "EnemyKind | None" = None
     alive: bool = True
     is_barak_missile: bool = False  # True if this is a Barak MRAD missile
+    missile_state: str = "liftoff"  # "liftoff", "rotating", "homing"
+    launch_pos: Vec2 = None
+    rotation_progress: float = 0.0  # 0.0 to 1.0 for rotation animation
+    rotate_dir: int = 0  # +1 for CW, -1 for CCW
+    target_angle: float = 0.0  # angle to rotate to (radians)
+    current_angle: float = math.pi/2  # vertical up
 
 
 @dataclass
@@ -437,32 +443,50 @@ def _update_projectiles(
         p.pos.x += p.vel.x * dt
         p.pos.y += p.vel.y * dt
 
-        # Barak MRAD missile: emit smoke/ember particles at rear
+        # Barak MRAD missile: two-phase logic
         if getattr(p, "is_barak_missile", False):
-            # Rear of missile is at (p.pos.x, p.pos.y + 16)
-            rear_pos = Vec2(p.pos.x, p.pos.y + 16)
-            # Emit smoke
-            mission.burning.particles.append(type('SmokeParticle', (), {
-                'pos': rear_pos.copy(),
-                'age': 0.0,
-                'ttl': 0.6,
-                'kind': 'smoke',
-                'radius': 7.0 + random.uniform(-1.5, 1.5),
-                'intensity': 0.7 + random.uniform(-0.2, 0.2),
-                'color': (180 + random.randint(-20, 20), 180 + random.randint(-20, 20), 180 + random.randint(-20, 20)),
-                'vel': Vec2(0.0, -8.0 + random.uniform(-2.0, 2.0)),  # Upward drift
-            })())
-            # Emit ember (flame)
-            if random.random() < 0.5:
-                mission.burning.particles.append(type('EmberParticle', (), {
-                    'pos': rear_pos.copy(),
-                    'age': 0.0,
-                    'ttl': 0.25,
-                    'kind': 'ember',
-                    'radius': 3.0 + random.uniform(-1.0, 1.0),
-                    'intensity': 1.0,
-                    'vel': Vec2(0.0, -12.0 + random.uniform(-3.0, 3.0)),  # Faster upward drift
-                })())
+            # Phase 1: Liftoff
+            if p.missile_state == "liftoff":
+                if p.launch_pos is None:
+                    p.launch_pos = p.pos.copy()
+                p.current_angle = math.pi/2  # vertical up
+                p.vel = Vec2(0.0, -240.0)  # 2x faster liftoff
+                if p.pos.y <= p.launch_pos.y - 40.0:
+                    # Determine rotation direction (INVERTED)
+                    dx = helicopter.pos.x - p.pos.x
+                    if dx > 0:
+                        p.rotate_dir = -1  # CCW (was CW)
+                        p.target_angle = math.pi  # left (was right)
+                    else:
+                        p.rotate_dir = 1  # CW (was CCW)
+                        p.target_angle = 0.0  # right (was left)
+                    p.missile_state = "rotating"
+                    p.rotation_progress = 0.0
+                    p.vel = Vec2(0.0, 0.0)
+            # Phase 2: Rotating
+            elif p.missile_state == "rotating":
+                start_angle = math.pi/2
+                end_angle = p.target_angle
+                # Animate rotation (0.5s duration)
+                p.rotation_progress += dt * 2.0
+                if p.rotation_progress >= 1.0:
+                    p.rotation_progress = 1.0
+                    p.current_angle = end_angle
+                    p.missile_state = "homing"
+                    # Phase 3: Final boost (handled in homing phase)
+                else:
+                    # Interpolate angle
+                    p.current_angle = start_angle + (end_angle - start_angle) * p.rotation_progress
+                    p.vel = Vec2(0.0, 0.0)
+            # Phase 3: Homing (continuous tracking)
+            elif p.missile_state == "homing":
+                # Continuously update velocity to track the helicopter
+                dx = helicopter.pos.x - p.pos.x
+                dy = (helicopter.pos.y + 24.0) - p.pos.y
+                angle = math.atan2(dy, dx)
+                speed = 360.0 * 3  # 3x faster
+                p.vel = Vec2(math.cos(angle) * speed, math.sin(angle) * speed)
+                p.current_angle = angle
 
         # Enemy collision (player projectiles only).
         if p.kind in (ProjectileKind.BULLET, ProjectileKind.BOMB):
@@ -1167,15 +1191,18 @@ def _update_enemies(
                             e.pos.x - 40 + launcher_length * math.cos(e.launcher_angle),
                             e.pos.y - 28.0 - launcher_length * math.sin(e.launcher_angle)
                         )
-                        missile_vel = Vec2(0.0, -120.0)  # Upwards, adjust speed as needed
+                        missile_angle = e.launcher_angle  # Should be vertical (pi/2)
+                        missile_speed = 120.0
+                        missile_vel = Vec2(math.cos(missile_angle) * missile_speed, -abs(math.sin(missile_angle)) * missile_speed)
                         mission.projectiles.append(
                             Projectile(
                                 kind=ProjectileKind.ENEMY_BULLET,  # Use ENEMY_BULLET for now; can define new kind if needed
                                 pos=missile_pos,
                                 vel=missile_vel,
-                                ttl=3.0,
+                                ttl=9999.0,  # Effectively unlimited
                                 source=EnemyKind.BARAK_MRAD,
                                 is_barak_missile=True,
+                                current_angle=missile_angle,
                             )
                         )
                         e.missile_fired = True
