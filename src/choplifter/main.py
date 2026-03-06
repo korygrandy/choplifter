@@ -218,6 +218,7 @@ def run() -> None:
     mode: str = "intro"  # intro | select_mission | select_chopper | playing | paused | cutscene | mission_end
     prev_menu_dir = 0
     prev_menu_vert = 0
+    just_paused_with_start = False
     pause_focus: str = "choppers"  # choppers | restart_mission | restart_game | mute | quit
     quit_confirm: bool = False
     muted = False
@@ -489,33 +490,6 @@ def run() -> None:
                     elif event.button == 6:  # Back button: facing
                         if not getattr(mission, "crash_active", False):
                             helicopter.cycle_facing()
-                # audio=audio,
-                # logger=logger,
-                # chopper_choices=chopper_choices,
-                # mission_choices=mission_choices,
-                # pause_focus=pause_focus,
-                # muted=muted,
-                # set_toast=set_toast,
-                # reset_game=reset_game_wrapper,
-                # apply_mission_preview=apply_mission_preview_wrapper,
-                # skip_intro=lambda: skip_intro(cutscenes.intro),
-                # skip_mission_cutscene=lambda: skip_mission_cutscene(cutscenes.mission),
-                # toggle_particles_wrapper=toggle_particles_wrapper,
-                # toggle_flashes_wrapper=toggle_flashes_wrapper,
-                # toggle_screenshake_wrapper=toggle_screenshake_wrapper,
-                # spawn_projectile_from_helicopter_logged=spawn_projectile_from_helicopter_logged,
-                # try_start_flare_salvo=try_start_flare_salvo,
-                # toggle_doors_with_logging=toggle_doors_with_logging,
-                # Facing=Facing,
-                # DebugSettings=DebugSettings,
-                # boarded_count=boarded_count,
-                # flares=flares,
-                # selected_mission_index=selected_mission_index,
-                # selected_mission_id=selected_mission_id,
-                # selected_chopper_index=selected_chopper_index,
-                # selected_chopper_asset=selected_chopper_asset,
-                # debug=debug
-                # )
             # Quit confirmation: if quit_confirm is True and A is pressed, exit; if B is pressed, cancel
             if quit_confirm:
                 if a_down and not prev_btn_a_down:
@@ -584,10 +558,6 @@ def run() -> None:
             if start_down and not prev_btn_start_down:
                 logger.info(f"GAMEPAD: Start button pressed (start_down={start_down}, prev_btn_start_down={prev_btn_start_down}, mode={mode})")
 
-            # Track if we just paused with Start, to require release before unpause
-            if 'just_paused_with_start' not in locals():
-                just_paused_with_start = False
-
             if mode == "playing" and (start_down and not prev_btn_start_down):
                 logger.info(f"PAUSE: Gamepad Start pressed, entering pause menu (mode=playing)")
                 mode = "paused"
@@ -601,7 +571,6 @@ def run() -> None:
             # Only allow unpause with Start if it was released after pausing
             if mode == "paused":
                 # Start/B resumes, but Start only if it was released after pausing
-                can_unpause_with_start = (not start_down and prev_btn_start_down and just_paused_with_start) or (not just_paused_with_start)
                 if ((start_down and not prev_btn_start_down and not just_paused_with_start) or (b_down and not prev_btn_b_down)):
                     logger.info(f"UNPAUSE: Gamepad Start or B pressed, resuming game (mode=paused)")
                     mode = "playing"
