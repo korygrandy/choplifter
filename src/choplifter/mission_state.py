@@ -56,6 +56,8 @@ class MissionState:
     crash_impact_sfx_pending: bool = False
     jet_spawn_seconds: float = 4.0
     mine_spawn_seconds: float = 24.0
+    tank_warning_seconds: float = 0.0
+    tank_warning_from_right: bool = False
     jet_warning_seconds: float = 0.0
     jet_warning_from_right: bool = False
     mine_warning_seconds: float = 0.0
