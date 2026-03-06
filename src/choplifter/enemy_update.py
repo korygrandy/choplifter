@@ -8,7 +8,7 @@ from .entities import Enemy, Projectile
 from .game_types import EnemyKind, ProjectileKind
 from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
-from .mission_helpers import _difficulty_scale, _hits_circle
+from .mission_helpers import _difficulty_scale, _hits_circle, sentiment_progression_pressure_multiplier
 from .mission_state import MissionState
 from .settings import HelicopterSettings
 
@@ -27,8 +27,11 @@ def _update_enemies(
     difficulty = _difficulty_scale(mission.sentiment)
     tuning = mission.tuning
     mission.tank_warning_seconds = max(0.0, float(getattr(mission, "tank_warning_seconds", 0.0)) - dt)
+    mission.tank_warning_cooldown_s = max(0.0, float(getattr(mission, "tank_warning_cooldown_s", 0.0)) - dt)
     mission.jet_warning_seconds = max(0.0, float(getattr(mission, "jet_warning_seconds", 0.0)) - dt)
+    mission.jet_warning_cooldown_s = max(0.0, float(getattr(mission, "jet_warning_cooldown_s", 0.0)) - dt)
     mission.mine_warning_seconds = max(0.0, float(getattr(mission, "mine_warning_seconds", 0.0)) - dt)
+    mission.mine_warning_cooldown_s = max(0.0, float(getattr(mission, "mine_warning_cooldown_s", 0.0)) - dt)
     mission.mine_warning_distance = float(getattr(mission, "mine_warning_distance", 9999.0))
 
     # Time-based pressure ramp:
@@ -37,6 +40,7 @@ def _update_enemies(
     # pressure > 1 => more frequent threats; < 1 => less.
     ramp_t = clamp((mission.elapsed_seconds - 60.0) / 60.0, 0.0, 1.0)
     pressure = (0.75 * (1.0 - ramp_t)) + (1.00 * ramp_t)
+    pressure *= float(sentiment_progression_pressure_multiplier(mission.sentiment))
 
     # Spawn a delayed initial air mine (used to keep the first minute calmer).
     if mission.pending_air_mine_pos is not None:
@@ -120,12 +124,14 @@ def _update_enemies(
                 trail_enabled=(int(mission.elapsed_seconds * 1.7) % 2 == 0),
             )
         )
-        mission.jet_warning_seconds = 1.2
-        if hasattr(mission, "audio") and mission.audio is not None:
-            try:
-                mission.audio.play_jet_flyby()
-            except Exception:
-                pass
+        if mission.jet_warning_cooldown_s <= 0.0:
+            mission.jet_warning_seconds = 1.2
+            mission.jet_warning_cooldown_s = 1.3
+            if hasattr(mission, "audio") and mission.audio is not None:
+                try:
+                    mission.audio.play_jet_flyby()
+                except Exception:
+                    pass
         if logger is not None:
             logger.info("JET: spawned")
 
@@ -285,9 +291,10 @@ def _update_enemies(
                 e.fire_tell_seconds = 0.0
                 e.fire_tell_armed = False
 
-            if e.fire_tell_seconds > 0.0:
+            if e.fire_tell_seconds > 0.0 and mission.tank_warning_cooldown_s <= 0.0:
                 mission.tank_warning_seconds = max(mission.tank_warning_seconds, 0.22)
                 mission.tank_warning_from_right = bool(e.pos.x > helicopter.pos.x)
+                mission.tank_warning_cooldown_s = 0.55
 
         elif e.kind is EnemyKind.JET:
             e.pos.x += e.vel.x * dt
@@ -321,9 +328,14 @@ def _update_enemies(
         elif e.kind is EnemyKind.AIR_MINE:
             to_heli = Vec2(helicopter.pos.x - e.pos.x, helicopter.pos.y - e.pos.y)
             dist = math.hypot(to_heli.x, to_heli.y)
-            if dist <= 220.0:
-                mission.mine_warning_seconds = max(mission.mine_warning_seconds, 0.35)
-                mission.mine_warning_distance = min(float(mission.mine_warning_distance), float(dist))
+            if dist <= 170.0 and mission.mine_warning_cooldown_s <= 0.0:
+                closing_speed = 0.0
+                if dist > 0.001:
+                    closing_speed = (to_heli.x * e.vel.x + to_heli.y * e.vel.y) / dist
+                if closing_speed >= 35.0:
+                    mission.mine_warning_seconds = max(mission.mine_warning_seconds, 0.45)
+                    mission.mine_warning_distance = min(float(mission.mine_warning_distance), float(dist))
+                    mission.mine_warning_cooldown_s = 0.80
             if dist > 0.001:
                 nx = to_heli.x / dist
                 ny = to_heli.y / dist

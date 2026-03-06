@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from ..game_types import EnemyKind, HostageState, ProjectileKind
+from ..mission_helpers import sentiment_band_label
 
 if TYPE_CHECKING:
     from ..mission_state import MissionState
@@ -378,19 +379,6 @@ def _draw_air_mine(screen: pygame.Surface, x: int, y: int, t: float) -> None:
         pygame.draw.circle(screen, (35, 35, 35), (x, y), 2)
 
 
-def _sentiment_band(sentiment: float) -> str:
-    s = float(sentiment)
-    if s >= 80.0:
-        return "Excellent"
-    if s >= 65.0:
-        return "Good"
-    if s >= 45.0:
-        return "Mixed"
-    if s >= 25.0:
-        return "Poor"
-    return "Critical"
-
-
 def _sentiment_reason_lines(
     *,
     saved: int,
@@ -436,7 +424,7 @@ def _draw_end(
     screen.blit(surf, rect)
 
     small = pygame.font.SysFont("consolas", 22)
-    band = _sentiment_band(sentiment)
+    band = sentiment_band_label(sentiment)
     lines = [
         f"Result: {reason}",
         f"Saved: {saved}",

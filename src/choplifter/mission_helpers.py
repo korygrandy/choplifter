@@ -16,6 +16,14 @@ if TYPE_CHECKING:
     from .mission_state import MissionState
 
 
+SENTIMENT_WEIGHT_SAVED = 2.5
+SENTIMENT_WEIGHT_KIA_PLAYER = -4.0
+SENTIMENT_WEIGHT_KIA_ENEMY = -2.5
+SENTIMENT_WEIGHT_LOST_IN_TRANSIT = -3.5
+# Guardrail: cap how much sentiment can move in one update tick.
+SENTIMENT_MAX_DELTA_PER_UPDATE = 18.0
+
+
 def boarded_count(mission: "MissionState") -> int:
     return sum(1 for h in mission.hostages if h.state is HostageState.BOARDED)
 
@@ -77,6 +85,43 @@ def _difficulty_scale(sentiment: float) -> float:
     return clamp((50.0 - clamp(sentiment, 0.0, 100.0)) / 50.0, -1.0, 1.0)
 
 
+def sentiment_band_label(sentiment: float) -> str:
+    s = float(clamp(sentiment, 0.0, 100.0))
+    if s >= 80.0:
+        return "Excellent"
+    if s >= 65.0:
+        return "Good"
+    if s >= 45.0:
+        return "Mixed"
+    if s >= 25.0:
+        return "Poor"
+    return "Critical"
+
+
+def sentiment_progression_pressure_multiplier(sentiment: float) -> float:
+    # Explicit progression tie-in by sentiment band.
+    # Higher sentiment: slightly less pressure. Lower sentiment: slightly more pressure.
+    band = sentiment_band_label(sentiment)
+    if band == "Excellent":
+        return 0.88
+    if band == "Good":
+        return 0.94
+    if band == "Mixed":
+        return 1.00
+    if band == "Poor":
+        return 1.10
+    return 1.18
+
+
+def sentiment_contributions(*, saved: int, kia_player: int, kia_enemy: int, lost_in_transit: int) -> dict[str, float]:
+    return {
+        "saved": float(saved) * SENTIMENT_WEIGHT_SAVED,
+        "kia_player": float(kia_player) * SENTIMENT_WEIGHT_KIA_PLAYER,
+        "kia_enemy": float(kia_enemy) * SENTIMENT_WEIGHT_KIA_ENEMY,
+        "lost_in_transit": float(lost_in_transit) * SENTIMENT_WEIGHT_LOST_IN_TRANSIT,
+    }
+
+
 def _update_sentiment(mission: "MissionState") -> None:
     # Minimal MVP interpretation:
     # - Rescues increase sentiment
@@ -93,10 +138,20 @@ def _update_sentiment(mission: "MissionState") -> None:
     dlost = lost - mission._sentiment_last_lost_in_transit
 
     if dsaved or dkia_player or dkia_enemy or dlost:
-        mission.sentiment += dsaved * 2.5
-        mission.sentiment -= dkia_player * 4.0
-        mission.sentiment -= dkia_enemy * 2.5
-        mission.sentiment -= dlost * 3.5
+        delta_parts = sentiment_contributions(
+            saved=dsaved,
+            kia_player=dkia_player,
+            kia_enemy=dkia_enemy,
+            lost_in_transit=dlost,
+        )
+        delta_total = (
+            float(delta_parts["saved"])
+            + float(delta_parts["kia_player"])
+            + float(delta_parts["kia_enemy"])
+            + float(delta_parts["lost_in_transit"])
+        )
+        delta_total = clamp(delta_total, -SENTIMENT_MAX_DELTA_PER_UPDATE, SENTIMENT_MAX_DELTA_PER_UPDATE)
+        mission.sentiment += delta_total
         mission.sentiment = clamp(mission.sentiment, 0.0, 100.0)
 
     mission._sentiment_last_saved = saved

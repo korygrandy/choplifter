@@ -58,10 +58,13 @@ class MissionState:
     mine_spawn_seconds: float = 24.0
     tank_warning_seconds: float = 0.0
     tank_warning_from_right: bool = False
+    tank_warning_cooldown_s: float = 0.0
     jet_warning_seconds: float = 0.0
     jet_warning_from_right: bool = False
+    jet_warning_cooldown_s: float = 0.0
     mine_warning_seconds: float = 0.0
     mine_warning_distance: float = 9999.0
+    mine_warning_cooldown_s: float = 0.0
     unload_release_seconds: float = 0.0
     next_saved_slot: int = 0
     _sentiment_last_saved: int = 0

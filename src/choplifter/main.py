@@ -237,11 +237,12 @@ def run() -> None:
         chopper_asset=selected_chopper_asset,
     )
     mission.audio = audio
+    campaign_sentiment = float(getattr(mission, "sentiment", 50.0))
 
     prev_stats: MissionStatsSnapshot = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
 
     def apply_mission_preview_wrapper() -> None:
-        nonlocal helicopter, mission, accumulator, prev_stats
+        nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
         mission, helicopter, accumulator, prev_stats = apply_mission_preview(
             create_mission_and_helicopter,
             heli_settings,
@@ -254,11 +255,12 @@ def run() -> None:
             set_toast,
             mission,
         )
+        mission.sentiment = float(campaign_sentiment)
         mission.audio = audio
         audio.log_audio_channel_snapshot(tag="mission_preview", logger=logger)
 
     def reset_game_wrapper() -> None:
-        nonlocal helicopter, mission, accumulator, prev_stats
+        nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_btn_rb_down, prev_btn_lb_down, prev_btn_back_down
         # Stop chopper warning beeps on game reset
@@ -276,6 +278,7 @@ def run() -> None:
             logger,
             flares,
         )
+        mission.sentiment = float(campaign_sentiment)
         mission.audio = audio
         audio.log_audio_channel_snapshot(tag="restart", logger=logger)
         prev_btn_a_down = False
@@ -840,6 +843,7 @@ def run() -> None:
 
                 # If mission ended, switch to mission_end mode to disable input.
                 if mission.ended:
+                    campaign_sentiment = float(mission.sentiment)
                     # Stop chopper warning beeps immediately on mission end
                     audio.stop_chopper_warning_beeps()
                     mode = "mission_end"
