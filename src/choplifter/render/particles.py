@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 if TYPE_CHECKING:
-    from ..mission import MissionState
+    from ..mission_state import MissionState
 
 
 _BURN_SPRITE_CACHE: dict[tuple[str, int], pygame.Surface] = {}
