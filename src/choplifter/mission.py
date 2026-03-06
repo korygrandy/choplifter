@@ -77,6 +77,11 @@ class Enemy:
     trail_enabled: bool = False
     trail_spawn_accum: float = 0.0
     turret_angle: float = 0.0  # Radians, only used for turrets
+    # Barak MRAD-specific state
+    mrad_state: str = "moving"  # moving, deploying, aiming, launching, done
+    launcher_angle: float = 0.0  # Radians, for launcher deployment/aim
+    missile_fired: bool = False
+    launcher_ext_progress: float = 0.0  # 0.0 (retracted) to 1.0 (fully extended)
 
 
 @dataclass(frozen=True)
@@ -244,6 +249,17 @@ class MissionState:
                     cooldown=level.tuning.tank_initial_cooldown_s,
                 )
             )
+
+        # --- BARAK MRAD ENEMY SPAWN LOGIC ---
+        # Example: spawn one Barak MRAD at left edge, off-screen, moving right
+        enemies.append(
+            Enemy(
+                kind=EnemyKind.BARAK_MRAD,
+                pos=Vec2(-120.0, heli.ground_y - 12.0),  # Off-screen left, ground level
+                vel=Vec2(32.0, 0.0),  # Moves right at 32 px/sec
+                health=100.0,
+            )
+        )
 
         pending_mine_pos: Vec2 | None = None
         pending_mine_seconds = 0.0
@@ -1066,6 +1082,56 @@ def _update_enemies(
             continue
 
         e.cooldown = max(0.0, e.cooldown - dt)
+
+
+        # --- BARAK MRAD MOVEMENT, DEPLOYMENT, AND AIMING LOGIC ---
+        if e.kind is EnemyKind.BARAK_MRAD:
+            if mission.compounds:
+                leftmost = min(mission.compounds, key=lambda c: c.pos.x)
+                target_x = leftmost.pos.x + leftmost.width + 24.0
+                if e.mrad_state == "moving":
+                    if e.pos.x < target_x:
+                        e.pos.x += e.vel.x * dt
+                        if e.pos.x >= target_x:
+                            e.pos.x = target_x
+                            e.vel.x = 0.0
+                            e.entered_screen = True
+                            e.mrad_state = "deploying"
+                    else:
+                        e.vel.x = 0.0
+                        e.entered_screen = True
+                        e.mrad_state = "deploying"
+                elif e.mrad_state == "deploying":
+                    # Animate launcher_angle from 0 (horizontal) to pi/2 (vertical)
+                    deploy_speed = 1.5  # radians/sec
+                    ext_speed = 1.2     # extension per second
+                    target_angle = math.pi / 2
+                    angle_done = False
+                    ext_done = False
+                    # Animate angle
+                    if abs(e.launcher_angle - target_angle) < deploy_speed * dt:
+                        e.launcher_angle = target_angle
+                        angle_done = True
+                    else:
+                        if e.launcher_angle < target_angle:
+                            e.launcher_angle += deploy_speed * dt
+                        else:
+                            e.launcher_angle -= deploy_speed * dt
+                    # Animate extension progress (0 to 1)
+                    if e.launcher_ext_progress < 1.0:
+                        e.launcher_ext_progress += ext_speed * dt
+                        if e.launcher_ext_progress > 1.0:
+                            e.launcher_ext_progress = 1.0
+                    else:
+                        ext_done = True
+                    # Only finish deploying when both are done
+                    if angle_done and ext_done:
+                        e.mrad_state = "aiming"
+                elif e.mrad_state == "aiming":
+                    # Placeholder for aiming logic (auto-aim at chopper)
+                    e.launcher_ext_progress = 1.0
+                    pass
+            continue
 
         if e.kind is EnemyKind.TANK:
             # Turret tracking logic (smooth rotation)
