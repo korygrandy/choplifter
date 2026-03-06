@@ -135,6 +135,41 @@ def _draw_projectiles(screen: pygame.Surface, mission: MissionState, *, camera_x
     for p in mission.projectiles:
         x = int(p.pos.x - camera_x)
         y = int(p.pos.y)
+        # Barak MRAD missile: draw as a large missile with flame and smoke
+        if getattr(p, "is_barak_missile", False):
+            missile_len = 34
+            missile_w = 6
+            # Draw missile body (white)
+            body_rect = pygame.Rect(x - missile_w // 2, y - missile_len, missile_w, missile_len)
+            pygame.draw.rect(screen, (230, 230, 230), body_rect)
+            # Draw missile tip (red)
+            pygame.draw.polygon(screen, (200, 40, 40), [
+                (x, y - missile_len - 6),
+                (x - missile_w // 2, y - missile_len),
+                (x + missile_w // 2, y - missile_len),
+            ])
+            # Draw fins (gray)
+            pygame.draw.polygon(screen, (120, 120, 120), [
+                (x - missile_w // 2, y - missile_len + 8),
+                (x - missile_w, y - missile_len + 16),
+                (x - missile_w // 2, y - missile_len + 16),
+            ])
+            pygame.draw.polygon(screen, (120, 120, 120), [
+                (x + missile_w // 2, y - missile_len + 8),
+                (x + missile_w, y - missile_len + 16),
+                (x + missile_w // 2, y - missile_len + 16),
+            ])
+            # Draw propulsion flame (orange/yellow)
+            flame_colors = [(255, 200, 40), (255, 120, 0)]
+            for i, color in enumerate(flame_colors):
+                flame_len = 10 + i * 4
+                flame_w = missile_w - i * 2
+                pygame.draw.ellipse(
+                    screen, color,
+                    (x - flame_w // 2, y + 2 + i * 2, flame_w, flame_len)
+                )
+            # Optionally: draw smoke (handled as particles for realism)
+            continue
         if p.kind is ProjectileKind.BULLET:
             pygame.draw.circle(screen, (240, 240, 240), (x, y), 2)
         elif p.kind in (ProjectileKind.ENEMY_BULLET, ProjectileKind.ENEMY_ARTILLERY):
@@ -190,7 +225,7 @@ def _draw_enemies(screen: pygame.Surface, mission: MissionState, *, camera_x: fl
                 pygame.draw.rect(launcher_surf, army_green, (0, 0, launcher_len, launcher_w))
                 pygame.draw.rect(launcher_surf, dark_green, (0, 0, launcher_len, launcher_w), 2)
                 # Add simple texture: horizontal lines and a vertical band
-                texture_color = (110, 140, 70)
+                texture_color = (106, 113, 81)  # #6a7151 html color code
                 for i in range(2, launcher_w-2, 4):
                     pygame.draw.line(launcher_surf, texture_color, (2, i), (launcher_len-2, i), 1)
                 # Vertical band near the base

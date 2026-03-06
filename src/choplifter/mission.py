@@ -62,6 +62,7 @@ class Projectile:
     ttl: float
     source: "EnemyKind | None" = None
     alive: bool = True
+    is_barak_missile: bool = False  # True if this is a Barak MRAD missile
 
 
 @dataclass
@@ -435,6 +436,33 @@ def _update_projectiles(
 
         p.pos.x += p.vel.x * dt
         p.pos.y += p.vel.y * dt
+
+        # Barak MRAD missile: emit smoke/ember particles at rear
+        if getattr(p, "is_barak_missile", False):
+            # Rear of missile is at (p.pos.x, p.pos.y + 16)
+            rear_pos = Vec2(p.pos.x, p.pos.y + 16)
+            # Emit smoke
+            mission.burning.particles.append(type('SmokeParticle', (), {
+                'pos': rear_pos.copy(),
+                'age': 0.0,
+                'ttl': 0.6,
+                'kind': 'smoke',
+                'radius': 7.0 + random.uniform(-1.5, 1.5),
+                'intensity': 0.7 + random.uniform(-0.2, 0.2),
+                'color': (180 + random.randint(-20, 20), 180 + random.randint(-20, 20), 180 + random.randint(-20, 20)),
+                'vel': Vec2(0.0, -8.0 + random.uniform(-2.0, 2.0)),  # Upward drift
+            })())
+            # Emit ember (flame)
+            if random.random() < 0.5:
+                mission.burning.particles.append(type('EmberParticle', (), {
+                    'pos': rear_pos.copy(),
+                    'age': 0.0,
+                    'ttl': 0.25,
+                    'kind': 'ember',
+                    'radius': 3.0 + random.uniform(-1.0, 1.0),
+                    'intensity': 1.0,
+                    'vel': Vec2(0.0, -12.0 + random.uniform(-3.0, 3.0)),  # Faster upward drift
+                })())
 
         # Enemy collision (player projectiles only).
         if p.kind in (ProjectileKind.BULLET, ProjectileKind.BOMB):
@@ -1126,11 +1154,41 @@ def _update_enemies(
                         ext_done = True
                     # Only finish deploying when both are done
                     if angle_done and ext_done:
-                        e.mrad_state = "aiming"
-                elif e.mrad_state == "aiming":
-                    # Placeholder for aiming logic (auto-aim at chopper)
+                        e.mrad_state = "launching"
+                elif e.mrad_state == "launching":
+                    # Missile launch logic: spawn missile once, play launch animation, then transition to 'done'
                     e.launcher_ext_progress = 1.0
-                    pass
+                    if not e.missile_fired:
+                        # Missile launches straight up from the tip of the launcher
+                        # Calculate missile start position based on launcher geometry
+                        launcher_length = 44.0 * e.launcher_ext_progress
+                        # Offset missile 30px left relative to BARAK sprite
+                        missile_pos = Vec2(
+                            e.pos.x - 40 + launcher_length * math.cos(e.launcher_angle),
+                            e.pos.y - 28.0 - launcher_length * math.sin(e.launcher_angle)
+                        )
+                        missile_vel = Vec2(0.0, -120.0)  # Upwards, adjust speed as needed
+                        mission.projectiles.append(
+                            Projectile(
+                                kind=ProjectileKind.ENEMY_BULLET,  # Use ENEMY_BULLET for now; can define new kind if needed
+                                pos=missile_pos,
+                                vel=missile_vel,
+                                ttl=3.0,
+                                source=EnemyKind.BARAK_MRAD,
+                                is_barak_missile=True,
+                            )
+                        )
+                        e.missile_fired = True
+                        # Debug: print/log missile launch event
+                        print("[DEBUG] BARAK MRAD missile launched at pos:", missile_pos)
+                        if logger is not None:
+                            logger.info(f"BARAK MRAD missile launched at {missile_pos}")
+                        # Play Barak MRAD missile launch SFX
+                        if hasattr(mission, "audio") and mission.audio is not None:
+                            if hasattr(mission.audio, "play_barak_mrad_launch"):
+                                mission.audio.play_barak_mrad_launch()
+                    # After firing, transition to 'done' state
+                    e.mrad_state = "done"
             continue
 
         if e.kind is EnemyKind.TANK:

@@ -226,6 +226,9 @@ class AudioBank:
     flying_loop: pygame.mixer.Sound | None
     menu_select: pygame.mixer.Sound | None
     pause: pygame.mixer.Sound | None
+    barak_mrad_launch: pygame.mixer.Sound | None
+    def play_barak_mrad_launch(self) -> None:
+        self._play(self.barak_mrad_launch, bus="sfx")
 
     def start_flying(self) -> None:
         """Starts the helicopter flying loop sound if available."""
@@ -435,6 +438,9 @@ class AudioBank:
             if pause is not None:
                 pause.set_volume(0.55)
 
+            barak_mrad_launch = _try_load_asset_sound(asset_dir / "barak-launched.wav")
+            if barak_mrad_launch is not None:
+                barak_mrad_launch.set_volume(0.60)
             return AudioBank(
                 mixer=mixer,
                 shoot=shoot,
@@ -459,6 +465,7 @@ class AudioBank:
                 pause=pause,
                 midair_collision=midair_collision,
                 chopper_warning_beeps=chopper_warning_beeps,
+                barak_mrad_launch=barak_mrad_launch,
             )
         except Exception as e:
             print(f"[AudioBank] Failed to initialize: {e}")
@@ -486,6 +493,7 @@ class AudioBank:
                 pause=None,
                 midair_collision=None,
                 chopper_warning_beeps=None,
+                barak_mrad_launch=None,
             )
             r2 = _sine_pcm16(freq_hz=988.0, duration_s=0.10, volume=0.22, sample_rate=sample_rate)
             rescue = pygame.mixer.Sound(buffer=_mix_pcm16([r1, r2], volume=0.85))
