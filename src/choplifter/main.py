@@ -1,45 +1,55 @@
-def draw_debug_overlay(target):
-    font = pygame.font.SysFont(None, 32)
-    overlay = font.render("DEBUG MODE", True, (255, 0, 0))
-    target.blit(overlay, (12, 12))
-
-
-debug_mode = False
-debug_weather_modes = ["clear", "rain", "fog", "dust", "storm"]
-debug_weather_index = 0
-
-def draw_debug_overlay(target):
-    font = pygame.font.SysFont(None, 32)
-    overlay = font.render("DEBUG MODE", True, (255, 0, 0))
-    target.blit(overlay, (12, 12))
-
-def set_debug_weather_mode(mode):
-    weather_mode = mode
-    weather_timer = 0.0
-    weather_duration = 9999.0  # Prevent auto-cycling
-
-from .app.keyboard_events import handle_keyboard_event
-
-from .game_types import EnemyKind
-
 from pathlib import Path
 import random
+
 import pygame
+
+from .app.keyboard_events import handle_keyboard_event
+from .game_types import EnemyKind
 
 from .audio import AudioBank
 from .audio_extra import play_satellite_reallocating
 from .accessibility import load_accessibility
+from .app.accessibility_toggles import toggle_particles, toggle_flashes, toggle_screenshake
+from .app.cutscenes import (
+    init_intro_cutscene,
+    draw_intro,
+    update_intro,
+    skip_intro,
+    start_mission_cutscene,
+    draw_mission_cutscene,
+    update_mission_cutscene,
+    skip_mission_cutscene,
+)
+from .app.doors import toggle_doors_with_logging
+from .app.feedback import ScreenShakeState, consume_mission_feedback, rough_landing_feedback, update_screenshake_target
+from .app.flares import FlareState, reset_flares, try_start_flare_salvo, update_flares
+from .app.flow import apply_mission_preview, reset_game
+from .app.gamepads import init_connected_joysticks, handle_joy_device_added, handle_joy_device_removed
+from .app.input import get_active_joystick, read_gamepad
+from .app.menu_helpers import cycle_index, move_pause_focus
+from .app.session import create_mission_and_helicopter
+from .app.state import CutsceneState, IntroCutsceneState, MissionCutsceneState
+from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapshot
+from .app.toast import ToastState
 from .controls import load_controls, matches_key, pressed
 from .debug_overlay import DebugOverlay
+from .fx.dust_storm import DustStormSystem
+from .fx.fog import FogSystem
+from .fx.lightning import LightningSystem
+from .fx.rain import RainSystem
+from .fx.storm_clouds import StormCloudSystem
+from .fx.wind_dust_clouds import WindBlownDustCloudSystem
 from .game_logging import create_session_logger
 from .helicopter import Facing, Helicopter, HelicopterInput, update_helicopter
 from . import haptics
+from .math2d import Vec2
 from .mission import update_mission
 from .mission_configs import get_mission_config_by_id
 from .mission_helpers import boarded_count
 from .mission_hostages import hostage_crush_check_logged
 from .mission_player_fire import spawn_projectile_from_helicopter_logged
 from .mission_state import MissionState
+from .physics_config import load_physics_settings
 from .rendering import (
     bg_asset_exists,
     draw_chopper_select_overlay,
@@ -57,39 +67,13 @@ from .rendering import (
 )
 from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, PhysicsSettings, WindowSettings
 from .sky_smoke import SkySmokeSystem
-from .fx.rain import RainSystem
-from .fx.fog import FogSystem
-from .fx.dust_storm import DustStormSystem
-from .fx.wind_dust_clouds import WindBlownDustCloudSystem
-from .fx.lightning import LightningSystem
-from .fx.storm_clouds import StormCloudSystem
-from .physics_config import load_physics_settings
-from .math2d import Vec2
-from .app.cutscenes import (
-    init_intro_cutscene,
-    draw_intro,
-    update_intro,
-    skip_intro,
-    start_mission_cutscene,
-    draw_mission_cutscene,
-    update_mission_cutscene,
-    skip_mission_cutscene,
-)
 import src.choplifter.app.cutscene_config as cutscene_config
-from .app.state import CutsceneState, IntroCutsceneState, MissionCutsceneState
-from .app.input import get_active_joystick, read_gamepad
-from .app.feedback import ScreenShakeState, consume_mission_feedback, rough_landing_feedback, update_screenshake_target
-from .app.flares import FlareState, reset_flares, try_start_flare_salvo, update_flares
-from .app.gamepads import init_connected_joysticks, handle_joy_device_added, handle_joy_device_removed
-from .app.toast import ToastState
-from .app.session import create_mission_and_helicopter
-from .app.flow import apply_mission_preview, reset_game
-from .app.menu_helpers import cycle_index, move_pause_focus
-from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapshot
-from .app.accessibility_toggles import toggle_particles, toggle_flashes, toggle_screenshake
-from .app.doors import toggle_doors_with_logging
 
-import random
+
+def draw_debug_overlay(target: pygame.Surface) -> None:
+    font = pygame.font.SysFont(None, 32)
+    overlay = font.render("DEBUG MODE", True, (255, 0, 0))
+    target.blit(overlay, (12, 12))
 
 
 def run() -> None:
@@ -155,6 +139,18 @@ def run() -> None:
     prev_btn_rb_down = False
     prev_btn_lb_down = False
     prev_btn_back_down = False
+
+    def reset_prev_gamepad_buttons() -> None:
+        nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down
+        nonlocal prev_btn_start_down, prev_btn_rb_down, prev_btn_lb_down, prev_btn_back_down
+        prev_btn_a_down = False
+        prev_btn_b_down = False
+        prev_btn_x_down = False
+        prev_btn_y_down = False
+        prev_btn_start_down = False
+        prev_btn_rb_down = False
+        prev_btn_lb_down = False
+        prev_btn_back_down = False
 
     def set_toast(message: str) -> None:
         toast.set(message)
@@ -258,8 +254,6 @@ def run() -> None:
 
     def reset_game_wrapper() -> None:
         nonlocal helicopter, mission, accumulator, prev_stats
-        nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
-        nonlocal prev_btn_rb_down, prev_btn_lb_down, prev_btn_back_down
         # Stop chopper warning beeps on game reset
         audio.stop_chopper_warning_beeps()
         mission, helicopter, accumulator, prev_stats = reset_game(
@@ -276,14 +270,7 @@ def run() -> None:
             flares,
         )
         mission.audio = audio
-        prev_btn_a_down = False
-        prev_btn_b_down = False
-        prev_btn_x_down = False
-        prev_btn_y_down = False
-        prev_btn_start_down = False
-        prev_btn_rb_down = False
-        prev_btn_lb_down = False
-        prev_btn_back_down = False
+        reset_prev_gamepad_buttons()
 
     def toggle_particles_wrapper() -> None:
         nonlocal particles_enabled
@@ -306,6 +293,16 @@ def run() -> None:
     while running:
         frame_dt = clock.tick(120) / 1000.0
         accumulator += frame_dt
+
+        # Reset per-frame button states before processing events/input.
+        a_down = False
+        b_down = False
+        x_down = False
+        y_down = False
+        start_down = False
+        rb_down = False
+        lb_down = False
+        back_down = False
 
         # --- VIP KIA overlay logic ---
         if hasattr(mission, "hostages"):
@@ -376,11 +373,7 @@ def run() -> None:
                 handle_joy_device_added(event.device_index, joysticks=joysticks, logger=logger, set_toast=set_toast)
             elif event.type == pygame.JOYDEVICEREMOVED:
                 handle_joy_device_removed(event.instance_id, joysticks=joysticks, logger=logger, set_toast=set_toast)
-                prev_btn_a_down = False
-                prev_btn_b_down = False
-                prev_btn_x_down = False
-                prev_btn_y_down = False
-                prev_btn_back_down = False
+                reset_prev_gamepad_buttons()
             elif event.type == pygame.KEYDOWN:
                 # In mission_end mode, allow Pause/Esc to open the pause menu, and Enter to restart
                 if mode == "mission_end" or mission.ended:
