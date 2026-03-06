@@ -110,6 +110,16 @@ class HelicopterDamageFxSystem:
         ttl = self._rng.uniform(self.smoke_ttl_min_s, self.smoke_ttl_max_s) * (0.90 + 0.45 * strength)
         radius = self._rng.uniform(self.smoke_radius_min, self.smoke_radius_max) * (0.85 + 0.70 * strength)
 
+        # Determine color based on damage (strength is (damage-50)/40, so damage = 50+strength*40)
+        # 0.0 <= strength < 0.375: white, 0.375 <= strength < 0.75: grey, 0.75 <= strength <= 1.0: black
+
+        if strength < 0.375:
+            color = (int(220), int(220), int(220))  # White
+        elif strength < 0.75:
+            color = (int(120), int(120), int(120))  # Grey
+        else:
+            color = (int(30), int(30), int(30))     # Black
+
         p = FxParticle(
             pos=Vec2(base.x + jitter_x, base.y + jitter_y),
             vel=Vec2(vx, vy),
@@ -117,6 +127,7 @@ class HelicopterDamageFxSystem:
             ttl=ttl,
             radius=radius,
             kind="smoke",
+            color=color,
         )
         # Per-particle alpha boost so low-damage smoke reads on bright backgrounds.
         p.intensity = 1.65 + 0.75 * clamp(float(strength), 0.0, 1.0)

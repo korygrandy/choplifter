@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 if TYPE_CHECKING:
-    from ..mission import MissionState
+    from ..mission_state import MissionState
 
 
 _BURN_SPRITE_CACHE: dict[tuple[str, int], pygame.Surface] = {}
@@ -37,18 +37,37 @@ def _draw_fx_particles(screen: pygame.Surface, particles: list[object], *, camer
         if kind == "ember":
             alpha = int(240 * (1.0 - t) * intensity)
             sprite = _get_burn_sprite("ember", radius)
-        else:
+            sprite.set_alpha(alpha)
+            screen.blit(sprite, (x - sprite.get_width() // 2, y - sprite.get_height() // 2))
+        elif kind == "smoke":
             alpha = int(120 * (1.0 - t) * (1.0 - t) * intensity)
             radius = int(max(1.0, radius_f * (1.0 + 0.45 * t)))
-            sprite = _get_burn_sprite("smoke", radius)
+            color = getattr(p, "color", None)
+            def clamp255(v):
+                try:
+                    return max(0, min(255, int(round(v))))
+                except Exception:
+                    return 0
 
-        alpha = max(0, min(255, alpha))
-
-        if alpha <= 0:
-            continue
-
-        sprite.set_alpha(alpha)
-        screen.blit(sprite, (x - sprite.get_width() // 2, y - sprite.get_height() // 2))
+            if (
+                isinstance(color, tuple)
+                and len(color) == 3
+                and all(isinstance(c, (int, float)) for c in color)
+            ):
+                draw_color = tuple(clamp255(c) for c in color) + (clamp255(alpha),)
+            else:
+                draw_color = (120, 120, 120, clamp255(alpha))
+            s = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+            pygame.draw.circle(s, draw_color, (radius, radius), radius)
+            s.set_alpha(clamp255(alpha))
+            screen.blit(s, (x - radius, y - radius))
+        else:
+            # Fallback for any other kind (future-proofing)
+            alpha = int(120 * (1.0 - t) * (1.0 - t) * intensity)
+            radius = int(max(1.0, radius_f * (1.0 + 0.45 * t)))
+            sprite = _get_burn_sprite(kind, radius)
+            sprite.set_alpha(alpha)
+            screen.blit(sprite, (x - sprite.get_width() // 2, y - sprite.get_height() // 2))
 
 
 def draw_jet_trail_particles(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
@@ -127,6 +146,56 @@ def draw_impact_sparks(screen: pygame.Surface, mission: MissionState, *, camera_
     if sparks is None:
         return
     _draw_fx_particles(screen, list(getattr(sparks, "particles", [])), camera_x=camera_x)
+
+
+def draw_rain_particles(screen: pygame.Surface, rain_system, *, camera_x: float = 0.0) -> None:
+    # Draw blue streaks for rain
+    for p in getattr(rain_system, "particles", []):
+        x = int(p.pos.x - camera_x)
+        y = int(p.pos.y)
+        t = p.age / max(0.001, p.ttl)
+        alpha = int(180 * (1.0 - t))
+        if alpha <= 0:
+            continue
+        color = (120, 180, 255, alpha)
+        length = int(12 + 16 * (1.0 - t))
+        end_y = y + length
+        s = pygame.Surface((3, length), pygame.SRCALPHA)
+        pygame.draw.line(s, color, (1, 0), (1, length), 2)
+        s.set_alpha(alpha)
+        screen.blit(s, (x - 1, y))
+
+
+def draw_fog_particles(screen: pygame.Surface, fog_system, *, camera_x: float = 0.0) -> None:
+    # Draw large, soft white fog puffs
+    for p in getattr(fog_system, "particles", []):
+        x = int(p.pos.x - camera_x)
+        y = int(p.pos.y)
+        t = p.age / max(0.001, p.ttl)
+        alpha = int(60 * (1.0 - t) * (1.0 - t))
+        if alpha <= 0:
+            continue
+        radius = int(max(8, p.radius * (1.0 + 0.2 * t)))
+        s = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(s, (220, 220, 220, alpha), (radius, radius), radius)
+        s.set_alpha(alpha)
+        screen.blit(s, (x - radius, y - radius))
+
+
+def draw_wind_dust_clouds(screen, mission, *, camera_x=0.0):
+    clouds = getattr(mission, "wind_dust_clouds", None)
+    if not clouds:
+        return
+    for c in getattr(clouds, "clouds", []):
+        if c.alpha <= 0:
+            continue
+        x = int(c.pos.x - camera_x)
+        y = int(c.pos.y)
+        radius = int(c.radius)
+        s = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(s, c.color + (c.alpha,), (radius, radius), radius)
+        s.set_alpha(c.alpha)
+        screen.blit(s, (x - radius, y - radius))
 
 
 def _get_burn_sprite(kind: str, radius: int) -> pygame.Surface:

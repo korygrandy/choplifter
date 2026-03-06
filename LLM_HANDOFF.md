@@ -73,16 +73,20 @@ The LLM should prioritize the following modern implementation strategies:
 
 This section is for future LLMs working on the *actual* code in this repository.
 
+
 ### What exists today
 
 - Python + Pygame prototype with a playable rescue loop (open compounds → board hostages → unload at base → win at 20 saved).
+- **Robust weather/particle SFX systems:** Rain, Fog, Dust, and Lightning, all with tunable parameters and visual feedback.
+- **Debug mode:** Toggle with F3; cycle weather with F5/F6 for rapid developer testing. Debug overlay is visible in-game and persists across pause/unpause.
+- **Input disablement on mission end:** All player input is locked when the mission ends, ensuring no accidental actions post-completion.
 - Intro cutscene video playback (with optional audio extraction/playback) and a skip hint.
 - Windows packaging via PyInstaller (both onefile and onedir builds).
 
 ### Entry points & layout
 
 - Entrypoint: `run.py` imports `src.choplifter.main:run`.
-- Game loop/state: `src/choplifter/main.py`.
+- Game loop/state: `src/choplifter/main.py` (now includes weather/particle SFX, debug mode, and input disablement logic).
 - App helpers (early modularization): `src/choplifter/app/` (cutscene state + helpers).
 - Mission/rescue logic: `src/choplifter/mission.py`.
 - Mission configs/tuning: `src/choplifter/mission_configs.py` (LevelConfig + MissionTuning + `get_mission_config_by_id`).
@@ -130,3 +134,75 @@ This section is for future LLMs working on the *actual* code in this repository.
 - Rescue loop readability: HUD displays grounded/doors state during missions.
 - Hostage movement: when hostages begin moving to the helicopter, the game mixes a more controlled “queue” behavior with an occasional chaotic rush. This is controlled by `MissionTuning` fields in `src/choplifter/mission.py`:
 	- `hostage_controlled_*`, `hostage_chaotic_*`, `hostage_chaos_probability`
+
+---
+
+## 8. Mission.py Monolithic Refactor Plan (2026)
+
+To reduce update risks and improve maintainability, the mission logic is being refactored from a monolithic mission.py file into smaller, logically grouped modules. This enables incremental testing and minimizes runtime errors.
+
+### Refactor Steps:
+
+1. **Entity Dataclasses**
+   - Move Hostage, Compound, Projectile, Enemy, BaseZone, MissionStats dataclasses to `entities.py`.
+   - Update mission.py to import these from `entities.py`.
+
+2. **Mission State**
+   - Move MissionState class to `mission_state.py`.
+   - Update mission.py to import MissionState from `mission_state.py`.
+
+3. **Helpers & Logic**
+   - Next, group mission helpers and core mission logic into separate modules (e.g., mission_helpers.py, mission_logic.py).
+   - Update imports and test after each step.
+
+4. **Incremental Testing**
+   - After each grouping/refactor, run the game and validate for errors before proceeding.
+
+### Rationale:
+- Reduces risk of runtime errors by isolating changes.
+- Enables easier debugging and future enhancements.
+- Aligns with modern Python modularization best practices.
+
+### Status:
+- Entity dataclasses and MissionState have been moved and imports updated.
+- Syntax and import errors have been resolved.
+- Next step: continue grouping helpers/logic and test after each change.
+
+---
+
+## 9. Recent Refactor and Debug Context (2026)
+
+### Key Context from Chat Session
+
+- **Mission.py Modularization:**
+  - Dataclasses (Hostage, Compound, Projectile, Enemy, BaseZone, MissionStats) moved to `entities.py`.
+  - MissionState moved to `mission_state.py`.
+  - Imports updated in mission.py; orphaned static methods and misplaced code removed to fix indentation and undefined variable errors.
+  - All MissionState creation logic now resides in mission_state.py.
+  - Incremental testing after each refactor step is recommended.
+
+- **Error Resolution:**
+  - Fixed SyntaxError and ImportError from misplaced code and incorrect imports.
+  - Cleaned up indentation and removed orphaned code blocks from mission.py.
+  - Ensured only top-level mission logic and imports remain in mission.py.
+
+- **Developer Workflow Guidance:**
+  - After each modularization step, run the game and check for errors before proceeding.
+  - Document refactor steps and rationale in LLM_HANDOFF.md for future LLM sessions.
+  - Use debug mode (F3) and weather cycling (F5/F6) for rapid testing.
+
+- **Session Summary:**
+  - Initial focus: missile crash animation, rumble tuning, health boost air-drop (abandoned).
+  - Main focus: refactor monolithic mission.py, reduce runtime errors, enable incremental testing.
+  - All entity/state grouping context, refactor plan, and debugging lessons are now documented.
+
+#### [2026-Refactor] Mission Helpers Modularization
+- Mission helpers `boarded_count` and `on_foot` have been extracted from mission.py to mission_helpers.py.
+- Imports in mission.py updated to use mission_helpers.
+- Incremental testing performed after extraction; no errors encountered.
+- Continue extracting additional helpers and update documentation after each step.
+
+- Extracted stateless helpers `_hits_circle`, `_projectile_hits_enemy`, and `_log_compound_health_if_needed` from mission.py to mission_helpers.py.
+- Added all required imports to mission_helpers.py for these helpers.
+- Updated mission.py to import and use these helpers from mission_helpers.py.
+- All errors resolved and game tested successfully after extraction.

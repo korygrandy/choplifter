@@ -14,13 +14,13 @@ class DustStormSystem:
         self.max_particles = 260
         self.spawn_accum = 0.0
 
-        self.dust_ttl_min_s = 0.45
-        self.dust_ttl_max_s = 1.00
-        self.dust_radius_min = 6.0
-        self.dust_radius_max = 12.0
+        self.dust_ttl_min_s = 0.55
+        self.dust_ttl_max_s = 1.25
+        self.dust_radius_min = 5.0
+        self.dust_radius_max = 15.0
 
         self.near_ground_y_threshold = 110.0
-        self.base_rate_per_s = 55.0
+        self.base_rate_per_s = 85.0  # denser dust
 
     def reset(self) -> None:
         self.particles.clear()
@@ -59,17 +59,22 @@ class DustStormSystem:
         self.particles = alive
 
     def _spawn_dust(self, *, heli_pos: Vec2, heli_vel: Vec2, ground_y: float, strength: float) -> None:
-        jitter_x = self._rng.uniform(-34.0, 34.0)
-        y = float(ground_y) - self._rng.uniform(0.0, 8.0)
+        jitter_x = self._rng.uniform(-38.0, 38.0)
+        y = float(ground_y) - self._rng.uniform(0.0, 10.0)
         x = float(heli_pos.x) + jitter_x
 
         wash = clamp(float(heli_vel.x) * 0.25, -120.0, 120.0)
-        vx = -wash + self._rng.uniform(-35.0, 35.0) * (0.35 + 0.65 * strength)
-        vy = self._rng.uniform(-12.0, 6.0)
+        vx = -wash + self._rng.uniform(-40.0, 40.0) * (0.35 + 0.65 * strength)
+        vy = self._rng.uniform(-14.0, 8.0)
 
         ttl = self._rng.uniform(self.dust_ttl_min_s, self.dust_ttl_max_s) * (0.75 + 0.35 * strength)
         radius = self._rng.uniform(self.dust_radius_min, self.dust_radius_max) * (0.75 + 0.60 * strength)
 
+        # More dust-like color: tan/brown, semi-transparent, with some variation
+        base_color = (200, 180, 120)
+        color_variation = tuple(
+            max(0, min(255, c + self._rng.randint(-18, 18))) for c in base_color
+        )
         self.particles.append(
             FxParticle(
                 pos=Vec2(x, y),
@@ -78,5 +83,6 @@ class DustStormSystem:
                 ttl=ttl,
                 radius=radius,
                 kind="smoke",
+                color=color_variation,
             )
         )

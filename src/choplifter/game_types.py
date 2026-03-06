@@ -12,6 +12,7 @@ class HostageState(Enum):
     EXITING = 5
     SAVED = 6
     KIA = 7
+    FALLING = 8
 
 
 class ProjectileKind(Enum):
@@ -25,3 +26,4 @@ class EnemyKind(Enum):
     TANK = 1
     JET = 2
     AIR_MINE = 3
+    BARAK_MRAD = 4  # Mobile missile system

@@ -23,3 +23,14 @@ Thumbs.db
 /pyinstaller-build/
 /pyinstaller-dist/
 /*.spec
+
+# Ignore all dist folders at any level
+/dist/
+**/dist/
+/.idea/misc.xml
+.idea/choplifter.iml
+.idea/modules.xml
+.idea/vcs.xml
+.idea/inspectionProfiles/profiles_settings.xml
+.gitignore
+.gitignore

@@ -7,7 +7,7 @@ from ..game_types import HostageState
 from ..helicopter import Helicopter
 
 if TYPE_CHECKING:
-    from ..mission import MissionState
+    from ..mission_state import MissionState
 
 
 _HUD_FONT: pygame.font.Font | None = None
@@ -26,13 +26,37 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
     saved = mission.stats.saved
 
     # Minimal always-on guidance so the rescue loop is discoverable.
-    lines = [
-        f"Fuel {int(helicopter.fuel):3d}   Damage {int(helicopter.damage):3d}   Crashes {mission.crashes}/3   Sentiment {int(mission.sentiment):3d}",
-        f"Objective: save 20 (saved {saved}/20)",
-        f"Rescue: shoot compound (Space) → land near hostages → press E to open doors → load {boarded}/16",
-        "Unload: land in base zone (flag) → press E to open doors",
-        f"State: {'GROUNDED' if helicopter.grounded else 'AIR'}   Doors: {'OPEN' if helicopter.doors_open else 'CLOSED'}",
-    ]
+    # --- VIP Mission HUD for City Siege ---
+    vip_hostage = next((h for h in mission.hostages if getattr(h, "is_vip", False)), None)
+    vip_status = "UNKNOWN"
+    if vip_hostage:
+        if vip_hostage.state.name == "SAVED":
+            vip_status = "RESCUED"
+        elif vip_hostage.state.name == "BOARDED":
+            vip_status = "ONBOARD"
+        elif vip_hostage.state.name == "EXITING":
+            vip_status = "EXITING"
+        elif vip_hostage.state.name == "KIA":
+            vip_status = "KIA"
+        else:
+            vip_status = vip_hostage.state.name
+    is_city_siege = getattr(mission, "mission_id", "").lower() in ("city", "city_center", "citycenter", "mission1", "m1")
+    if is_city_siege and vip_hostage:
+        lines = [
+            f"Fuel {int(helicopter.fuel):3d}   Damage {int(helicopter.damage):3d}   Crashes {mission.crashes}/3   Sentiment {int(mission.sentiment):3d}",
+            f"Objective: Rescue VIP (Purple) + Save 20 Hostages",
+            f"VIP Status: {vip_status}",
+            f"Hostages Saved: {saved}/20",
+            f"Rescue: shoot compound (Space) → land near hostages → press E to open doors → load {boarded}/16",
+            "Unload: land in base zone (flag) → press E to open doors",
+        ]
+    else:
+        lines = [
+            f"Fuel {int(helicopter.fuel):3d}   Damage {int(helicopter.damage):3d}   Crashes {mission.crashes}/3   Sentiment {int(mission.sentiment):3d}",
+            f"Objective: save 20 (saved {saved}/20)",
+            f"Rescue: shoot compound (Space) → land near hostages → press E to open doors → load {boarded}/16",
+            "Unload: land in base zone (flag) → press E to open doors",
+        ]
 
     if mission.invuln_seconds > 0.0:
         lines.append(f"INVULN: {mission.invuln_seconds:0.1f}s")
