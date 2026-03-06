@@ -1,4 +1,15 @@
 from __future__ import annotations
+import os
+# Image cache for enemy sprites
+_enemy_image_cache = {}
+
+def get_enemy_image(name):
+    if name not in _enemy_image_cache:
+        # Use absolute path to ensure asset is found
+        asset_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'assets'))
+        path = os.path.join(asset_dir, name)
+        _enemy_image_cache[name] = pygame.image.load(path).convert_alpha()
+    return _enemy_image_cache[name]
 
 import math
 from typing import TYPE_CHECKING
@@ -152,6 +163,51 @@ def _draw_enemies(screen: pygame.Surface, mission: MissionState, *, camera_x: fl
                 int(turret_base[1] + turret_length * math.sin(angle))
             )
             pygame.draw.line(screen, (25, 25, 25), turret_base, turret_tip, 3)
+
+        elif e.kind is EnemyKind.BARAK_MRAD:
+            # Draw the MRAP vehicle sprite
+            img = get_enemy_image('mrap-vehicle.png')
+            img_rect = img.get_rect()
+            x = int(e.pos.x - camera_x)
+            y = int(ground_y - img_rect.height)
+            screen.blit(img, (x - img_rect.width // 2, y))
+
+            # Draw the launcher (rectangle) if deploying or later
+            if getattr(e, "mrad_state", None) in ("deploying", "aiming", "launching", "done"):
+                # Launcher base position: on top of vehicle, offset 40px left and 8px up
+                base_x = x - 40
+                base_y = y + 18 - 8 - 10  # raise by 10 pixels
+                launcher_len = 70  # twice as long as before (152*2)
+                launcher_w = 18      # half as long as before (8/2)
+                angle = getattr(e, "launcher_angle", 0.0)
+                ext_progress = getattr(e, "launcher_ext_progress", 0.0)
+                # Main launcher rectangle (rotates)
+                rect = pygame.Rect(0, 0, launcher_len, launcher_w)
+                rect.center = (base_x + (launcher_len/2) * math.cos(-angle)/2, base_y - (launcher_len/2) * math.sin(-angle)/2)
+                launcher_surf = pygame.Surface((launcher_len, launcher_w), pygame.SRCALPHA)
+                army_green = (80, 81, 63)        # #50513f html color code
+                dark_green = (60, 90, 30)        # outline
+                pygame.draw.rect(launcher_surf, army_green, (0, 0, launcher_len, launcher_w))
+                pygame.draw.rect(launcher_surf, dark_green, (0, 0, launcher_len, launcher_w), 2)
+                # Add simple texture: horizontal lines and a vertical band
+                texture_color = (110, 140, 70)
+                for i in range(2, launcher_w-2, 4):
+                    pygame.draw.line(launcher_surf, texture_color, (2, i), (launcher_len-2, i), 1)
+                # Vertical band near the base
+                band_color = (100, 120, 60)
+                band_w = max(2, launcher_len // 16)
+                pygame.draw.rect(launcher_surf, band_color, (4, 2, band_w, launcher_w-4))
+                # Barrel extension (thinner, animates out)
+                ext_max_len = 176  # twice as long as before (88*2)
+                ext_len = int(ext_max_len * ext_progress)
+                ext_w = 2  # half as long as before (4/2)
+                if ext_len > 0:
+                    pygame.draw.rect(launcher_surf, (180, 180, 180), (launcher_len-2, (launcher_w-ext_w)//2, ext_len, ext_w))
+                    pygame.draw.rect(launcher_surf, (60, 60, 60), (launcher_len-2, (launcher_w-ext_w)//2, ext_len, ext_w), 1)
+                # Rotate the surface
+                rotated = pygame.transform.rotate(launcher_surf, math.degrees(angle))
+                rot_rect = rotated.get_rect(center=rect.center)
+                screen.blit(rotated, rot_rect)
 
         elif e.kind is EnemyKind.JET:
             x = int(e.pos.x - camera_x)
