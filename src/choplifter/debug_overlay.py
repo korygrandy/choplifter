@@ -3,7 +3,8 @@ from __future__ import annotations
 import pygame
 
 from .helicopter import Helicopter
-from .mission import MissionState, boarded_count
+from .mission_helpers import boarded_count
+from .mission_state import MissionState
 
 
 class DebugOverlay:
