@@ -3,6 +3,7 @@ from __future__ import annotations
 import pygame
 
 from .helicopter import Helicopter
+from .game_types import EnemyKind
 from .mission_helpers import boarded_count
 from .mission_state import MissionState
 
@@ -16,6 +17,16 @@ class DebugOverlay:
         boarded = boarded_count(mission)
         compound_states = " ".join(
             f"{max(0, int(c.health))}{'O' if c.is_open else 'S'}" for c in mission.compounds
+        )
+        tank_tell_active = sum(
+            1
+            for e in mission.enemies
+            if e.kind is EnemyKind.TANK and float(getattr(e, "fire_tell_seconds", 0.0)) > 0.0
+        )
+        tank_flash_active = sum(
+            1
+            for e in mission.enemies
+            if e.kind is EnemyKind.TANK and float(getattr(e, "muzzle_flash_seconds", 0.0)) > 0.0
         )
 
         lines = [
@@ -36,6 +47,8 @@ class DebugOverlay:
             f"KIA(enemy): {mission.stats.kia_by_enemy}",
             f"lost_in_transit: {mission.stats.lost_in_transit}",
             f"sentiment: {mission.sentiment:0.1f}",
+            f"threat_tells: tank={tank_tell_active} flash={tank_flash_active}",
+            f"threat_warn: jet={mission.jet_warning_seconds:0.1f}s mine={mission.mine_warning_seconds:0.1f}s",
             f"compounds: {compound_states}",
         ]
 

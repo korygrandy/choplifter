@@ -15,35 +15,39 @@ This is the active backlog after the latest mission/main refactor and packaging 
 - [x] Main-file cleanup pass (input/pause state dedupe and stale block removal).
 - [x] Documentation refresh for README + handoff/build docs.
 - [x] Fresh onefile and onedir rebuild after cleanup.
+- [x] Intro + hostage rescue cutscenes migrated to `.avi` assets.
+- [x] Build script updated to prefer staged assets and skip legacy `.mpg` files when `.avi` variants exist.
+- [x] Onefile rebuild after media migration with reduced output size.
 
 ## High Priority Next
 
-- [ ] Reduce onefile build size.
-- [ ] Re-encode `intro.mpg` and mission cutscene media to smaller formats.
+- [x] Reduce onefile build size.
+- [x] Re-encode intro and mission cutscene media to smaller formats (`intro.avi`, `hostage-rescue-cutscene.avi`).
 - [ ] Evaluate a "lite media" build mode that skips video dependencies for smaller distribution builds.
 - [ ] Convert largest WAV effects to compressed audio where quality remains acceptable.
 
 ### Onefile Size Reduction Baseline (Measured)
 
 - Current onefile output:
-	- `pyinstaller-dist/Choplifter.exe` is about `330.56 MB`.
+	- Latest measured `pyinstaller-dist/Choplifter.exe` is about `227.17 MB`.
+	- Previous baseline was about `330.56 MB`.
+	- Net reduction so far is about `103.39 MB`.
 - Largest media payloads in `src/choplifter/assets`:
-	- `intro.mpg` about `228.70 MB`
-	- `hostage-rescue-cutscene.mpg` about `21.34 MB`
+	- `intro.avi` (re-encoded, smaller than previous `intro.mpg`).
+	- `hostage-rescue-cutscene.avi` (re-encoded, smaller than previous `hostage-rescue-cutscene.mpg`).
 	- `chopper-flying.wav` about `9.92 MB`
 - Packaging/runtime contributors in onedir:
 	- bundled ffmpeg from `imageio-ffmpeg` about `83.58 MB` (inside `_internal`)
 	- `numpy` about `19.46 MB`
 - Current script behavior:
-	- `scripts/build_windows_exe.ps1` currently bundles all assets and video dependencies by default.
+	- `scripts/build_windows_exe.ps1` stages assets and skips legacy `intro.mpg`/`hostage-rescue-cutscene.mpg` when `.avi` alternatives are present.
+	- Video dependencies (`imageio`, `imageio-ffmpeg`) are still included by default.
 
 ### Onefile Size Reduction Plan (Highest Impact First)
 
-- [ ] Re-encode intro and mission cutscene videos first.
-	- Convert `intro.mpg` and `hostage-rescue-cutscene.mpg` to H.264 MP4.
-	- Suggested settings: CRF ~26-30, AAC mono/stereo 96-128k.
-	- Keep filename behavior compatible by preserving lookup expectations or updating candidate list in `src/choplifter/app/cutscenes.py`.
-	- Expected win: often `-180 MB` to `-230 MB` from intro recode alone.
+- [x] Re-encode intro and mission cutscene videos first.
+	- `intro.avi` and `hostage-rescue-cutscene.avi` are now used by default.
+	- Legacy `.mpg` variants are excluded from build staging when `.avi` files are present.
 - [ ] Create a "lite media" profile with no video playback dependency.
 	- Add a build flag in `scripts/build_windows_exe.ps1` (for example `-LiteMedia`).
 	- In lite mode:
@@ -68,17 +72,40 @@ This is the active backlog after the latest mission/main refactor and packaging 
 
 ### Recommended Execution Order
 
-1. Re-encode the two large videos.
-2. Build and re-measure output size.
-3. Add and validate `-LiteMedia` profile (no ffmpeg/imageio + fallback intro).
-4. Optionally convert large SFX to OGG.
-5. Finalize explicit asset manifest/include list.
+1. Add and validate `-LiteMedia` profile (no ffmpeg/imageio + fallback intro).
+2. Optionally convert large SFX to OGG.
+3. Finalize explicit asset manifest/include list.
+4. Build and re-measure onefile and onedir outputs.
 
 ## Gameplay / UX Improvements
 
 - [ ] Rescue readability polish (boarding feedback, grounded/doors clarity).
+	- [ ] Define boarding UX states (`approaching`, `boarding`, `boarded`, `blocked`).
+	- [x] Add clear boardability indicator when helicopter is in valid pickup conditions.
+	- [x] Add outcome toasts for blocked boarding reasons (`Too high`, `Too fast`, `Doors closed`, `Not grounded`).
+	- [x] Add/confirm grounded-state indicator in HUD.
+	- [x] Add/confirm door-state indicator in HUD (`OPEN`/`CLOSED`).
+	- [x] Add cooldown/debounce for prompt flicker to avoid noisy UI.
+	- [ ] Add accessibility pass for color + shape readability.
+	- [ ] Add telemetry counters for failed board attempts by reason.
+	- [ ] Tune boarding thresholds after playtest.
 - [ ] Threat readability pass (distinct tells for tanks/jets/mines).
+	- [ ] Create threat tell matrix per enemy (cue, lead time, effective range).
+	- [x] Tanks: add pre-fire turret tell and muzzle flash timing window.
+	- [x] Jets: add early warning cue before attack run.
+	- [x] Mines: add visibility pulse/glint and proximity warning cue.
+	- [ ] Ensure each threat has distinct visual + audio signature.
+	- [ ] Add colorblind-safe cue alternatives.
+	- [x] Add debug overlay for active tell windows.
+	- [ ] Balance false positives vs missed warnings.
 - [ ] Sentiment/consequence meter in debrief and progression.
+	- [ ] Define sentiment inputs (rescues, losses, collateral, objective quality).
+	- [ ] Define scoring bands and labels (`Excellent`/`Good`/`Mixed`/`Poor`/`Critical`).
+	- [ ] Add debrief meter UI with reason breakdown lines.
+	- [ ] Persist sentiment across mission progression.
+	- [ ] Tie progression modifiers to sentiment bands.
+	- [ ] Add balancing guardrails so one event cannot dominate outcome unfairly.
+	- [ ] Add tests for score computation and persistence.
 
 ## Reprioritized Game Enhancements (Pygame/PC)
 
@@ -111,8 +138,24 @@ Ordered from least complex to most complex.
 
 - [ ] Missile/flar diversion behavior.
 	- If flares are active, override BARAK target vector to decoy direction `(0, -1)`.
+	- Normalize naming to `flare` across code/data (keep compatibility aliases if needed).
+	- Define diversion eligibility (range, timing window, missile types).
+	- Implement target override to decoy vector/position while flare is active.
+	- Add smooth retargeting limits (turn-rate cap) to avoid unnatural snaps.
+	- Add diversion feedback cue (trail bend + audio).
+	- Handle edge cases (flare expiry mid-flight, no active flare, multiple flares).
+	- Add tunables (chance, radius, max turn rate, flare lifetime).
+	- Add tests for diversion success/failure branches.
 - [ ] MRAP and launcher state cycle.
 	- Implement `Retract -> Move -> Deploy` state machine using timer/state variables.
+	- Formalize full cycle (`Retract -> Move -> Deploy -> Launch -> Retract`).
+	- Replace ad-hoc string transitions with explicit state constants.
+	- Add per-state timers/guards and fail-safe transitions.
+	- Implement synchronized deploy animation (angle + extension).
+	- Keep launch one-shot logic isolated with clean reset path.
+	- Add reload/cooldown behavior before next cycle.
+	- Add transition event hooks for SFX/VFX.
+	- Add debug state inspector and deterministic transition tests.
 
 ### 4) High Complexity (Systems Layer)
 

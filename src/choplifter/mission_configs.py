@@ -27,6 +27,8 @@ class MissionTuning:
     tank_ground_offset_y: float = 8.0
     tank_fire_range_x: float = 360.0
     tank_fire_min_altitude_clearance_y: float = 40.0
+    tank_prefire_tell_s: float = 0.30
+    tank_muzzle_flash_s: float = 0.09
 
     jet_fire_base_cooldown_s: float = 0.35
     jet_fire_min_cooldown_s: float = 0.25

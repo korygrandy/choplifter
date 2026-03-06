@@ -303,6 +303,26 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
 
     boarded = sum(1 for h in mission.hostages if h.state is HostageState.BOARDED)
     saved = mission.stats.saved
+    doors_state = "OPEN" if helicopter.doors_open else "CLOSED"
+    grounded_state = "YES" if helicopter.grounded else "NO"
+    rescue_ready = "READY" if helicopter.grounded and helicopter.doors_open else "NOT READY"
+    nearby_boardable = sum(
+        1
+        for h in mission.hostages
+        if h.state in (HostageState.WAITING, HostageState.MOVING_TO_LZ)
+        and abs(h.pos.x - helicopter.pos.x) <= 260.0
+        and abs(h.pos.y - helicopter.pos.y) <= 140.0
+    )
+    if boarded >= 16:
+        boarding_status = "FULL"
+    elif not helicopter.grounded:
+        boarding_status = "BLOCKED: LAND"
+    elif not helicopter.doors_open:
+        boarding_status = "BLOCKED: OPEN DOORS"
+    elif nearby_boardable <= 0:
+        boarding_status = "WAITING: NO HOSTAGES NEAR"
+    else:
+        boarding_status = "AVAILABLE"
 
     hud_x = 12
     lives_y = 8
@@ -383,16 +403,28 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
             "Objective: Rescue VIP and save 20 hostages",
             f"Rescue flow: Open compound -> land -> doors (E) -> load {boarded}/16",
             "Unload flow: land at base flag -> doors (E)",
+            f"LZ status: {rescue_ready} | Grounded: {grounded_state} | Doors: {doors_state}",
+            f"Boarding: {boarding_status}",
         ]
     else:
         lines = [
             f"Objective: Save 20 hostages (saved {saved}/20)",
             f"Rescue flow: Open compound -> land -> doors (E) -> load {boarded}/16",
             "Unload flow: land at base flag -> doors (E)",
+            f"LZ status: {rescue_ready} | Grounded: {grounded_state} | Doors: {doors_state}",
+            f"Boarding: {boarding_status}",
         ]
 
     if mission.invuln_seconds > 0.0:
         lines.append(f"INVULN: {mission.invuln_seconds:0.1f}s")
+
+    if float(getattr(mission, "jet_warning_seconds", 0.0)) > 0.0:
+        direction = "FROM RIGHT" if bool(getattr(mission, "jet_warning_from_right", False)) else "FROM LEFT"
+        lines.append(f"THREAT: JET INBOUND ({direction})")
+
+    if float(getattr(mission, "mine_warning_seconds", 0.0)) > 0.0:
+        mine_dist = int(float(getattr(mission, "mine_warning_distance", 0.0)))
+        lines.append(f"THREAT: MINE PROXIMITY ({mine_dist}px)")
 
     x = 12
     y = screen.get_height() - 12 - len(lines) * 20

@@ -494,7 +494,7 @@ def run() -> None:
                         try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
                     elif event.button == 0:  # A button: doors
                         if not getattr(mission, "crash_active", False):
-                            toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count)
+                            toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count, set_toast)
                     elif event.button == 3:  # Y button: reverse
                         if not getattr(mission, "crash_active", False):
                             helicopter.reverse_flip()
@@ -751,7 +751,7 @@ def run() -> None:
 
                 if a_down and not prev_btn_a_down:
                     if not getattr(mission, "crash_active", False):
-                        toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count)
+                        toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count, set_toast)
                 if y_down and not prev_btn_y_down:
                     if not getattr(mission, "crash_active", False):
                         helicopter.reverse_flip()
