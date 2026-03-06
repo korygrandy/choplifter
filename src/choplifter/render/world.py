@@ -82,15 +82,42 @@ def _draw_base(screen: pygame.Surface, mission: MissionState, *, camera_x: float
 def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
     for c in mission.compounds:
         r = pygame.Rect(int(c.pos.x - camera_x), int(c.pos.y), int(c.width), int(c.height))
-        color = (160, 120, 70) if not c.is_open else (120, 95, 60)
-        pygame.draw.rect(screen, color, r)
-        pygame.draw.rect(screen, (30, 30, 30), r, 2)
+        color = (150, 112, 68) if not c.is_open else (118, 92, 58)
+
+        # Main bunker body.
+        pygame.draw.rect(screen, color, r, border_radius=2)
+        pygame.draw.rect(screen, (26, 26, 26), r, 2, border_radius=2)
+
+        # Roof cap to make compounds read as fortified bunkers.
+        roof_h = max(6, int(c.height * 0.14))
+        roof = pygame.Rect(r.x - 4, r.y - roof_h + 1, r.width + 8, roof_h)
+        pygame.draw.rect(screen, (98, 84, 58), roof, border_radius=3)
+        pygame.draw.rect(screen, (36, 36, 36), roof, 1, border_radius=3)
+
+        # Vent slits / panel lines.
+        slit_y = r.y + max(4, r.height // 4)
+        for i in range(3):
+            sx = r.x + 8 + i * max(12, r.width // 4)
+            pygame.draw.line(screen, (78, 62, 40), (sx, slit_y), (sx + 10, slit_y), 2)
+
+        # Corner turret domes.
+        turret_r = max(3, min(6, r.height // 5))
+        turret_y = roof.y + roof_h // 2
+        left_turret_x = r.x + 8
+        right_turret_x = r.right - 8
+        pygame.draw.circle(screen, (92, 102, 96), (left_turret_x, turret_y), turret_r)
+        pygame.draw.circle(screen, (92, 102, 96), (right_turret_x, turret_y), turret_r)
+        pygame.draw.circle(screen, (32, 32, 32), (left_turret_x, turret_y), turret_r, 1)
+        pygame.draw.circle(screen, (32, 32, 32), (right_turret_x, turret_y), turret_r, 1)
+
         if c.is_open:
-            gap = pygame.Rect(r.centerx - 10, r.bottom - 14, 20, 14)
+            gap = pygame.Rect(r.centerx - 12, r.bottom - 15, 24, 15)
             pygame.draw.rect(screen, (35, 35, 35), gap)
+            pygame.draw.rect(screen, (70, 70, 70), gap, 1)
 
 
 def _draw_hostages(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+    vip_positions: list[tuple[int, int]] = []
     for h in mission.hostages:
         if h.state in (HostageState.IDLE, HostageState.BOARDED):
             continue
@@ -119,12 +146,30 @@ def _draw_hostages(screen: pygame.Surface, mission: MissionState, *, camera_x: f
         if h.state is HostageState.FALLING:
             pygame.draw.line(screen, (80, 180, 255), (x, y-8), (x, y), 2)
 
-        # --- VIP marker (drawn last, always on top) ---
         if getattr(h, "is_vip", False):
-            # Draw a gold ring above the VIP's head
-            pygame.draw.circle(screen, (255, 215, 0), (x, y - 10), 6, 2)  # gold ring
-            # Optionally, add a small white dot in the center for extra highlight
-            pygame.draw.circle(screen, (255, 255, 255), (x, y - 10), 2)
+            vip_positions.append((x, y))
+
+    # Draw VIP markers at the end so they remain top-most over all hostage indicators.
+    for x, y in vip_positions:
+        _draw_vip_crown(screen, x, y, mission_time=float(getattr(mission, "elapsed_seconds", 0.0)))
+
+
+def _draw_vip_crown(screen: pygame.Surface, x: int, y: int, *, mission_time: float) -> None:
+    crown_y = y - 12
+    alpha = int(127.5 * (math.sin(mission_time * 5.2) + 1.0))
+    alpha = max(36, min(255, alpha))
+
+    crown = pygame.Surface((20, 14), pygame.SRCALPHA)
+    points = [(2, 12), (5, 5), (9, 9), (12, 3), (15, 9), (18, 5), (18, 12)]
+    pygame.draw.polygon(crown, (255, 220, 70, alpha), points)
+    pygame.draw.polygon(crown, (255, 245, 185, min(255, alpha + 20)), points, 1)
+    crown.set_alpha(alpha)
+    screen.blit(crown, (x - crown.get_width() // 2, crown_y - crown.get_height() // 2))
+
+    # Small halo ring to improve readability over bright backgrounds.
+    halo = pygame.Surface((18, 18), pygame.SRCALPHA)
+    pygame.draw.circle(halo, (255, 235, 140, max(26, alpha // 3)), (9, 9), 7, 2)
+    screen.blit(halo, (x - 9, crown_y - 9))
 def toggle_thermal_mode():
     global thermal_mode
     thermal_mode = not thermal_mode
@@ -194,20 +239,38 @@ def _draw_enemies(screen: pygame.Surface, mission: MissionState, *, camera_x: fl
 
     for e in mission.enemies:
         if e.kind is EnemyKind.TANK:
-            # Simple tank block near ground.
-            w, h = 44, 18
+            # Reskinned tank with richer hull + turret silhouette.
+            w, h = 46, 18
             r = pygame.Rect(int(e.pos.x - camera_x - w / 2), int(ground_y - h), w, h)
-            pygame.draw.rect(screen, (70, 70, 70), r)
-            pygame.draw.rect(screen, (25, 25, 25), r, 2)
+            pygame.draw.rect(screen, (68, 74, 68), r, border_radius=2)
+            pygame.draw.rect(screen, (24, 24, 24), r, 2, border_radius=2)
+
+            tread_h = 5
+            tread = pygame.Rect(r.x + 2, r.bottom - tread_h, r.width - 4, tread_h)
+            pygame.draw.rect(screen, (42, 42, 42), tread)
+
+            hull = [
+                (r.x + 5, r.y + 3),
+                (r.right - 8, r.y + 3),
+                (r.right - 3, r.y + 8),
+                (r.right - 7, r.y + 12),
+                (r.x + 7, r.y + 12),
+                (r.x + 3, r.y + 8),
+            ]
+            pygame.draw.polygon(screen, (86, 96, 82), hull)
+            pygame.draw.polygon(screen, (25, 25, 25), hull, 1)
+
             # Turret marker using e.turret_angle
-            turret_length = 22
-            turret_base = (r.centerx, r.top + 3)
+            turret_length = 24
+            turret_base = (r.centerx - 1, r.top + 6)
+            pygame.draw.circle(screen, (76, 82, 76), turret_base, 5)
+            pygame.draw.circle(screen, (30, 30, 30), turret_base, 5, 1)
             angle = getattr(e, 'turret_angle', 0.0)
             turret_tip = (
                 int(turret_base[0] + turret_length * math.cos(angle)),
                 int(turret_base[1] + turret_length * math.sin(angle))
             )
-            pygame.draw.line(screen, (25, 25, 25), turret_base, turret_tip, 3)
+            pygame.draw.line(screen, (28, 30, 28), turret_base, turret_tip, 4)
 
         elif e.kind is EnemyKind.BARAK_MRAD:
             # Draw the MRAP vehicle sprite

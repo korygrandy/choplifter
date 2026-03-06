@@ -110,6 +110,10 @@ def _update_projectiles(
         if p.kind in (ProjectileKind.ENEMY_BULLET, ProjectileKind.ENEMY_ARTILLERY):
             if _hits_circle(p.pos, helicopter.pos, radius=26.0):
                 if getattr(p, "is_barak_missile", False):
+                    mission.explosions.emit_fire_plume(p.pos, strength=1.0)
+                    mission.explosions.emit_explosion(p.pos, strength=0.85)
+                    mission.impact_sparks.emit_hit(p.pos, p.vel, strength=1.35)
+                    mission.burning.add_site(p.pos, intensity=0.55)
                     damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
                 elif p.kind is ProjectileKind.ENEMY_ARTILLERY:
                     mission.stats.artillery_hits += 1
@@ -122,7 +126,12 @@ def _update_projectiles(
 
         # Ground collision.
         if p.pos.y >= heli.ground_y - 6.0:
-            if p.kind is ProjectileKind.BOMB:
+            if getattr(p, "is_barak_missile", False):
+                mission.explosions.emit_fire_plume(p.pos, strength=0.92)
+                mission.explosions.emit_explosion(p.pos, strength=0.72)
+                mission.impact_sparks.emit_hit(p.pos, p.vel, strength=1.20)
+                mission.burning.add_site(p.pos, intensity=0.40)
+            elif p.kind is ProjectileKind.BOMB:
                 _bomb_explode(mission, p.pos, logger)
             p.alive = False
             continue
