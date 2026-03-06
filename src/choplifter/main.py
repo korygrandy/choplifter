@@ -255,6 +255,7 @@ def run() -> None:
             mission,
         )
         mission.audio = audio
+        audio.log_audio_channel_snapshot(tag="mission_preview", logger=logger)
 
     def reset_game_wrapper() -> None:
         nonlocal helicopter, mission, accumulator, prev_stats
@@ -276,6 +277,7 @@ def run() -> None:
             flares,
         )
         mission.audio = audio
+        audio.log_audio_channel_snapshot(tag="restart", logger=logger)
         prev_btn_a_down = False
         prev_btn_b_down = False
         prev_btn_x_down = False
@@ -368,6 +370,9 @@ def run() -> None:
                         e.launcher_angle = 0.0  # Start horizontal
                         e.launcher_ext_progress = 0.0  # Start retracted
                         e.missile_fired = False  # Allow re-trigger
+                        if hasattr(mission, "audio") and mission.audio is not None:
+                            if hasattr(mission.audio, "play_barak_mrad_deploy"):
+                                mission.audio.play_barak_mrad_deploy()
                         set_toast("DEBUG: BARAK missile launch sequence triggered (F9)")
                         break
             elif event.type == pygame.QUIT:
@@ -884,6 +889,7 @@ def run() -> None:
                     ):
                         mode = "cutscene"
                         audio.stop_flying()
+                        audio.log_audio_channel_snapshot(tag="cutscene_enter", logger=logger)
 
                 open_compounds = sum(1 for c in mission.compounds if c.is_open)
                 if open_compounds > prev_stats.open_compounds:
@@ -946,6 +952,7 @@ def run() -> None:
                 prev_state = helicopter.doors_open
                 helicopter.doors_open = doors_open_before_cutscene
                 logger.info(f"DOORS: restored after cutscene | was_open={prev_state} | restored_open={helicopter.doors_open}")
+                audio.log_audio_channel_snapshot(tag="cutscene_exit", logger=logger)
 
         # Visual-only sky particles.
         if particles_enabled and mode not in ("intro", "cutscene"):
@@ -974,6 +981,7 @@ def run() -> None:
             camera_x = max_cam_x
 
         # Update audio (ducking is applied via bus volumes).
+        audio.set_cinematic_ducked(mode == "cutscene", factor=0.5)
         audio.update(frame_dt)
 
         # Screenshake offsets (render-time only; affects the whole frame).

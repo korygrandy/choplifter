@@ -19,7 +19,10 @@ def apply_mission_preview(
     )
     accumulator = 0.0
     sky_smoke.reset()
-    audio.stop_flying()
+    if hasattr(audio, "stop_persistent_channels"):
+        audio.stop_persistent_channels()
+    else:
+        audio.stop_flying()
     prev_stats = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
     bg = getattr(mission, "bg_asset", "")
     if bg and not hasattr(mission, "bg_asset_exists") and set_toast:
@@ -46,7 +49,10 @@ def reset_game(
     )
     accumulator = 0.0
     sky_smoke.reset()
-    audio.stop_flying()
+    if hasattr(audio, "stop_persistent_channels"):
+        audio.stop_persistent_channels()
+    else:
+        audio.stop_flying()
     prev_stats = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
     reset_flares(flares)
     logger.info("RESET: mission restarted")
