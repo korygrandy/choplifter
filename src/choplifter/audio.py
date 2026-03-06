@@ -80,6 +80,12 @@ def _try_load_asset_sound(path: Path) -> pygame.mixer.Sound | None:
 
 BusName = Literal["sfx", "ui", "music"]
 
+# Dedicated channels reserved outside bus pools for persistent/key sounds.
+DEDICATED_CH_FLYING_LOOP = 14
+DEDICATED_CH_BARAK_DEPLOY = 16
+DEDICATED_CH_BARAK_LAUNCH = 17
+AUDIO_CHANNEL_DEBUG = False
+
 
 
 
@@ -103,38 +109,61 @@ class AudioMixer:
 
     def __post_init__(self):
         # Assign dedicated channels to each bus for proper routing
-        total_channels = 16
+        total_channels = 18
         pygame.mixer.set_num_channels(total_channels)
-        # Example: 8 SFX, 2 UI, 6 music (flying loop, etc)
+        # Keep 14/16/17 reserved for dedicated persistent/key sounds.
         bus_layout = {
             "sfx": list(range(0, 8)),
             "ui": list(range(8, 10)),
-            "music": list(range(10, 16)),
+            "music": list(range(10, 14)),
         }
         self.buses = {bus: [pygame.mixer.Channel(idx) for idx in idxs] for bus, idxs in bus_layout.items()}
         self.active_loops = {}
+        self._bus_cursor = {bus: 0 for bus in bus_layout}
 
     def play(self, sound: pygame.mixer.Sound, bus: BusName = "sfx", *, dedicated_channel: int = None) -> None:
         """Play a one-shot sound on the specified bus. If dedicated_channel is set, use that channel and do not interrupt it."""
         if dedicated_channel is not None:
             ch = pygame.mixer.Channel(dedicated_channel)
-            if not ch.get_busy():
-                ch.play(sound)
+            # Dedicated channels are isolated from pooled transient SFX channels.
+            ch.play(sound)
             return
         channels = self.buses.get(bus, [])
         if channels:
-            # If the bus is saturated, steal the first channel.
-            channels[0].play(sound)
+            # Prefer an idle channel in this bus; fall back to round-robin steal.
+            for ch in channels:
+                if not ch.get_busy():
+                    ch.play(sound)
+                    return
+
+            cursor = int(self._bus_cursor.get(bus, 0))
+            ch = channels[cursor % len(channels)]
+            ch.play(sound)
+            self._bus_cursor[bus] = (cursor + 1) % len(channels)
         else:
             sound.play()
 
         # ...existing code...
 
-    def play_loop(self, sound: pygame.mixer.Sound, *, key: str, bus: BusName = "music", fade_in_ms: int = 500) -> None:
+    def play_loop(
+        self,
+        sound: pygame.mixer.Sound,
+        *,
+        key: str,
+        bus: BusName = "music",
+        fade_in_ms: int = 500,
+        dedicated_channel: int | None = None,
+    ) -> None:
         if key in self.active_loops:
             ch = self.active_loops[key]
             if ch.get_busy():
                 return
+
+        if dedicated_channel is not None:
+            ch = pygame.mixer.Channel(dedicated_channel)
+            ch.play(sound, loops=-1, fade_ms=fade_in_ms)
+            self.active_loops[key] = ch
+            return
 
         channels = self.buses.get(bus, [])
         if not channels:
@@ -170,6 +199,35 @@ class AudioBank:
                 pygame.mixer.Channel(7).stop()
         except Exception:
             pass
+
+    def log_audio_channel_snapshot(self, *, tag: str = "state", logger=None) -> None:
+        """Opt-in debug snapshot for key mixer channels and bus occupancy."""
+        if not AUDIO_CHANNEL_DEBUG:
+            return
+        try:
+            pieces: list[str] = []
+            for idx in (
+                7,
+                DEDICATED_CH_FLYING_LOOP,
+                DEDICATED_CH_BARAK_DEPLOY,
+                DEDICATED_CH_BARAK_LAUNCH,
+            ):
+                ch = pygame.mixer.Channel(idx)
+                pieces.append(f"ch{idx}={'busy' if ch.get_busy() else 'idle'}")
+
+            if self.mixer is not None:
+                for bus in ("sfx", "ui", "music"):
+                    channels = self.mixer.buses.get(bus, [])
+                    busy = sum(1 for ch in channels if ch.get_busy())
+                    pieces.append(f"{bus}={busy}/{len(channels)}")
+
+            msg = f"AUDIO_CH[{tag}] " + " | ".join(pieces)
+            if logger is not None:
+                logger.info(msg)
+            else:
+                print(msg)
+        except Exception:
+            return
     def play_hostage_scream(self) -> None:
         """Play a random male or female scream SFX if available."""
         # Lazy-load scream sounds if not already loaded
@@ -202,6 +260,7 @@ class AudioBank:
     _duck_total_s: float = field(default=0.0, init=False, repr=False)
     _duck_min_factor: float = field(default=1.0, init=False, repr=False)
     _duck_current_factor: float = field(default=1.0, init=False, repr=False)
+    _cinematic_duck_factor: float = field(default=1.0, init=False, repr=False)
     mixer: AudioMixer | None
     _pause_menu_active: bool = field(default=False, init=False, repr=False)
     shoot: pygame.mixer.Sound | None
@@ -226,19 +285,58 @@ class AudioBank:
     flying_loop: pygame.mixer.Sound | None
     menu_select: pygame.mixer.Sound | None
     pause: pygame.mixer.Sound | None
+    barak_mrad_deploy: pygame.mixer.Sound | None
     barak_mrad_launch: pygame.mixer.Sound | None
+
+    def play_barak_mrad_deploy(self) -> None:
+        if self.barak_mrad_deploy is None:
+            return
+        if self.mixer is not None:
+            # Separate dedicated lane keeps deploy and launch cues from stepping on each other.
+            self.mixer.play(self.barak_mrad_deploy, bus="sfx", dedicated_channel=DEDICATED_CH_BARAK_DEPLOY)
+        else:
+            self.barak_mrad_deploy.play()
+
     def play_barak_mrad_launch(self) -> None:
-        self._play(self.barak_mrad_launch, bus="sfx")
+        if self.barak_mrad_launch is None:
+            return
+        if self.mixer is not None:
+            self.mixer.play(self.barak_mrad_launch, bus="sfx", dedicated_channel=DEDICATED_CH_BARAK_LAUNCH)
+        else:
+            self.barak_mrad_launch.play()
 
     def start_flying(self) -> None:
         """Starts the helicopter flying loop sound if available."""
         if hasattr(self, "mixer") and self.mixer is not None and self.flying_loop is not None:
-            self.mixer.play_loop(self.flying_loop, key="flying_loop", bus="music", fade_in_ms=500)
+            self.mixer.play_loop(
+                self.flying_loop,
+                key="flying_loop",
+                bus="music",
+                fade_in_ms=500,
+                dedicated_channel=DEDICATED_CH_FLYING_LOOP,
+            )
         elif self.flying_loop is not None:
             try:
                 self.flying_loop.play(loops=-1, fade_ms=500)
             except Exception:
                 pass
+
+    def stop_persistent_channels(self) -> None:
+        """Stop persistent dedicated channels explicitly (restart/cutscene safety)."""
+        self.stop_flying()
+        self.stop_chopper_warning_beeps()
+        try:
+            pygame.mixer.Channel(DEDICATED_CH_BARAK_LAUNCH).stop()
+        except Exception:
+            pass
+
+    def set_cinematic_ducked(self, active: bool, *, factor: float = 0.5) -> None:
+        """Sustain ducking during cutscenes/hostage cinematics."""
+        target = float(_clamp(factor, 0.1, 1.0)) if active else 1.0
+        if abs(target - float(self._cinematic_duck_factor)) <= 0.01:
+            return
+        self._cinematic_duck_factor = target
+        self._apply_mute_state()
 
     def stop_flying(self) -> None:
         """Stops the helicopter flying loop sound if active."""
@@ -384,7 +482,7 @@ class AudioBank:
             artillery_shot = _try_load_asset_sound(asset_dir / "artillery-shot.wav")
             artillery_impact_a = _try_load_asset_sound(asset_dir / "artillery-impact.wav")
             artillery_impact_b = _try_load_asset_sound(asset_dir / "alternate-artillery-impact.wav")
-            jet_flyby = _try_load_asset_sound(asset_dir / "fighter-jet-flyby.wav")
+            jet_flyby = _try_load_asset_sound(asset_dir / "fighter-jet-flyby.ogg")
 
             menu_select = _try_load_asset_sound(asset_dir / "menu-select.wav")
             pause = _try_load_asset_sound(asset_dir / "pause.wav")
@@ -405,7 +503,7 @@ class AudioBank:
             doors_open = _try_load_asset_sound(asset_dir / "doors_open.wav") or doors_open
             doors_close = _try_load_asset_sound(asset_dir / "doors_close.wav") or doors_close
             board = _try_load_asset_sound(asset_dir / "board.wav") or board
-            flying_loop = _try_load_asset_sound(asset_dir / "chopper-flying.wav")
+            flying_loop = _try_load_asset_sound(asset_dir / "chopper-flying.ogg")
 
             shoot.set_volume(0.35)
             bomb.set_volume(0.45)
@@ -438,9 +536,17 @@ class AudioBank:
             if pause is not None:
                 pause.set_volume(0.55)
 
+            # Asset in repository is currently named barak-depoying.wav (typo preserved).
+            barak_mrad_deploy = (
+                _try_load_asset_sound(asset_dir / "barak-depoying.wav")
+                or _try_load_asset_sound(asset_dir / "barak-deploying.wav")
+            )
+            if barak_mrad_deploy is not None:
+                barak_mrad_deploy.set_volume(0.66)
+
             barak_mrad_launch = _try_load_asset_sound(asset_dir / "barak-launched.wav")
             if barak_mrad_launch is not None:
-                barak_mrad_launch.set_volume(0.60)
+                barak_mrad_launch.set_volume(0.58)
             return AudioBank(
                 mixer=mixer,
                 shoot=shoot,
@@ -465,6 +571,7 @@ class AudioBank:
                 pause=pause,
                 midair_collision=midair_collision,
                 chopper_warning_beeps=chopper_warning_beeps,
+                barak_mrad_deploy=barak_mrad_deploy,
                 barak_mrad_launch=barak_mrad_launch,
             )
         except Exception as e:
@@ -493,6 +600,7 @@ class AudioBank:
                 pause=None,
                 midair_collision=None,
                 chopper_warning_beeps=None,
+                barak_mrad_deploy=None,
                 barak_mrad_launch=None,
             )
             r2 = _sine_pcm16(freq_hz=988.0, duration_s=0.10, volume=0.22, sample_rate=sample_rate)
@@ -504,7 +612,7 @@ class AudioBank:
             artillery_shot = _try_load_asset_sound(asset_dir / "artillery-shot.wav")
             artillery_impact_a = _try_load_asset_sound(asset_dir / "artillery-impact.wav")
             artillery_impact_b = _try_load_asset_sound(asset_dir / "alternate-artillery-impact.wav")
-            jet_flyby = _try_load_asset_sound(asset_dir / "fighter-jet-flyby.wav")
+            jet_flyby = _try_load_asset_sound(asset_dir / "fighter-jet-flyby.ogg")
 
             menu_select = _try_load_asset_sound(asset_dir / "menu-select.wav")
             pause = _try_load_asset_sound(asset_dir / "pause.wav")
@@ -527,7 +635,7 @@ class AudioBank:
             doors_open = _try_load_asset_sound(asset_dir / "doors_open.wav") or doors_open
             doors_close = _try_load_asset_sound(asset_dir / "doors_close.wav") or doors_close
             board = _try_load_asset_sound(asset_dir / "board.wav") or board
-            flying_loop = _try_load_asset_sound(asset_dir / "chopper-flying.wav")
+            flying_loop = _try_load_asset_sound(asset_dir / "chopper-flying.ogg")
 
             # Keep levels conservative.
             shoot.set_volume(0.35)
@@ -576,7 +684,7 @@ class AudioBank:
             mute_ui = False
             mute_music = bool(self._pause_menu_active)
 
-        duck = float(self._duck_current_factor)
+        duck = float(self._duck_current_factor) * float(self._cinematic_duck_factor)
         if self.mixer is not None:
             self.mixer.set_bus_volume("sfx", (0.0 if mute_sfx else 1.0) * duck)
             self.mixer.set_bus_volume("ui", 0.0 if mute_ui else 1.0)

@@ -100,10 +100,10 @@ Ordered from least complex to most complex.
 
 ### 2) Audio Overhaul (Mixer Layer)
 
-- [ ] Dedicated sound channels.
+- [x] Dedicated sound channels.
 	- Assign helicopter hum and BARAK-launch sounds to dedicated `pygame.mixer.Channel` instances.
 	- Prevent cutoff/stealing from transient SFX playback.
-- [ ] Restart and cutscene audio logic.
+- [x] Restart and cutscene audio logic.
 	- On restart, stop persistent channels explicitly (`channel.stop()`).
 	- During hostage/cutscene sequences, duck key channels (`channel.set_volume(0.5)`).
 

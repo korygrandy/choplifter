@@ -141,10 +141,16 @@ def _update_enemies(
                             e.vel.x = 0.0
                             e.entered_screen = True
                             e.mrad_state = "deploying"
+                            if hasattr(mission, "audio") and mission.audio is not None:
+                                if hasattr(mission.audio, "play_barak_mrad_deploy"):
+                                    mission.audio.play_barak_mrad_deploy()
                     else:
                         e.vel.x = 0.0
                         e.entered_screen = True
                         e.mrad_state = "deploying"
+                        if hasattr(mission, "audio") and mission.audio is not None:
+                            if hasattr(mission.audio, "play_barak_mrad_deploy"):
+                                mission.audio.play_barak_mrad_deploy()
                 elif e.mrad_state == "deploying":
                     # Animate launcher_angle from 0 (horizontal) to pi/2 (vertical)
                     deploy_speed = 1.5  # radians/sec
