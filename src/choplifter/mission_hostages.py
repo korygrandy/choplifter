@@ -7,6 +7,7 @@ from typing import Callable
 from .game_types import HostageState
 from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
+from .mission_helpers import on_foot
 from .mission_state import MissionState
 from .settings import HelicopterSettings
 
@@ -250,8 +251,10 @@ def hostage_crush_check(
     last_landing_vy: float,
     *,
     safe_landing_vy: float,
-    on_foot_fn: Callable[..., bool],
+    on_foot_fn: Callable[..., bool] | None = None,
 ) -> None:
+    on_foot_fn = on_foot_fn or on_foot
+
     # Called on a landing event. If the landing was hard and a hostage is under the helicopter, crush them.
     if mission.ended:
         return
@@ -279,8 +282,10 @@ def hostage_crush_check_logged(
     *,
     safe_landing_vy: float,
     logger: logging.Logger | None,
-    on_foot_fn: Callable[..., bool],
+    on_foot_fn: Callable[..., bool] | None = None,
 ) -> None:
+    on_foot_fn = on_foot_fn or on_foot
+
     before = mission.stats.kia_by_player
     hostage_crush_check(
         mission,

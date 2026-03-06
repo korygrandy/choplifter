@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Callable
 
+from .mission_helpers import boarded_count
 from .mission_state import MissionState
 
 
@@ -12,8 +13,10 @@ def _end_mission(
     reason: str,
     logger: logging.Logger | None,
     *,
-    boarded_count_fn: Callable[[MissionState], int],
+    boarded_count_fn: Callable[[MissionState], int] | None = None,
 ) -> None:
+    boarded_count_fn = boarded_count_fn or boarded_count
+
     if mission.ended:
         return
 
