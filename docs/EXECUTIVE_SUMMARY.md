@@ -20,6 +20,8 @@ The remake is built to be **logically faithful** to the classic feel (tight arca
    - Debug state and weather persist across pause/unpause
 - **Input Disablement:** All player input is locked on mission end to prevent accidental actions.
 - **UX:** Gamepad support, mission restart/pause flows, chopper selection, accessibility toggles
+- **Architecture:** Mission/main logic refactored into focused modules for safer iteration and reduced regression risk
+- **Packaging:** Windows onefile and onedir builds are operational via scripted PyInstaller pipeline
 
 ## Why It’s Compelling
 - **Strong core fantasy:** “Rescue under fire” is immediate, understandable, and replayable.
@@ -48,7 +50,7 @@ The product will ship with three distinct missions the player can select before 
 ## What We Need Next
 - **Mission content build-out:** Visual identity per mission, unique objective cadence, tuned threat mixes.
 - **Art/audio pass:** Replace placeholders and unify presentation across missions.
-- **Distribution readiness:** Packaging + build pipeline + basic analytics/telemetry (opt-in) for tuning.
+- **Distribution readiness:** Reduce onefile package size (media and runtime dependency optimization), then finalize signed release pipeline.
 
 ## Investment Thesis
 This is a focused, technically proven prototype with a strong core loop and clear expansion path: three missions, scalable content iteration, and a modern UX foundation—positioned to become a polished, replayable arcade-action title with efficient content production.

@@ -1,28 +1,149 @@
-# Game Enhancements — TODO / Backlog
+# Game Enhancements - TODO / Backlog
 
-This is the working backlog for incremental improvements on top of the current playable build.
+This is the active backlog after the latest mission/main refactor and packaging pass.
 
-## Baseline (now)
+## Baseline (Current)
 
-- Windows build: PyInstaller **onefile** works.
-- Intro video: `src/choplifter/assets/intro.mpg` is the active intro.
-- Repo note: `intro.mpg` is tracked via **Git LFS** (required for full asset checkout).
+- Playable rescue loop is stable.
+- Mission logic has been split into dedicated modules.
+- Main loop cleanup/dedupe completed.
+- Weather/FX systems are integrated and tunable.
+- Windows onedir + onefile builds complete successfully.
 
-## Next (small, shippable steps)
+## Recently Completed
 
-- [x] Add a short README note about Git LFS (`git lfs install` + `git lfs pull`) so new clones get `intro.mpg`.
-- [x] Add/verify an in-game “Skip Intro” hint + ensure skip works instantly on keypress.
-- [x] Tune helicopter feel (document the knobs and current values): `engine_power`, `friction`, `max_speed`, `tilt_rate`, `max_tilt`.
-- [x] Mission flow polish: clear “start mission / retry / back to mission select” loop.
+- [x] Main-file cleanup pass (input/pause state dedupe and stale block removal).
+- [x] Documentation refresh for README + handoff/build docs.
+- [x] Fresh onefile and onedir rebuild after cleanup.
 
-## Gameplay (Milestone-driven)
+## High Priority Next
 
-- [ ] Rescue loop polish: hostage movement caps + clearer grounded/doors-open feedback.
-- [ ] Threat readability pass: ensure tanks/jets/mines have distinct audio/visual tells.
-- [ ] Add a simple global consequence meter (start with **Sentiment**) and show it in debrief.
+- [ ] Reduce onefile build size.
+- [ ] Re-encode `intro.mpg` and mission cutscene media to smaller formats.
+- [ ] Evaluate a "lite media" build mode that skips video dependencies for smaller distribution builds.
+- [ ] Convert largest WAV effects to compressed audio where quality remains acceptable.
+
+### Onefile Size Reduction Baseline (Measured)
+
+- Current onefile output:
+	- `pyinstaller-dist/Choplifter.exe` is about `330.56 MB`.
+- Largest media payloads in `src/choplifter/assets`:
+	- `intro.mpg` about `228.70 MB`
+	- `hostage-rescue-cutscene.mpg` about `21.34 MB`
+	- `chopper-flying.wav` about `9.92 MB`
+- Packaging/runtime contributors in onedir:
+	- bundled ffmpeg from `imageio-ffmpeg` about `83.58 MB` (inside `_internal`)
+	- `numpy` about `19.46 MB`
+- Current script behavior:
+	- `scripts/build_windows_exe.ps1` currently bundles all assets and video dependencies by default.
+
+### Onefile Size Reduction Plan (Highest Impact First)
+
+- [ ] Re-encode intro and mission cutscene videos first.
+	- Convert `intro.mpg` and `hostage-rescue-cutscene.mpg` to H.264 MP4.
+	- Suggested settings: CRF ~26-30, AAC mono/stereo 96-128k.
+	- Keep filename behavior compatible by preserving lookup expectations or updating candidate list in `src/choplifter/app/cutscenes.py`.
+	- Expected win: often `-180 MB` to `-230 MB` from intro recode alone.
+- [ ] Create a "lite media" profile with no video playback dependency.
+	- Add a build flag in `scripts/build_windows_exe.ps1` (for example `-LiteMedia`).
+	- In lite mode:
+		- Do not include `imageio` / `imageio-ffmpeg` metadata collection.
+		- Do not include large video files in `--add-data`.
+		- Use existing fallback intro/title-card behavior when video is unavailable.
+	- Expected win: roughly `-100 MB` more (ffmpeg + numpy + related hooks), plus skipped video assets.
+- [ ] Compress/convert WAV SFX to OGG.
+	- Convert largest SFX (`chopper-flying.wav`, `fighter-jet-flyby.wav`, etc.) to `.ogg`.
+	- Update asset loading in `src/choplifter/audio.py` and `src/choplifter/audio_extra.py` to prefer `.ogg`.
+	- Expected win: usually `-10 MB` to `-25 MB` depending quality settings.
+- [ ] Stop shipping non-runtime source assets.
+	- Exclude files such as `chopper-one.xcf` from packaged output.
+	- Replace broad asset inclusion with explicit include patterns or an asset manifest.
+	- Expected win: small but clean (`~4.44 MB` immediate, plus long-term hygiene).
+- [ ] Optimize images losslessly.
+	- Run PNG/JPG optimization pass (for example `oxipng`, `jpegoptim`, or `mozjpeg`).
+	- Expected win: modest (`~2 MB` to `~8 MB`) without visual quality loss.
+- [ ] Keep onefile for distribution convenience only.
+	- Onefile size will track total payload size; it is not an automatic size reduction format.
+	- Use onedir for profiling and iteration, then generate final onefile deliverables.
+
+### Recommended Execution Order
+
+1. Re-encode the two large videos.
+2. Build and re-measure output size.
+3. Add and validate `-LiteMedia` profile (no ffmpeg/imageio + fallback intro).
+4. Optionally convert large SFX to OGG.
+5. Finalize explicit asset manifest/include list.
+
+## Gameplay / UX Improvements
+
+- [ ] Rescue readability polish (boarding feedback, grounded/doors clarity).
+- [ ] Threat readability pass (distinct tells for tanks/jets/mines).
+- [ ] Sentiment/consequence meter in debrief and progression.
+
+## Reprioritized Game Enhancements (Pygame/PC)
+
+Ordered from least complex to most complex.
+
+### 1) UI & Visuals (Quick Wins)
+
+- [ ] VIP crown fix (priority quick win).
+	- Move VIP crown draw call to the end of the UI/indicator draw sequence so it always renders on top.
+	- Add pulsating alpha effect using sine wave timing.
+	- Target formula: `alpha = 127.5 * (sin(time * speed) + 1)` (maps to 0..255).
+- [ ] HUD overlay migration.
+	- Replace console-style text indicators with icon-based HUD (fuel, health, etc.) in top-left.
+	- Use PNG icon assets exported from SVG source files.
+- [ ] Bunker and turret reskin.
+	- Upgrade defensive structure visuals with improved polygons and/or new textures.
+- [ ] BARAK explosion animation.
+	- Trigger a dedicated sprite sequence (fire plume) on collision/impact events.
+
+### 2) Audio Overhaul (Mixer Layer)
+
+- [ ] Dedicated sound channels.
+	- Assign helicopter hum and BARAK-launch sounds to dedicated `pygame.mixer.Channel` instances.
+	- Prevent cutoff/stealing from transient SFX playback.
+- [ ] Restart and cutscene audio logic.
+	- On restart, stop persistent channels explicitly (`channel.stop()`).
+	- During hostage/cutscene sequences, duck key channels (`channel.set_volume(0.5)`).
+
+### 3) Behavioral Logic (State Layer)
+
+- [ ] Missile/flar diversion behavior.
+	- If flares are active, override BARAK target vector to decoy direction `(0, -1)`.
+- [ ] MRAP and launcher state cycle.
+	- Implement `Retract -> Move -> Deploy` state machine using timer/state variables.
+
+### 4) High Complexity (Systems Layer)
+
+- [ ] Supply drop physics + munitions manager.
+	- Build manager for spawn timing, sway motion (`sin` horizontal offset), and gravity.
+- [ ] Mission enhancements: escort and sabotage.
+	- Add new objective types with new win/loss conditions and multi-entity coordination.
+
+## Technical Deep-Dive Notes
+
+- VIP crown layering:
+	- Ensure `draw_vip_crown()` is called after standard hostage indicator rendering.
+- VIP crown pulsation:
+	- Use smooth alpha modulation each frame with sine timing.
+
+## Open Prioritization Questions (Decision Inputs)
+
+- [ ] VIP indicator architecture:
+	- Are non-VIP indicators in the same sprite group as VIP?
+	- If yes, evaluate `pygame.sprite.LayeredUpdates` to guarantee VIP front layer.
+- [ ] SVG pipeline decision:
+	- Confirm whether SVGs are converted at runtime or pre-exported to PNG.
+	- Prefer pre-exported PNGs unless runtime SVG dependency is required.
+- [ ] BARAK "searing heat" visual style:
+	- Choose particle system (many small particles) vs animated sprite (single plume).
+- [ ] Restart architecture check:
+	- Confirm whether restart re-instantiates game/session objects or resets variables in-place.
+	- Use this to finalize global channel-stop strategy and audio state reset.
 
 ## Later
 
-- [ ] Weather: sandstorm visibility + wind gusts affecting vertical velocity.
-- [ ] Vertical mission segments (rooftop extractions).
-- [ ] Mission-specific cutscenes (in-engine timeline, not video).
+- [ ] Weather gameplay modifiers (sandstorm visibility + wind impact).
+- [ ] Vertical extraction mission segments.
+- [ ] Additional mission-specific cutscenes/events.

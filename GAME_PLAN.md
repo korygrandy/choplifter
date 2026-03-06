@@ -1,12 +1,16 @@
-# Choplifter Sequel — Game Plan (Working Doc)
+# Choplifter Sequel - Game Plan (Working Doc)
 
 ---
 
-**2026 Update:**
-- Robust weather/particle SFX (Rain, Fog, Dust, Lightning) are now implemented and tunable.
-- In-game debug mode (F3 toggle, F5/F6 weather cycling) is available for rapid developer testing.
-- Input is disabled on mission end to prevent accidental actions.
-See LLM_HANDOFF.md for developer workflow and debug/testing instructions.
+## 2026 Implementation Status
+
+- Weather/particle systems (rain, fog, dust, lightning, storm) are implemented.
+- Intro + mission cutscenes are integrated and skippable.
+- Mission and main loop refactor work has been completed into modular app/mission layers.
+- Input lock on mission end is implemented.
+- Current engineering focus includes package-size reduction for Windows onefile distribution.
+
+See `LLM_HANDOFF.md` for current architecture and refactor ownership map.
 
 ## 0) Goals & Non-Goals
 
@@ -75,13 +79,11 @@ Also define:
 
 ### 5.0 Cutscenes / Intro Presentation
 
-**Near-term (MVP-friendly):** Add a short, skippable **intro cutscene** ("trailer feel") that plays **before Mission Select**, ending on black with:
-- `CHOPLIFTER`
-- `Mission: Middle East Rescue`
+Current implementation:
+- Intro cutscene plays before mission select and supports skip controls.
+- Mission cutscene event is integrated and skippable.
 
-Implementation bias: build as an in-engine timeline/state (not a video file) so it stays lightweight, resolution-independent, and easy to theme.
-
-**Later:** Add **mission-specific cutscenes** that play **after a mission is selected** (future TODO; implement in its own feature branch).
+Current technical approach uses media playback with fallback behavior when assets/runtime are unavailable.
 
 ### 5.1 Helicopter Physics (MVP)
 - **Inertia / friction:** $v_{t+1} = v_t \times friction$
@@ -154,9 +156,9 @@ Weapon mapping (classic-inspired):
 - Side-facing: **machine gun** (best against jets)
 - Forward-facing: **bombs/rockets** (best against tanks)
 
-### 6.1 Gamepad Compatibility (Planned)
+### 6.1 Gamepad Compatibility (Implemented)
 
-Goal: allow an Xbox controller to be turned on mid-game and be usable without restarting.
+Goal met: an Xbox-style controller can be connected/disconnected during runtime with in-game toast feedback.
 
 - **Connection UX:** show a small on-screen notification when a gamepad is connected or disconnected.
 - **Default mapping (proposal):**

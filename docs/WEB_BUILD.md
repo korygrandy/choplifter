@@ -1,10 +1,10 @@
 # Web Build (Playable in Browser)
 
-This project is a Python + Pygame game. The simplest path to a web-playable build is **`pygbag`**, which packages it to WebAssembly + a static site.
+This project is a Python + Pygame game. The current browser path is **`pygbag`**, which packages to WebAssembly + static site output.
 
 ## Prereqs
 
-- Python 3.11+ (this repo uses 3.13 in the venv)
+- Python 3.11+ (this repo currently uses 3.13 in the venv)
 - Create/activate venv and install deps:
   - `pip install -r requirements.txt`
   - `pip install pygbag`
@@ -17,15 +17,16 @@ Note:
 - This repo includes a local `.venv` folder. `pygbag` will try to scan everything under the project root unless told to ignore directories.
 - A `pygbag.ini` is included to ignore `.venv` and other non-game folders so web builds are reliable.
 
-- Build:
+- Build command:
   - `pygbag --build --disable-sound-format-error run.py`
 
 Note:
-- `pygbag` prefers `.ogg` for web audio. This project currently includes `.wav` audio assets, so the flag is used to allow the build to complete.
+- `pygbag` prefers `.ogg` for web audio. This project still includes WAV assets, so `--disable-sound-format-error` is used for compatibility.
 
 Notes:
-- If you run into asset-loading issues in the browser, ensure assets are referenced via package-relative paths (the build environment is not the same as desktop).
-- Web builds can differ in audio behavior/perf; keep expectations realistic for the first pass.
+- If you run into asset-loading issues in the browser, ensure assets are referenced via package-relative paths.
+- Browser builds may differ from desktop for audio timing/performance and heavy FX.
+- Large video assets can increase download/startup time significantly.
 
 ## Test locally
 
