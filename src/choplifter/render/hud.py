@@ -7,7 +7,7 @@ from ..game_types import HostageState
 from ..helicopter import Helicopter
 
 if TYPE_CHECKING:
-    from ..mission import MissionState
+    from ..mission_state import MissionState
 
 
 _HUD_FONT: pygame.font.Font | None = None

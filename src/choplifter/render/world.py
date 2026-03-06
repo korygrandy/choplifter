@@ -18,7 +18,7 @@ import pygame
 from ..game_types import EnemyKind, HostageState, ProjectileKind
 
 if TYPE_CHECKING:
-    from ..mission import MissionState
+    from ..mission_state import MissionState
 
 
 def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0, enable_particles: bool = True) -> None:

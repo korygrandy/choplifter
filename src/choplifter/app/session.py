@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from ..helicopter import Facing, Helicopter
-from ..mission import MissionState, get_mission_config_by_id
+from ..mission_configs import get_mission_config_by_id
+from ..mission_state import MissionState
 
 
 def create_mission_and_helicopter(

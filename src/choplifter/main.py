@@ -34,14 +34,12 @@ from .debug_overlay import DebugOverlay
 from .game_logging import create_session_logger
 from .helicopter import Facing, Helicopter, HelicopterInput, update_helicopter
 from . import haptics
-from .mission import (
-    MissionState,
-    get_mission_config_by_id,
-    hostage_crush_check_logged,
-    boarded_count,
-    spawn_projectile_from_helicopter_logged,
-    update_mission,
-)
+from .mission import update_mission
+from .mission_configs import get_mission_config_by_id
+from .mission_helpers import boarded_count
+from .mission_hostages import hostage_crush_check_logged
+from .mission_player_fire import spawn_projectile_from_helicopter_logged
+from .mission_state import MissionState
 from .rendering import (
     bg_asset_exists,
     draw_chopper_select_overlay,
