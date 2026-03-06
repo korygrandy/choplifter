@@ -28,7 +28,7 @@ from . import haptics
 from .entities import Hostage, Compound, Projectile, Enemy, BaseZone, MissionStats
 
 from .mission_state import MissionState
-from .mission_helpers import boarded_count, on_foot
+from .mission_helpers import boarded_count, on_foot, _hits_circle, _projectile_hits_enemy, _log_compound_health_if_needed
 
 
 def spawn_projectile_from_helicopter(mission: MissionState, helicopter: Helicopter) -> None:
@@ -695,6 +695,7 @@ def _update_sentiment(mission: MissionState) -> None:
 
 
 def _log_compound_health_if_needed(c: Compound, logger: logging.Logger | None, reason: str) -> None:
+
     if logger is None:
         return
 
@@ -1088,26 +1089,8 @@ def _spawn_enemy_bullet_toward(
     )
 
 
-def _hits_circle(a: Vec2, b: Vec2, radius: float) -> bool:
-    dx = a.x - b.x
-    dy = a.y - b.y
-    return dx * dx + dy * dy <= radius * radius
 
 
-def _projectile_hits_enemy(p: Projectile, e: Enemy, heli: HelicopterSettings, tuning: MissionTuning) -> bool:
-    if e.kind is EnemyKind.TANK:
-        w, h = 44.0, 18.0
-        left = e.pos.x - w * 0.5
-        top = heli.ground_y - h
-        return left <= p.pos.x <= left + w and top <= p.pos.y <= top + h
-
-    if e.kind is EnemyKind.JET:
-        return _hits_circle(p.pos, e.pos, radius=20.0)
-
-    if e.kind is EnemyKind.AIR_MINE:
-        return _hits_circle(p.pos, e.pos, radius=tuning.mine_projectile_radius)
-
-    return False
 
 
 def _damage_helicopter(
@@ -1178,18 +1161,7 @@ def _damage_helicopter(
             except Exception:
                 pass
 
-        if logger is not None:
-            logger.debug(
-                "FLASH: kind=damage source=%s amount=%.2f damage=%.1f->%.1f rgb=%s",
-                source,
-                float(amount),
-                float(before),
-                float(helicopter.damage),
-                helicopter.damage_flash_rgb,
-            )
-        if source in ("ARTILLERY", "BARAK_MISSILE"):
-            haptics.rumble_artillery_hit(logger=logger)
-        else:
+
             haptics.rumble_hit(amount=amount, source=source, logger=logger)
     if logger is not None and int(before) != int(helicopter.damage):
         logger.info("HIT: %s damage=%.0f", source, helicopter.damage)

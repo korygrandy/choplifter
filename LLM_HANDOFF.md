@@ -201,3 +201,8 @@ To reduce update risks and improve maintainability, the mission logic is being r
 - Imports in mission.py updated to use mission_helpers.
 - Incremental testing performed after extraction; no errors encountered.
 - Continue extracting additional helpers and update documentation after each step.
+
+- Extracted stateless helpers `_hits_circle`, `_projectile_hits_enemy`, and `_log_compound_health_if_needed` from mission.py to mission_helpers.py.
+- Added all required imports to mission_helpers.py for these helpers.
+- Updated mission.py to import and use these helpers from mission_helpers.py.
+- All errors resolved and game tested successfully after extraction.
