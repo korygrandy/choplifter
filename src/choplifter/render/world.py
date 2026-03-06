@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from ..game_types import EnemyKind, HostageState, ProjectileKind
-from ..mission_helpers import sentiment_band_label
+from ..mission_helpers import sentiment_band_label, sentiment_contributions
 
 if TYPE_CHECKING:
     from ..mission_state import MissionState
@@ -386,11 +386,16 @@ def _sentiment_reason_lines(
     kia_enemy: int,
     lost_in_transit: int,
 ) -> list[str]:
-    # Mirror mission sentiment weights so debrief reasons are transparent.
-    add_saved = saved * 2.5
-    sub_kia_player = kia_player * 4.0
-    sub_kia_enemy = kia_enemy * 2.5
-    sub_lost = lost_in_transit * 3.5
+    factors = sentiment_contributions(
+        saved=saved,
+        kia_player=kia_player,
+        kia_enemy=kia_enemy,
+        lost_in_transit=lost_in_transit,
+    )
+    add_saved = factors["saved"]
+    sub_kia_player = abs(factors["kia_player"])
+    sub_kia_enemy = abs(factors["kia_enemy"])
+    sub_lost = abs(factors["lost_in_transit"])
 
     return [
         f"Sentiment factors: +{add_saved:0.1f} rescued civilians",
@@ -444,12 +449,45 @@ def _draw_end(
             lost_in_transit=lost_in_transit,
         )
     )
-    lines.extend([
-        "Press Enter (or Start) to restart",
-    ])
-    y = rect.bottom + 19
+
+    # Keep restart prompt anchored to the bottom so it stays visible while stats scroll.
+    prompt = small.render("Press Enter (or Start) to restart", True, (235, 235, 235))
+    prompt_rect = prompt.get_rect(center=(screen.get_width() // 2, screen.get_height() - 20))
+    screen.blit(prompt, prompt_rect)
+
+    # Render debrief stats in a clipped viewport; auto-scroll if content exceeds available height.
+    viewport_top = rect.bottom + 11
+    viewport_bottom = max(viewport_top + 40, prompt_rect.top - 10)
+    viewport_rect = pygame.Rect(20, viewport_top, max(1, screen.get_width() - 40), max(1, viewport_bottom - viewport_top))
+
+    line_step = 28
+    content_height = len(lines) * line_step
+    max_scroll = max(0.0, float(content_height - viewport_rect.height))
+
+    scroll_offset = 0.0
+    if max_scroll > 0.0:
+        scroll_speed_px_s = 34.0
+        edge_pause_s = 1.1
+        one_way_s = max_scroll / scroll_speed_px_s
+        cycle_s = (edge_pause_s * 2.0) + (one_way_s * 2.0)
+        t = pygame.time.get_ticks() / 1000.0
+        phase = t % max(0.001, cycle_s)
+
+        if phase < edge_pause_s:
+            scroll_offset = 0.0
+        elif phase < edge_pause_s + one_way_s:
+            scroll_offset = (phase - edge_pause_s) * scroll_speed_px_s
+        elif phase < edge_pause_s + one_way_s + edge_pause_s:
+            scroll_offset = max_scroll
+        else:
+            scroll_offset = max_scroll - (phase - edge_pause_s - one_way_s - edge_pause_s) * scroll_speed_px_s
+
+    previous_clip = screen.get_clip()
+    screen.set_clip(viewport_rect)
+    y = viewport_rect.top - int(scroll_offset)
     for line in lines:
         s = small.render(line, True, (235, 235, 235))
         r = s.get_rect(center=(screen.get_width() // 2, y))
         screen.blit(s, r)
-        y += 28
+        y += line_step
+    screen.set_clip(previous_clip)

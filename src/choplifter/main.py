@@ -220,6 +220,7 @@ def run() -> None:
 
     # Intro cutscene plays on every launch.
     mode: str = "intro"  # intro | select_mission | select_chopper | playing | paused | cutscene | mission_end
+    mission_end_return_seconds: float = 0.0
     prev_menu_dir = 0
     prev_menu_vert = 0
     pause_focus: str = "choppers"  # choppers | restart_mission | restart_game | mute | quit
@@ -242,7 +243,7 @@ def run() -> None:
     prev_stats: MissionStatsSnapshot = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
 
     def apply_mission_preview_wrapper() -> None:
-        nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
+        nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment, mission_end_return_seconds
         mission, helicopter, accumulator, prev_stats = apply_mission_preview(
             create_mission_and_helicopter,
             heli_settings,
@@ -257,10 +258,11 @@ def run() -> None:
         )
         mission.sentiment = float(campaign_sentiment)
         mission.audio = audio
+        mission_end_return_seconds = 0.0
         audio.log_audio_channel_snapshot(tag="mission_preview", logger=logger)
 
     def reset_game_wrapper() -> None:
-        nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
+        nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment, mission_end_return_seconds
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_btn_rb_down, prev_btn_lb_down, prev_btn_back_down
         # Stop chopper warning beeps on game reset
@@ -278,6 +280,7 @@ def run() -> None:
             logger,
             flares,
         )
+        mission_end_return_seconds = 0.0
         mission.sentiment = float(campaign_sentiment)
         mission.audio = audio
         audio.log_audio_channel_snapshot(tag="restart", logger=logger)
@@ -390,18 +393,17 @@ def run() -> None:
                 prev_btn_y_down = False
                 prev_btn_back_down = False
             elif event.type == pygame.KEYDOWN:
-                # In mission_end mode, allow Pause/Esc to open the pause menu, and Enter to restart
+                # In mission_end mode, route navigation back to Mission Select.
                 if mode == "mission_end" or mission.ended:
                     if event.key in (pygame.K_ESCAPE, pygame.K_PAUSE):
-                        mode = "paused"
-                        set_toast("Pause menu opened (Game End)")
+                        mode = "select_mission"
+                        set_toast("Mission ended: returning to Mission Select")
                         continue
                     elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                        reset_game_wrapper()
-                        mode = "playing"
-                        set_toast("Mission restarted (Enter)")
+                        mode = "select_mission"
+                        set_toast("Mission ended: returning to Mission Select")
                         continue
-                    # Only allow restart/menu keys in mission_end mode (handled elsewhere if needed)
+                    # Only allow mission-end navigation keys in mission_end mode.
                     continue
                 # --- Handle quit confirmation in pause menu for keyboard ---
                 if mode == "paused" and quit_confirm:
@@ -478,9 +480,8 @@ def run() -> None:
                 # X (2): fire, B (1): flare, A (0): doors, Y (3): reverse, Back (6): facing, Start (7): pause/restart
                 if mode == "mission_end":
                     if event.button == 7:  # Start button
-                        reset_game_wrapper()
-                        mode = "playing"
-                        set_toast("Mission restarted (Start button)")
+                        mode = "select_mission"
+                        set_toast("Mission ended: returning to Mission Select")
                 elif mode == "playing":
                     if event.button == 2:  # X button: fire
                         if logger:
@@ -841,12 +842,14 @@ def run() -> None:
                         audio.stop_flying()
                 update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
 
-                # If mission ended, switch to mission_end mode to disable input.
+                # If mission ended, show the mission-end screen briefly, then return to Mission Select.
                 if mission.ended:
                     campaign_sentiment = float(mission.sentiment)
                     # Stop chopper warning beeps immediately on mission end
                     audio.stop_chopper_warning_beeps()
                     mode = "mission_end"
+                    mission_end_return_seconds = 5.0
+                    set_toast("Mission ended. Returning to Mission Select in 5s.")
                     continue
 
                 # Consume cinematic feedback impulses produced by mission damage events.
@@ -930,7 +933,7 @@ def run() -> None:
 
                 if mission.crashes != prev_stats.crashes:
                     if mission.ended:
-                        set_toast(f"THE END: {mission.end_reason} (Enter=Retry, Esc/Start=Menu)")
+                        set_toast(f"THE END: {mission.end_reason} (Enter/Esc/Start=Mission Select)")
                     else:
                         set_toast(f"CRASH {mission.crashes}/3 — respawn (invuln {mission.invuln_seconds:0.1f}s)")
                         audio.play_crash()
@@ -957,6 +960,12 @@ def run() -> None:
                 helicopter.doors_open = doors_open_before_cutscene
                 logger.info(f"DOORS: restored after cutscene | was_open={prev_state} | restored_open={helicopter.doors_open}")
                 audio.log_audio_channel_snapshot(tag="cutscene_exit", logger=logger)
+
+        if mode == "mission_end":
+            mission_end_return_seconds = max(0.0, mission_end_return_seconds - frame_dt)
+            if mission_end_return_seconds <= 0.0:
+                mode = "select_mission"
+                set_toast("Mission ended: returning to Mission Select")
 
         # Visual-only sky particles.
         if particles_enabled and mode not in ("intro", "cutscene"):
