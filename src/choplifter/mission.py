@@ -517,7 +517,10 @@ def _update_projectiles(
         # Helicopter collision (enemy projectiles only).
         if p.kind in (ProjectileKind.ENEMY_BULLET, ProjectileKind.ENEMY_ARTILLERY):
             if _hits_circle(p.pos, helicopter.pos, radius=26.0):
-                if p.kind is ProjectileKind.ENEMY_ARTILLERY:
+                # Special case: Barak MRAD missile
+                if getattr(p, "is_barak_missile", False):
+                    _damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
+                elif p.kind is ProjectileKind.ENEMY_ARTILLERY:
                     mission.stats.artillery_hits += 1
                     mission.impact_sparks.emit_hit(p.pos, p.vel, strength=1.25)
                     _damage_helicopter(mission, helicopter, 10.0, logger, source="ARTILLERY")
@@ -1418,13 +1421,16 @@ def _damage_helicopter(
         # Normalize damage amounts (10 is common) so bullets don't feel overly punchy.
         base = clamp(float(amount) / 25.0, 0.0, 1.0)
         if source in ("ENEMY_BULLET",):
-            shake = 0.10 + 0.18 * base
+            shake = 0.80 + 0.60 * base  
         elif source in ("ARTILLERY",):
-            shake = 0.35 + 0.35 * base
+            shake = 0.60 + 0.40 * base 
         elif source in ("AIR_MINE",):
             shake = 0.48 + 0.42 * base
         elif source in ("JET",):
             shake = 0.28 + 0.32 * base
+        elif source == "BARAK_MISSILE":
+            shake = 0.10 + 0.18 * base
+
         else:
             shake = 0.18 + 0.30 * base
 
@@ -1466,7 +1472,7 @@ def _damage_helicopter(
                 float(helicopter.damage),
                 helicopter.damage_flash_rgb,
             )
-        if source == "ARTILLERY":
+        if source in ("ARTILLERY", "BARAK_MISSILE"):
             haptics.rumble_artillery_hit(logger=logger)
         else:
             haptics.rumble_hit(amount=amount, source=source, logger=logger)
