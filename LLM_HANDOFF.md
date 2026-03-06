@@ -195,3 +195,9 @@ To reduce update risks and improve maintainability, the mission logic is being r
   - Initial focus: missile crash animation, rumble tuning, health boost air-drop (abandoned).
   - Main focus: refactor monolithic mission.py, reduce runtime errors, enable incremental testing.
   - All entity/state grouping context, refactor plan, and debugging lessons are now documented.
+
+#### [2026-Refactor] Mission Helpers Modularization
+- Mission helpers `boarded_count` and `on_foot` have been extracted from mission.py to mission_helpers.py.
+- Imports in mission.py updated to use mission_helpers.
+- Incremental testing performed after extraction; no errors encountered.
+- Continue extracting additional helpers and update documentation after each step.
