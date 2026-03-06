@@ -86,16 +86,16 @@ Ordered from least complex to most complex.
 
 ### 1) UI & Visuals (Quick Wins)
 
-- [ ] VIP crown fix (priority quick win).
+- [x] VIP crown fix (priority quick win).
 	- Move VIP crown draw call to the end of the UI/indicator draw sequence so it always renders on top.
 	- Add pulsating alpha effect using sine wave timing.
 	- Target formula: `alpha = 127.5 * (sin(time * speed) + 1)` (maps to 0..255).
-- [ ] HUD overlay migration.
+- [x] HUD overlay migration (icon overlay implemented; final art swap pending).
 	- Replace console-style text indicators with icon-based HUD (fuel, health, etc.) in top-left.
 	- Use PNG icon assets exported from SVG source files.
-- [ ] Bunker and turret reskin.
+- [x] Bunker and turret reskin.
 	- Upgrade defensive structure visuals with improved polygons and/or new textures.
-- [ ] BARAK explosion animation.
+- [x] BARAK explosion animation.
 	- Trigger a dedicated sprite sequence (fire plume) on collision/impact events.
 
 ### 2) Audio Overhaul (Mixer Layer)

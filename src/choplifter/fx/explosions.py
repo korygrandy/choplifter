@@ -68,6 +68,30 @@ class ExplosionSystem:
                 )
             )
 
+    def emit_fire_plume(self, pos: Vec2, *, strength: float = 1.0) -> None:
+        if len(self.particles) >= self.max_particles:
+            return
+
+        strength = clamp(float(strength), 0.0, 1.0)
+        plume_count = int(18 + 20 * strength)
+        for _ in range(plume_count):
+            if len(self.particles) >= self.max_particles:
+                break
+            vx = self._rng.uniform(-42.0, 42.0)
+            vy = -self._rng.uniform(90.0, 190.0)
+            ttl = self._rng.uniform(0.24, 0.72)
+            radius = self._rng.uniform(5.5, 13.0) * (0.70 + 0.55 * strength)
+            self.particles.append(
+                FxParticle(
+                    pos=Vec2(float(pos.x) + self._rng.uniform(-7.0, 7.0), float(pos.y) + self._rng.uniform(-6.0, 6.0)),
+                    vel=Vec2(vx, vy),
+                    age=0.0,
+                    ttl=ttl,
+                    radius=radius,
+                    kind="fire_plume",
+                )
+            )
+
     def update(self, dt: float) -> None:
         if dt <= 0.0:
             return
@@ -83,6 +107,10 @@ class ExplosionSystem:
                 p.vel.y += gravity * dt
                 p.vel.x *= 0.975
                 p.vel.y *= 0.975
+            elif p.kind == "fire_plume":
+                p.vel.y -= 44.0 * dt
+                p.vel.x *= 0.965
+                p.vel.y *= 0.972
             else:
                 p.vel.y -= 14.0 * dt
                 p.vel.x *= 0.985

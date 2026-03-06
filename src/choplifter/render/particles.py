@@ -61,6 +61,31 @@ def _draw_fx_particles(screen: pygame.Surface, particles: list[object], *, camer
             pygame.draw.circle(s, draw_color, (radius, radius), radius)
             s.set_alpha(clamp255(alpha))
             screen.blit(s, (x - radius, y - radius))
+        elif kind == "fire_plume":
+            alpha = int(230 * (1.0 - t) * intensity)
+            plume_h = int(max(6.0, radius_f * (1.9 + 0.7 * t)))
+            plume_w = int(max(4.0, radius_f * (1.0 + 0.35 * t)))
+
+            plume = pygame.Surface((plume_w * 2, plume_h * 2), pygame.SRCALPHA)
+            cx = plume.get_width() // 2
+            base_y = plume.get_height() - 4
+
+            outer = [
+                (cx - plume_w, base_y),
+                (cx + plume_w, base_y),
+                (cx + max(2, plume_w // 3), base_y - plume_h),
+                (cx - max(2, plume_w // 3), base_y - plume_h),
+            ]
+            inner = [
+                (cx - max(2, plume_w // 2), base_y - 1),
+                (cx + max(2, plume_w // 2), base_y - 1),
+                (cx + max(1, plume_w // 5), base_y - int(plume_h * 0.62)),
+                (cx - max(1, plume_w // 5), base_y - int(plume_h * 0.62)),
+            ]
+            pygame.draw.polygon(plume, (255, 110, 20, max(24, alpha)), outer)
+            pygame.draw.polygon(plume, (255, 210, 80, min(255, alpha + 18)), inner)
+            plume.set_alpha(max(0, min(255, alpha)))
+            screen.blit(plume, (x - plume.get_width() // 2, y - plume.get_height() // 2))
         else:
             # Fallback for any other kind (future-proofing)
             alpha = int(120 * (1.0 - t) * (1.0 - t) * intensity)
