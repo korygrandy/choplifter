@@ -143,8 +143,15 @@ def _draw_enemies(screen: pygame.Surface, mission: MissionState, *, camera_x: fl
             r = pygame.Rect(int(e.pos.x - camera_x - w / 2), int(ground_y - h), w, h)
             pygame.draw.rect(screen, (70, 70, 70), r)
             pygame.draw.rect(screen, (25, 25, 25), r, 2)
-            # Turret marker.
-            pygame.draw.line(screen, (25, 25, 25), (r.centerx, r.top + 3), (r.centerx + 10, r.top - 6), 3)
+            # Turret marker using e.turret_angle
+            turret_length = 22
+            turret_base = (r.centerx, r.top + 3)
+            angle = getattr(e, 'turret_angle', 0.0)
+            turret_tip = (
+                int(turret_base[0] + turret_length * math.cos(angle)),
+                int(turret_base[1] + turret_length * math.sin(angle))
+            )
+            pygame.draw.line(screen, (25, 25, 25), turret_base, turret_tip, 3)
 
         elif e.kind is EnemyKind.JET:
             x = int(e.pos.x - camera_x)

@@ -76,6 +76,7 @@ class Enemy:
     entered_screen: bool = False
     trail_enabled: bool = False
     trail_spawn_accum: float = 0.0
+    turret_angle: float = 0.0  # Radians, only used for turrets
 
 
 @dataclass(frozen=True)
@@ -1067,7 +1068,24 @@ def _update_enemies(
         e.cooldown = max(0.0, e.cooldown - dt)
 
         if e.kind is EnemyKind.TANK:
+            # Turret tracking logic (smooth rotation)
             dx = helicopter.pos.x - e.pos.x
+            dy = helicopter.pos.y - e.pos.y
+            target_angle = math.atan2(dy, dx)
+            # Smoothly interpolate turret_angle toward target_angle (shortest path)
+            def angle_diff(a, b):
+                d = (b - a + math.pi) % (2 * math.pi) - math.pi
+                return d
+            max_turn_speed = 2.5  # radians/sec, tune as needed
+            angle_delta = angle_diff(e.turret_angle, target_angle)
+            max_step = max_turn_speed * dt
+            if abs(angle_delta) < max_step:
+                e.turret_angle = target_angle
+            else:
+                e.turret_angle += max_step if angle_delta > 0 else -max_step
+                # Keep angle in [-pi, pi]
+                e.turret_angle = (e.turret_angle + math.pi) % (2 * math.pi) - math.pi
+
             if (
                 abs(dx) <= tuning.tank_fire_range_x
                 and helicopter.pos.y <= heli.ground_y - tuning.tank_fire_min_altitude_clearance_y
