@@ -20,6 +20,8 @@ def set_debug_weather_mode(mode):
 
 from .app.keyboard_events import handle_keyboard_event
 
+from .mission import EnemyKind
+
 from pathlib import Path
 import random
 import pygame
@@ -357,6 +359,19 @@ def run() -> None:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_t:
                 toggle_thermal_mode()
                 set_toast("Thermal mode toggled (T)")
+            # Debug: trigger BARAK missile launch sequence with F9
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_F9:
+                for e in mission.enemies:
+                    if getattr(e, "kind", None) == EnemyKind.BARAK_MRAD and e.alive:
+                        # Stop vehicle
+                        e.vel.x = 0.0
+                        # Begin missile silo deploy sequence
+                        e.mrad_state = "deploying"
+                        e.launcher_angle = 0.0  # Start horizontal
+                        e.launcher_ext_progress = 0.0  # Start retracted
+                        e.missile_fired = False  # Allow re-trigger
+                        set_toast("DEBUG: BARAK missile launch sequence triggered (F9)")
+                        break
             elif event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.JOYDEVICEADDED:
