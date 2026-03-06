@@ -1042,6 +1042,20 @@ def _damage_helicopter(
                 pass
 
 
+        if logger is not None:
+            logger.debug(
+                "FLASH: kind=damage source=%s amount=%.2f damage=%.1f->%.1f rgb=%s",
+                source,
+                float(amount),
+                float(before),
+                float(helicopter.damage),
+                helicopter.damage_flash_rgb,
+            )
+        if source == "BARAK_MISSILE":
+            haptics.rumble_barak_missile_hit(logger=logger)
+        elif source == "ARTILLERY":
+            haptics.rumble_artillery_hit(logger=logger)
+        else:
             haptics.rumble_hit(amount=amount, source=source, logger=logger)
     if logger is not None and int(before) != int(helicopter.damage):
         logger.info("HIT: %s damage=%.0f", source, helicopter.damage)
