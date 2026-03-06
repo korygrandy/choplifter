@@ -26,6 +26,7 @@ def _update_enemies(
 ) -> None:
     difficulty = _difficulty_scale(mission.sentiment)
     tuning = mission.tuning
+    mission.tank_warning_seconds = max(0.0, float(getattr(mission, "tank_warning_seconds", 0.0)) - dt)
     mission.jet_warning_seconds = max(0.0, float(getattr(mission, "jet_warning_seconds", 0.0)) - dt)
     mission.mine_warning_seconds = max(0.0, float(getattr(mission, "mine_warning_seconds", 0.0)) - dt)
     mission.mine_warning_distance = float(getattr(mission, "mine_warning_distance", 9999.0))
@@ -283,6 +284,10 @@ def _update_enemies(
             if (not in_fire_window) and (e.fire_tell_seconds > 0.0 or e.fire_tell_armed):
                 e.fire_tell_seconds = 0.0
                 e.fire_tell_armed = False
+
+            if e.fire_tell_seconds > 0.0:
+                mission.tank_warning_seconds = max(mission.tank_warning_seconds, 0.22)
+                mission.tank_warning_from_right = bool(e.pos.x > helicopter.pos.x)
 
         elif e.kind is EnemyKind.JET:
             e.pos.x += e.vel.x * dt

@@ -418,13 +418,17 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
     if mission.invuln_seconds > 0.0:
         lines.append(f"INVULN: {mission.invuln_seconds:0.1f}s")
 
+    if float(getattr(mission, "tank_warning_seconds", 0.0)) > 0.0:
+        tank_dir = "->" if bool(getattr(mission, "tank_warning_from_right", False)) else "<-"
+        lines.append(f"[TANK] LOCK {tank_dir}")
+
     if float(getattr(mission, "jet_warning_seconds", 0.0)) > 0.0:
         direction = "FROM RIGHT" if bool(getattr(mission, "jet_warning_from_right", False)) else "FROM LEFT"
-        lines.append(f"THREAT: JET INBOUND ({direction})")
+        lines.append(f"[JET] >>> INBOUND ({direction})")
 
     if float(getattr(mission, "mine_warning_seconds", 0.0)) > 0.0:
         mine_dist = int(float(getattr(mission, "mine_warning_distance", 0.0)))
-        lines.append(f"THREAT: MINE PROXIMITY ({mine_dist}px)")
+        lines.append(f"[MINE] * PROXIMITY ({mine_dist}px)")
 
     x = 12
     y = screen.get_height() - 12 - len(lines) * 20

@@ -94,14 +94,14 @@ This is the active backlog after the latest mission/main refactor and packaging 
 	- [x] Tanks: add pre-fire turret tell and muzzle flash timing window.
 	- [x] Jets: add early warning cue before attack run.
 	- [x] Mines: add visibility pulse/glint and proximity warning cue.
-	- [ ] Ensure each threat has distinct visual + audio signature.
-	- [ ] Add colorblind-safe cue alternatives.
+	- [x] Ensure each threat has distinct visual + audio signature.
+	- [x] Add colorblind-safe cue alternatives.
 	- [x] Add debug overlay for active tell windows.
 	- [ ] Balance false positives vs missed warnings.
 - [ ] Sentiment/consequence meter in debrief and progression.
 	- [ ] Define sentiment inputs (rescues, losses, collateral, objective quality).
-	- [ ] Define scoring bands and labels (`Excellent`/`Good`/`Mixed`/`Poor`/`Critical`).
-	- [ ] Add debrief meter UI with reason breakdown lines.
+	- [x] Define scoring bands and labels (`Excellent`/`Good`/`Mixed`/`Poor`/`Critical`).
+	- [x] Add debrief meter UI with reason breakdown lines.
 	- [ ] Persist sentiment across mission progression.
 	- [ ] Tie progression modifiers to sentiment bands.
 	- [ ] Add balancing guardrails so one event cannot dominate outcome unfairly.

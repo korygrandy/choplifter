@@ -378,6 +378,40 @@ def _draw_air_mine(screen: pygame.Surface, x: int, y: int, t: float) -> None:
         pygame.draw.circle(screen, (35, 35, 35), (x, y), 2)
 
 
+def _sentiment_band(sentiment: float) -> str:
+    s = float(sentiment)
+    if s >= 80.0:
+        return "Excellent"
+    if s >= 65.0:
+        return "Good"
+    if s >= 45.0:
+        return "Mixed"
+    if s >= 25.0:
+        return "Poor"
+    return "Critical"
+
+
+def _sentiment_reason_lines(
+    *,
+    saved: int,
+    kia_player: int,
+    kia_enemy: int,
+    lost_in_transit: int,
+) -> list[str]:
+    # Mirror mission sentiment weights so debrief reasons are transparent.
+    add_saved = saved * 2.5
+    sub_kia_player = kia_player * 4.0
+    sub_kia_enemy = kia_enemy * 2.5
+    sub_lost = lost_in_transit * 3.5
+
+    return [
+        f"Sentiment factors: +{add_saved:0.1f} rescued civilians",
+        f"Sentiment factors: -{sub_kia_player:0.1f} player-caused casualties",
+        f"Sentiment factors: -{sub_kia_enemy:0.1f} enemy-caused casualties",
+        f"Sentiment factors: -{sub_lost:0.1f} lost in transit",
+    ]
+
+
 def _draw_end(
     screen: pygame.Surface,
     text: str,
@@ -402,6 +436,7 @@ def _draw_end(
     screen.blit(surf, rect)
 
     small = pygame.font.SysFont("consolas", 22)
+    band = _sentiment_band(sentiment)
     lines = [
         f"Result: {reason}",
         f"Saved: {saved}",
@@ -411,9 +446,19 @@ def _draw_end(
         f"Lost in transit: {lost_in_transit}",
         f"Enemies destroyed: {enemies_destroyed}",
         f"Crashes: {crashes}",
-        f"Sentiment: {int(sentiment)}",
-        "Press Enter (or Start) to restart",
+        f"Sentiment: {int(sentiment)} ({band})",
     ]
+    lines.extend(
+        _sentiment_reason_lines(
+            saved=saved,
+            kia_player=kia_player,
+            kia_enemy=kia_enemy,
+            lost_in_transit=lost_in_transit,
+        )
+    )
+    lines.extend([
+        "Press Enter (or Start) to restart",
+    ])
     y = rect.bottom + 19
     for line in lines:
         s = small.render(line, True, (235, 235, 235))
