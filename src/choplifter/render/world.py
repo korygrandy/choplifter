@@ -135,29 +135,33 @@ def _draw_projectiles(screen: pygame.Surface, mission: MissionState, *, camera_x
     for p in mission.projectiles:
         x = int(p.pos.x - camera_x)
         y = int(p.pos.y)
-        # Barak MRAD missile: draw as a large missile with flame and smoke
+        # Barak MRAD missile: draw as a large missile with flame and smoke, rotated by current_angle
         if getattr(p, "is_barak_missile", False):
             missile_len = 34
             missile_w = 6
+            surf_w = 32
+            surf_h = 48
+            missile_surf = pygame.Surface((surf_w, surf_h), pygame.SRCALPHA)
+            cx, cy = surf_w // 2, surf_h // 2
             # Draw missile body (white)
-            body_rect = pygame.Rect(x - missile_w // 2, y - missile_len, missile_w, missile_len)
-            pygame.draw.rect(screen, (230, 230, 230), body_rect)
+            body_rect = pygame.Rect(cx - missile_w // 2, cy - missile_len, missile_w, missile_len)
+            pygame.draw.rect(missile_surf, (230, 230, 230), body_rect)
             # Draw missile tip (red)
-            pygame.draw.polygon(screen, (200, 40, 40), [
-                (x, y - missile_len - 6),
-                (x - missile_w // 2, y - missile_len),
-                (x + missile_w // 2, y - missile_len),
+            pygame.draw.polygon(missile_surf, (200, 40, 40), [
+                (cx, cy - missile_len - 6),
+                (cx - missile_w // 2, cy - missile_len),
+                (cx + missile_w // 2, cy - missile_len),
             ])
             # Draw fins (gray)
-            pygame.draw.polygon(screen, (120, 120, 120), [
-                (x - missile_w // 2, y - missile_len + 8),
-                (x - missile_w, y - missile_len + 16),
-                (x - missile_w // 2, y - missile_len + 16),
+            pygame.draw.polygon(missile_surf, (120, 120, 120), [
+                (cx - missile_w // 2, cy - missile_len + 8),
+                (cx - missile_w, cy - missile_len + 16),
+                (cx - missile_w // 2, cy - missile_len + 16),
             ])
-            pygame.draw.polygon(screen, (120, 120, 120), [
-                (x + missile_w // 2, y - missile_len + 8),
-                (x + missile_w, y - missile_len + 16),
-                (x + missile_w // 2, y - missile_len + 16),
+            pygame.draw.polygon(missile_surf, (120, 120, 120), [
+                (cx + missile_w // 2, cy - missile_len + 8),
+                (cx + missile_w, cy - missile_len + 16),
+                (cx + missile_w // 2, cy - missile_len + 16),
             ])
             # Draw propulsion flame (orange/yellow)
             flame_colors = [(255, 200, 40), (255, 120, 0)]
@@ -165,9 +169,15 @@ def _draw_projectiles(screen: pygame.Surface, mission: MissionState, *, camera_x
                 flame_len = 10 + i * 4
                 flame_w = missile_w - i * 2
                 pygame.draw.ellipse(
-                    screen, color,
-                    (x - flame_w // 2, y + 2 + i * 2, flame_w, flame_len)
+                    missile_surf, color,
+                    (cx - flame_w // 2, cy + 2 + i * 2, flame_w, flame_len)
                 )
+            # Always rotate sprite by (current_angle - 90deg) so it appears horizontal in all phases
+            angle_rad = getattr(p, "current_angle", math.pi/2) - math.pi/2
+            angle_deg = -math.degrees(angle_rad)
+            rotated = pygame.transform.rotate(missile_surf, angle_deg)
+            rot_rect = rotated.get_rect(center=(x, y))
+            screen.blit(rotated, rot_rect)
             # Optionally: draw smoke (handled as particles for realism)
             continue
         if p.kind is ProjectileKind.BULLET:
