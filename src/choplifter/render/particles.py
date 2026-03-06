@@ -182,6 +182,22 @@ def draw_fog_particles(screen: pygame.Surface, fog_system, *, camera_x: float = 
         screen.blit(s, (x - radius, y - radius))
 
 
+def draw_wind_dust_clouds(screen, mission, *, camera_x=0.0):
+    clouds = getattr(mission, "wind_dust_clouds", None)
+    if not clouds:
+        return
+    for c in getattr(clouds, "clouds", []):
+        if c.alpha <= 0:
+            continue
+        x = int(c.pos.x - camera_x)
+        y = int(c.pos.y)
+        radius = int(c.radius)
+        s = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(s, c.color + (c.alpha,), (radius, radius), radius)
+        s.set_alpha(c.alpha)
+        screen.blit(s, (x - radius, y - radius))
+
+
 def _get_burn_sprite(kind: str, radius: int) -> pygame.Surface:
     radius = max(1, int(radius))
     key = (kind, radius)

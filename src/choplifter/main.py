@@ -1,4 +1,3 @@
-
 def draw_debug_overlay(target):
     font = pygame.font.SysFont(None, 32)
     overlay = font.render("DEBUG MODE", True, (255, 0, 0))
@@ -61,6 +60,7 @@ from .sky_smoke import SkySmokeSystem
 from .fx.rain import RainSystem
 from .fx.fog import FogSystem
 from .fx.dust_storm import DustStormSystem
+from .fx.wind_dust_clouds import WindBlownDustCloudSystem
 from .fx.lightning import LightningSystem
 from .fx.storm_clouds import StormCloudSystem
 from .physics_config import load_physics_settings
