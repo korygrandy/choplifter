@@ -20,7 +20,7 @@ def set_debug_weather_mode(mode):
 
 from .app.keyboard_events import handle_keyboard_event
 
-from .mission import EnemyKind
+from .game_types import EnemyKind
 
 from pathlib import Path
 import random
