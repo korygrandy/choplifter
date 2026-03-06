@@ -126,6 +126,7 @@ class MissionState:
     impact_sparks: ImpactSparkSystem = field(default_factory=ImpactSparkSystem)
     jet_trails: JetTrailSystem = field(default_factory=JetTrailSystem)
     dust_storm: DustStormSystem = field(default_factory=DustStormSystem)
+    wind_dust_clouds: object = field(default_factory=lambda: None)  # Will be set up for dust storm missions
     heli_damage_fx: HelicopterDamageFxSystem = field(default_factory=HelicopterDamageFxSystem)
     explosions: ExplosionSystem = field(default_factory=ExplosionSystem)
     flares: FlareSystem = field(default_factory=FlareSystem)

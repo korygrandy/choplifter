@@ -27,6 +27,10 @@ def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: flo
         draw_dust_storm_particles(screen, mission, camera_x=camera_x)
     _draw_projectiles(screen, mission, camera_x=camera_x)
 
+    # Draw wind-blown dust clouds if present
+    from .particles import draw_wind_dust_clouds
+    draw_wind_dust_clouds(screen, mission, camera_x=camera_x)
+
     if mission.ended and mission.end_text:
         boarded = sum(1 for h in mission.hostages if h.state is HostageState.BOARDED)
         _draw_end(
