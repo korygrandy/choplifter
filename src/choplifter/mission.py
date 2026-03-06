@@ -1,15 +1,10 @@
+
 from __future__ import annotations
 
-from dataclasses import field
 import logging
+import pygame
 import math
 import random
-
-from .burning_particles import BurningParticleSystem
-from .fx_particles import DustStormSystem, ExplosionSystem, FlareSystem, HelicopterDamageFxSystem, ImpactSparkSystem, JetTrailSystem
-import pygame
-from .game_types import EnemyKind, HostageState, ProjectileKind
-from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
 from .mission_configs import (
     LevelConfig,
@@ -21,6 +16,8 @@ from .mission_configs import (
     get_mission_config_by_id,
 )
 from .settings import HelicopterSettings
+from .helicopter import Helicopter, Facing
+from .game_types import ProjectileKind, HostageState, EnemyKind
 from . import haptics
 
 
@@ -28,7 +25,8 @@ from . import haptics
 from .entities import Hostage, Compound, Projectile, Enemy, BaseZone, MissionStats
 
 from .mission_state import MissionState
-from .mission_helpers import boarded_count, on_foot, _hits_circle, _projectile_hits_enemy, _log_compound_health_if_needed
+from .mission_helpers import boarded_count, on_foot, _hits_circle, _projectile_hits_enemy, _log_compound_health_if_needed, _update_sentiment, _update_fuel, _log_progress_if_changed, _difficulty_scale
+from .enemy_update import _update_enemies
 
 
 def spawn_projectile_from_helicopter(mission: MissionState, helicopter: Helicopter) -> None:
@@ -95,7 +93,7 @@ def update_mission(
         _end_mission(mission, "THE END", "OUT OF FUEL", logger)
         return
 
-    # Particle effects (world-space).
+    # World-space particle systems must be advanced every tick.
     mission.burning.update(dt)
     mission.impact_sparks.update(dt)
     mission.jet_trails.update(dt)
@@ -104,23 +102,12 @@ def update_mission(
     mission.explosions.update(dt)
     mission.flares.update(dt)
 
-    # If we're in a crash animation, run the crash sequence and skip gameplay updates.
-    if mission.crash_active:
-        _update_crash_sequence(mission, helicopter, dt, heli, logger)
-        return
-
     _update_enemies(mission, helicopter, dt, heli, logger)
 
     _update_projectiles(mission, dt, heli, logger, helicopter)
     _update_compounds_and_release(mission, heli, logger)
     _update_hostages(mission, helicopter, dt, heli)
     _handle_unload(mission, helicopter, heli, dt)
-
-    # --- Mission Success: VIP rescued ---
-    # If the VIP is present and has been SAVED, trigger mission success immediately
-    vip_hostage = next((h for h in mission.hostages if getattr(h, "is_vip", False)), None)
-    if vip_hostage is not None and vip_hostage.state is HostageState.SAVED and not mission.ended:
-        _end_mission(mission, "THE END", "VIP RESCUED SUCCESS", logger)
 
     _handle_crash_and_respawn(mission, helicopter, dt, heli, logger)
     if mission.ended:
@@ -158,48 +145,40 @@ def _update_projectiles(
         p.pos.x += p.vel.x * dt
         p.pos.y += p.vel.y * dt
 
-        # Barak MRAD missile: two-phase logic
+        # BARAK MRAD missile: staged behavior (liftoff -> rotate -> homing).
         if getattr(p, "is_barak_missile", False):
-            # Phase 1: Liftoff
             if p.missile_state == "liftoff":
                 if p.launch_pos is None:
                     p.launch_pos = p.pos.copy()
-                p.current_angle = math.pi/2  # vertical up
-                p.vel = Vec2(0.0, -240.0)  # 2x faster liftoff
+                p.current_angle = math.pi / 2
+                p.vel = Vec2(0.0, -240.0)
                 if p.pos.y <= p.launch_pos.y - 40.0:
-                    # Determine rotation direction (INVERTED)
                     dx = helicopter.pos.x - p.pos.x
                     if dx > 0:
-                        p.rotate_dir = -1  # CCW (was CW)
-                        p.target_angle = math.pi  # left (was right)
+                        p.rotate_dir = -1
+                        p.target_angle = math.pi
                     else:
-                        p.rotate_dir = 1  # CW (was CCW)
-                        p.target_angle = 0.0  # right (was left)
+                        p.rotate_dir = 1
+                        p.target_angle = 0.0
                     p.missile_state = "rotating"
                     p.rotation_progress = 0.0
                     p.vel = Vec2(0.0, 0.0)
-            # Phase 2: Rotating
             elif p.missile_state == "rotating":
-                start_angle = math.pi/2
+                start_angle = math.pi / 2
                 end_angle = p.target_angle
-                # Animate rotation (0.5s duration)
                 p.rotation_progress += dt * 2.0
                 if p.rotation_progress >= 1.0:
                     p.rotation_progress = 1.0
                     p.current_angle = end_angle
                     p.missile_state = "homing"
-                    # Phase 3: Final boost (handled in homing phase)
                 else:
-                    # Interpolate angle
                     p.current_angle = start_angle + (end_angle - start_angle) * p.rotation_progress
                     p.vel = Vec2(0.0, 0.0)
-            # Phase 3: Homing (continuous tracking)
             elif p.missile_state == "homing":
-                # Continuously update velocity to track the helicopter
                 dx = helicopter.pos.x - p.pos.x
                 dy = (helicopter.pos.y + 24.0) - p.pos.y
                 angle = math.atan2(dy, dx)
-                speed = 360.0 * 3  # 3x faster
+                speed = 360.0 * 3.0
                 p.vel = Vec2(math.cos(angle) * speed, math.sin(angle) * speed)
                 p.current_angle = angle
 
@@ -220,7 +199,6 @@ def _update_projectiles(
                             mission.stats.tanks_destroyed += 1
                             # Persist a burning effect at the destroyed cannon/tank location.
                             mission.burning.add_site(e.pos, intensity=1.0)
-                            haptics.rumble_tank_destroyed(logger=logger)
                         if logger is not None:
                             logger.info("ENEMY_DOWN: %s", e.kind.name)
                     p.alive = False
@@ -232,7 +210,6 @@ def _update_projectiles(
         # Helicopter collision (enemy projectiles only).
         if p.kind in (ProjectileKind.ENEMY_BULLET, ProjectileKind.ENEMY_ARTILLERY):
             if _hits_circle(p.pos, helicopter.pos, radius=26.0):
-                # Special case: Barak MRAD missile
                 if getattr(p, "is_barak_missile", False):
                     _damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
                 elif p.kind is ProjectileKind.ENEMY_ARTILLERY:
@@ -624,74 +601,6 @@ def hostage_crush_check_logged(
         logger.info("CRUSH: hard landing killed %d hostage(s)", mission.stats.kia_by_player - before)
 
 
-def _log_progress_if_changed(mission: MissionState, logger: logging.Logger | None) -> None:
-    if logger is None:
-        return
-
-    boarded = boarded_count(mission)
-    if boarded != mission._last_logged_boarded:
-        mission._last_logged_boarded = boarded
-        logger.info("BOARDING: boarded=%d", boarded)
-
-    if mission.stats.saved != mission._last_logged_saved:
-        delta = mission.stats.saved - mission._last_logged_saved
-        mission._last_logged_saved = mission.stats.saved
-        logger.info("UNLOAD: +%d saved (total=%d)", delta, mission.stats.saved)
-
-    if mission.stats.kia_by_player != mission._last_logged_kia_player:
-        delta = mission.stats.kia_by_player - mission._last_logged_kia_player
-        mission._last_logged_kia_player = mission.stats.kia_by_player
-        logger.info("COLLATERAL: +%d KIA_by_player (total=%d)", delta, mission.stats.kia_by_player)
-
-    if mission.stats.kia_by_enemy != mission._last_logged_kia_enemy:
-        delta = mission.stats.kia_by_enemy - mission._last_logged_kia_enemy
-        mission._last_logged_kia_enemy = mission.stats.kia_by_enemy
-        logger.info("ENEMY_FIRE: +%d KIA_by_enemy (total=%d)", delta, mission.stats.kia_by_enemy)
-
-    if mission.stats.enemies_destroyed != mission._last_logged_enemies_destroyed:
-        delta = mission.stats.enemies_destroyed - mission._last_logged_enemies_destroyed
-        mission._last_logged_enemies_destroyed = mission.stats.enemies_destroyed
-        logger.info("ENEMIES: +%d destroyed (total=%d)", delta, mission.stats.enemies_destroyed)
-
-    # Log sentiment as it crosses buckets (keeps logs readable).
-    bucket = int(clamp(mission.sentiment, 0.0, 100.0) // 10)
-    if bucket != mission._last_logged_sentiment_bucket:
-        mission._last_logged_sentiment_bucket = bucket
-        logger.info("SENTIMENT: %.0f", clamp(mission.sentiment, 0.0, 100.0))
-
-
-def _difficulty_scale(sentiment: float) -> float:
-    # Map sentiment 0..100 to a difficulty scalar -1..+1.
-    # Low sentiment => more pressure; high sentiment => slightly less.
-    return clamp((50.0 - clamp(sentiment, 0.0, 100.0)) / 50.0, -1.0, 1.0)
-
-
-def _update_sentiment(mission: MissionState) -> None:
-    # Minimal MVP interpretation:
-    # - Rescues increase sentiment
-    # - Any hostage deaths decrease sentiment (player-caused more severe)
-    # - Lost-in-transit decreases sentiment
-    saved = mission.stats.saved
-    kia_player = mission.stats.kia_by_player
-    kia_enemy = mission.stats.kia_by_enemy
-    lost = mission.stats.lost_in_transit
-
-    dsaved = saved - mission._sentiment_last_saved
-    dkia_player = kia_player - mission._sentiment_last_kia_player
-    dkia_enemy = kia_enemy - mission._sentiment_last_kia_enemy
-    dlost = lost - mission._sentiment_last_lost_in_transit
-
-    if dsaved or dkia_player or dkia_enemy or dlost:
-        mission.sentiment += dsaved * 2.5
-        mission.sentiment -= dkia_player * 4.0
-        mission.sentiment -= dkia_enemy * 2.5
-        mission.sentiment -= dlost * 3.5
-        mission.sentiment = clamp(mission.sentiment, 0.0, 100.0)
-
-    mission._sentiment_last_saved = saved
-    mission._sentiment_last_kia_player = kia_player
-    mission._sentiment_last_kia_enemy = kia_enemy
-    mission._sentiment_last_lost_in_transit = lost
 
 
 def _log_compound_health_if_needed(c: Compound, logger: logging.Logger | None, reason: str) -> None:
@@ -710,35 +619,6 @@ def _log_compound_health_if_needed(c: Compound, logger: logging.Logger | None, r
     logger.info("Compound %s: x=%.0f health=%.0f", reason, c.pos.x, health)
 
 
-def _update_fuel(mission: MissionState, helicopter: Helicopter, dt: float, logger: logging.Logger | None) -> None:
-    if mission.ended:
-        return
-
-    # Minimal MVP-lite: fuel drains over time, refuels at base.
-    tuning = mission.tuning
-    # Tune: make hovering/landing feel less punishing, but fast flight costs.
-    drain_base_per_s = tuning.fuel_drain_base_per_s
-    drain_airborne_per_s = tuning.fuel_drain_airborne_per_s
-    drain_speed_per_s = tuning.fuel_drain_speed_per_s
-    refuel_per_s = tuning.fuel_refuel_per_s
-
-    at_base = mission.base.contains_point(helicopter.pos) and helicopter.grounded
-    if at_base:
-        helicopter.fuel = min(100.0, helicopter.fuel + refuel_per_s * dt)
-    else:
-        speed = abs(helicopter.vel.x) + abs(helicopter.vel.y)
-        speed_factor = clamp(speed / 50.0, 0.0, 1.0)
-        drain = drain_base_per_s
-        if not helicopter.grounded:
-            drain += drain_airborne_per_s
-            drain += drain_speed_per_s * speed_factor
-        helicopter.fuel = max(0.0, helicopter.fuel - drain * dt)
-
-    fuel_int = int(helicopter.fuel)
-    if logger is not None and fuel_int != mission._last_logged_fuel_int:
-        if fuel_int in (75, 50, 25, 10, 5, 0):
-            logger.info("FUEL: %d", fuel_int)
-    mission._last_logged_fuel_int = fuel_int
 
 
 def _update_enemies(
