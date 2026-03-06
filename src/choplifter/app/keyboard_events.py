@@ -128,7 +128,7 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
             helicopter.reverse_flip()
     elif mode == "playing" and matches_key(event.key, controls.doors):
         if not getattr(mission, "crash_active", False):
-            toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count)
+            toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count, set_toast)
     elif mode == "playing" and matches_key(event.key, controls.flare):
         if logger:
             logger.info(f"DEBUG: Flare key pressed (key={event.key}) in playing mode")

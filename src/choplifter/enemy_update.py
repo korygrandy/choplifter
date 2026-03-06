@@ -26,6 +26,9 @@ def _update_enemies(
 ) -> None:
     difficulty = _difficulty_scale(mission.sentiment)
     tuning = mission.tuning
+    mission.jet_warning_seconds = max(0.0, float(getattr(mission, "jet_warning_seconds", 0.0)) - dt)
+    mission.mine_warning_seconds = max(0.0, float(getattr(mission, "mine_warning_seconds", 0.0)) - dt)
+    mission.mine_warning_distance = float(getattr(mission, "mine_warning_distance", 9999.0))
 
     # Time-based pressure ramp:
     # - First 60s: easier
@@ -100,9 +103,11 @@ def _update_enemies(
         if helicopter.pos.x > mission.world_width * 0.5:
             x = -tuning.jet_spawn_margin_x
             vx = tuning.jet_speed_x
+            mission.jet_warning_from_right = False
         else:
             x = mission.world_width + tuning.jet_spawn_margin_x
             vx = -tuning.jet_speed_x
+            mission.jet_warning_from_right = True
         mission.enemies.append(
             Enemy(
                 kind=EnemyKind.JET,
@@ -114,6 +119,12 @@ def _update_enemies(
                 trail_enabled=(int(mission.elapsed_seconds * 1.7) % 2 == 0),
             )
         )
+        mission.jet_warning_seconds = 1.2
+        if hasattr(mission, "audio") and mission.audio is not None:
+            try:
+                mission.audio.play_jet_flyby()
+            except Exception:
+                pass
         if logger is not None:
             logger.info("JET: spawned")
 
@@ -127,6 +138,8 @@ def _update_enemies(
             continue
 
         e.cooldown = max(0.0, e.cooldown - dt)
+        e.fire_tell_seconds = max(0.0, e.fire_tell_seconds - dt)
+        e.muzzle_flash_seconds = max(0.0, e.muzzle_flash_seconds - dt)
 
         # --- BARAK MRAD MOVEMENT, DEPLOYMENT, AND AIMING LOGIC ---
         if e.kind is EnemyKind.BARAK_MRAD:
@@ -240,23 +253,36 @@ def _update_enemies(
                 # Keep angle in [-pi, pi]
                 e.turret_angle = (e.turret_angle + math.pi) % (2 * math.pi) - math.pi
 
-            if (
+            in_fire_window = (
                 abs(dx) <= tuning.tank_fire_range_x
                 and helicopter.pos.y <= heli.ground_y - tuning.tank_fire_min_altitude_clearance_y
-                and e.cooldown <= 0.0
-            ):
-                tank_cd = (tuning.tank_fire_base_cooldown_s / pressure) * (1.0 - 0.12 * difficulty)
-                e.cooldown = clamp(tank_cd, tuning.tank_fire_min_cooldown_s, tuning.tank_fire_max_cooldown_s)
-                spawn_enemy_bullet_toward(
-                    mission,
-                    e.pos,
-                    helicopter.pos,
-                    kind=ProjectileKind.ENEMY_ARTILLERY,
-                    source=EnemyKind.TANK,
-                )
-                mission.stats.artillery_fired += 1
-                if logger is not None:
-                    logger.info("TANK_FIRE")
+            )
+
+            if in_fire_window and e.cooldown <= 0.0:
+                # Two-stage attack: first arm and show tell, then fire when tell elapses.
+                if (not e.fire_tell_armed) and e.fire_tell_seconds <= 0.0:
+                    e.fire_tell_armed = True
+                    e.fire_tell_seconds = max(0.05, float(tuning.tank_prefire_tell_s))
+                elif e.fire_tell_armed and e.fire_tell_seconds <= 0.0:
+                    tank_cd = (tuning.tank_fire_base_cooldown_s / pressure) * (1.0 - 0.12 * difficulty)
+                    e.cooldown = clamp(tank_cd, tuning.tank_fire_min_cooldown_s, tuning.tank_fire_max_cooldown_s)
+                    e.muzzle_flash_seconds = max(0.04, float(tuning.tank_muzzle_flash_s))
+                    e.fire_tell_armed = False
+                    spawn_enemy_bullet_toward(
+                        mission,
+                        e.pos,
+                        helicopter.pos,
+                        kind=ProjectileKind.ENEMY_ARTILLERY,
+                        source=EnemyKind.TANK,
+                    )
+                    mission.stats.artillery_fired += 1
+                    if logger is not None:
+                        logger.info("TANK_FIRE")
+
+            # Cancel the tell if target breaks the firing window before the shot.
+            if (not in_fire_window) and (e.fire_tell_seconds > 0.0 or e.fire_tell_armed):
+                e.fire_tell_seconds = 0.0
+                e.fire_tell_armed = False
 
         elif e.kind is EnemyKind.JET:
             e.pos.x += e.vel.x * dt
@@ -290,6 +316,9 @@ def _update_enemies(
         elif e.kind is EnemyKind.AIR_MINE:
             to_heli = Vec2(helicopter.pos.x - e.pos.x, helicopter.pos.y - e.pos.y)
             dist = math.hypot(to_heli.x, to_heli.y)
+            if dist <= 220.0:
+                mission.mine_warning_seconds = max(mission.mine_warning_seconds, 0.35)
+                mission.mine_warning_distance = min(float(mission.mine_warning_distance), float(dist))
             if dist > 0.001:
                 nx = to_heli.x / dist
                 ny = to_heli.y / dist

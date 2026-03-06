@@ -65,6 +65,9 @@ class Enemy:
     trail_enabled: bool = False
     trail_spawn_accum: float = 0.0
     turret_angle: float = 0.0  # Radians, only used for turrets
+    fire_tell_seconds: float = 0.0
+    fire_tell_armed: bool = False
+    muzzle_flash_seconds: float = 0.0
     # Barak MRAD-specific state
     mrad_state: str = "moving"  # moving, deploying, aiming, launching, done
     launcher_angle: float = 0.0  # Radians, for launcher deployment/aim

@@ -272,6 +272,16 @@ def _draw_enemies(screen: pygame.Surface, mission: MissionState, *, camera_x: fl
             )
             pygame.draw.line(screen, (28, 30, 28), turret_base, turret_tip, 4)
 
+            # Pre-fire tell: subtle amber pulse at the muzzle before a tank shot.
+            if getattr(e, "fire_tell_seconds", 0.0) > 0.0:
+                tell_r = 4 + int((math.sin(t * 24.0) + 1.0) * 1.5)
+                pygame.draw.circle(screen, (255, 200, 80), turret_tip, tell_r)
+
+            # Shot confirmation: brief bright muzzle flash.
+            if getattr(e, "muzzle_flash_seconds", 0.0) > 0.0:
+                pygame.draw.circle(screen, (255, 240, 170), turret_tip, 6)
+                pygame.draw.circle(screen, (255, 120, 80), turret_tip, 3)
+
         elif e.kind is EnemyKind.BARAK_MRAD:
             # Draw the MRAP vehicle sprite
             img = get_enemy_image('mrap-vehicle.png')
