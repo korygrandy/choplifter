@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
 
 from ..helicopter import HelicopterInput
+from . import cutscene_config
+from .feedback import consume_mission_feedback
 from .stats_snapshot import MissionStatsSnapshot, count_open_compounds
+from .ui_constants import MISSION_END_RETURN_DELAY_S
 
 
 def build_helicopter_input(
@@ -41,12 +45,77 @@ class PlayingMissionEndTransition:
 
 
 @dataclass
+class PlayingProgressionResult:
+    ended: bool
+    next_mode: str | None
+    next_mission_end_return_seconds: float | None
+    campaign_sentiment: float | None
+    boarded_now: int
+
+
+@dataclass
+class HostageRescueCutsceneResult:
+    started: bool
+    doors_open_before_cutscene: bool | None
+
+
+@dataclass
+class PlayingFixedStepResult:
+    next_mode: str
+    campaign_sentiment: float
+    mission_end_return_seconds: float
+    doors_open_before_cutscene: bool
+    continue_fixed_loop: bool
+
+
+def apply_landing_aftermath(
+    *,
+    landed: bool,
+    landing_vy: float,
+    mission: object,
+    helicopter: object,
+    physics: object,
+    screenshake: object,
+    audio: object,
+    screenshake_enabled: bool,
+    logger: object,
+    hostage_crush_check_fn: Callable[..., None],
+    rough_landing_feedback_fn: Callable[..., None],
+) -> None:
+    """Apply mission/audio feedback associated with a landing transition."""
+    if not landed:
+        return
+
+    hostage_crush_check_fn(
+        mission,
+        helicopter,
+        landing_vy,
+        safe_landing_vy=getattr(physics, "safe_landing_vy", 0.0),
+        logger=logger,
+    )
+    rough_landing_feedback_fn(
+        state=screenshake,
+        landing_vy=landing_vy,
+        safe_landing_vy=float(getattr(physics, "safe_landing_vy", 0.0)),
+        invuln_seconds=float(getattr(mission, "invuln_seconds", 0.0)),
+        ended=bool(getattr(mission, "ended", False)),
+        audio=audio,
+        screenshake_enabled=screenshake_enabled,
+    )
+
+
+@dataclass
 class PlayingHelicopterStepResult:
     landed: bool
     landing_vy: float
 
 
-def resolve_playing_mission_end_transition(*, mission_ended: bool, sentiment: float, mission_end_delay_s: float = 5.0) -> PlayingMissionEndTransition:
+def resolve_playing_mission_end_transition(
+    *,
+    mission_ended: bool,
+    sentiment: float,
+    mission_end_delay_s: float = MISSION_END_RETURN_DELAY_S,
+) -> PlayingMissionEndTransition:
     """Resolve mode/timer/toast changes when a playing mission ends."""
     if not mission_ended:
         return PlayingMissionEndTransition(
@@ -111,6 +180,244 @@ def step_playing_helicopter(
         getattr(audio, "stop_flying")()
 
     return PlayingHelicopterStepResult(landed=landed, landing_vy=landing_vy)
+
+
+def process_playing_progression(
+    *,
+    mission: object,
+    helicopter: object,
+    tick_dt: float,
+    mission_end_delay_s: float,
+    prev_stats: MissionStatsSnapshot,
+    boarded_count: Callable[[object], int],
+    audio: object,
+    set_toast: Callable[[str], None],
+    screenshake: object,
+    screenshake_enabled: bool,
+) -> PlayingProgressionResult:
+    """Process post-update playing progression and return control-flow outcomes."""
+    playing_end = resolve_playing_mission_end_transition(
+        mission_ended=bool(getattr(mission, "ended", False)),
+        sentiment=float(getattr(mission, "sentiment", 0.0)),
+        mission_end_delay_s=mission_end_delay_s,
+    )
+    if playing_end.ended:
+        # Stop warning beeps immediately on mission end.
+        getattr(audio, "stop_chopper_warning_beeps")()
+        if playing_end.toast_message:
+            set_toast(playing_end.toast_message)
+        return PlayingProgressionResult(
+            ended=True,
+            next_mode=playing_end.next_mode,
+            next_mission_end_return_seconds=playing_end.next_mission_end_return_seconds,
+            campaign_sentiment=playing_end.campaign_sentiment,
+            boarded_now=0,
+        )
+
+    # Consume cinematic feedback impulses produced by mission damage events.
+    consume_mission_feedback(
+        state=screenshake,
+        mission=mission,
+        audio=audio,
+        screenshake_enabled=screenshake_enabled,
+    )
+
+    damage_flash_seconds = float(getattr(helicopter, "damage_flash_seconds", 0.0))
+    setattr(helicopter, "damage_flash_seconds", max(0.0, damage_flash_seconds - tick_dt))
+
+    stat_events = collect_playing_stat_events(
+        mission=mission,
+        prev_stats=prev_stats,
+        boarded_count=boarded_count,
+    )
+    apply_playing_stat_events_feedback(
+        stat_events=stat_events,
+        audio=audio,
+        set_toast=set_toast,
+    )
+
+    return PlayingProgressionResult(
+        ended=False,
+        next_mode=None,
+        next_mission_end_return_seconds=None,
+        campaign_sentiment=None,
+        boarded_now=stat_events.boarded_now,
+    )
+
+
+def try_start_hostage_rescue_cutscene(
+    *,
+    mission: object,
+    helicopter: object,
+    boarded_now: int,
+    mission_cutscene_state: object,
+    assets_dir: Path,
+    logger: object,
+    start_mission_cutscene_fn: Callable[..., bool],
+) -> HostageRescueCutsceneResult:
+    """Start the one-shot hostage rescue cutscene when threshold is reached."""
+    if boarded_now < cutscene_config.HOSTAGE_RESCUE_CUTSCENE_THRESHOLD:
+        return HostageRescueCutsceneResult(started=False, doors_open_before_cutscene=None)
+
+    cutscenes_played = getattr(mission, "cutscenes_played", set())
+    if cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID in cutscenes_played:
+        return HostageRescueCutsceneResult(started=False, doors_open_before_cutscene=None)
+
+    cutscenes_played.add(cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID)
+
+    cutscene_path = cutscene_config.get_hostage_rescue_cutscene_path(
+        str(getattr(mission, "mission_id", "")),
+        assets_dir,
+        cutscene_config.HOSTAGE_RESCUE_CUTSCENE_DEFAULT_ASSET,
+        cutscene_config.HOSTAGE_RESCUE_CUTSCENE_BY_MISSION,
+    )
+
+    doors_before = bool(getattr(helicopter, "doors_open", False))
+    started = bool(
+        start_mission_cutscene_fn(
+            mission_cutscene_state,
+            cutscene_path=cutscene_path,
+            logger=logger,
+            event_id=cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID,
+            mission_id=str(getattr(mission, "mission_id", "")),
+        )
+    )
+    if not started:
+        return HostageRescueCutsceneResult(started=False, doors_open_before_cutscene=None)
+
+    return HostageRescueCutsceneResult(started=True, doors_open_before_cutscene=doors_before)
+
+
+def run_playing_fixed_step(
+    *,
+    mode: str,
+    mission: object,
+    helicopter: object,
+    helicopter_input: HelicopterInput,
+    tick_dt: float,
+    physics: object,
+    heli_settings: object,
+    audio: object,
+    flares: object,
+    screenshake: object,
+    screenshake_enabled: bool,
+    logger: object,
+    prev_stats: MissionStatsSnapshot,
+    boarded_count: Callable[[object], int],
+    set_toast: Callable[[str], None],
+    mission_end_delay_s: float,
+    campaign_sentiment: float,
+    mission_end_return_seconds: float,
+    doors_open_before_cutscene: bool,
+    mission_cutscene_state: object,
+    assets_dir: Path,
+    update_flares_fn: Callable[..., None],
+    update_helicopter_fn: Callable[..., None],
+    hostage_crush_check_fn: Callable[..., None],
+    rough_landing_feedback_fn: Callable[..., None],
+    update_mission_fn: Callable[..., None],
+    start_mission_cutscene_fn: Callable[..., bool],
+) -> PlayingFixedStepResult:
+    """Run one fixed-timestep update when in playing mode."""
+    if mode != "playing":
+        return PlayingFixedStepResult(
+            next_mode=mode,
+            campaign_sentiment=float(campaign_sentiment),
+            mission_end_return_seconds=float(mission_end_return_seconds),
+            doors_open_before_cutscene=bool(doors_open_before_cutscene),
+            continue_fixed_loop=False,
+        )
+
+    update_flares_fn(flares, mission=mission, helicopter=helicopter, dt=tick_dt)
+
+    heli_step = step_playing_helicopter(
+        mission=mission,
+        helicopter=helicopter,
+        helicopter_input=helicopter_input,
+        tick_dt=tick_dt,
+        physics=physics,
+        heli_settings=heli_settings,
+        audio=audio,
+        update_helicopter_fn=update_helicopter_fn,
+    )
+
+    apply_landing_aftermath(
+        landed=heli_step.landed,
+        landing_vy=heli_step.landing_vy,
+        mission=mission,
+        helicopter=helicopter,
+        physics=physics,
+        screenshake=screenshake,
+        audio=audio,
+        screenshake_enabled=screenshake_enabled,
+        logger=logger,
+        hostage_crush_check_fn=hostage_crush_check_fn,
+        rough_landing_feedback_fn=rough_landing_feedback_fn,
+    )
+
+    update_mission_fn(mission, helicopter, tick_dt, heli_settings, logger=logger)
+
+    playing_progress = process_playing_progression(
+        mission=mission,
+        helicopter=helicopter,
+        tick_dt=tick_dt,
+        mission_end_delay_s=mission_end_delay_s,
+        prev_stats=prev_stats,
+        boarded_count=boarded_count,
+        audio=audio,
+        set_toast=set_toast,
+        screenshake=screenshake,
+        screenshake_enabled=screenshake_enabled,
+    )
+    if playing_progress.ended:
+        return PlayingFixedStepResult(
+            next_mode=str(playing_progress.next_mode or mode),
+            campaign_sentiment=float(
+                playing_progress.campaign_sentiment
+                if playing_progress.campaign_sentiment is not None
+                else campaign_sentiment
+            ),
+            mission_end_return_seconds=float(
+                playing_progress.next_mission_end_return_seconds
+                if playing_progress.next_mission_end_return_seconds is not None
+                else mission_end_return_seconds
+            ),
+            doors_open_before_cutscene=bool(doors_open_before_cutscene),
+            continue_fixed_loop=True,
+        )
+
+    rescue_cutscene = try_start_hostage_rescue_cutscene(
+        mission=mission,
+        helicopter=helicopter,
+        boarded_now=playing_progress.boarded_now,
+        mission_cutscene_state=mission_cutscene_state,
+        assets_dir=assets_dir,
+        logger=logger,
+        start_mission_cutscene_fn=start_mission_cutscene_fn,
+    )
+    if rescue_cutscene.started:
+        next_doors = bool(
+            rescue_cutscene.doors_open_before_cutscene
+            if rescue_cutscene.doors_open_before_cutscene is not None
+            else doors_open_before_cutscene
+        )
+        getattr(audio, "stop_flying")()
+        getattr(audio, "log_audio_channel_snapshot")(tag="cutscene_enter", logger=logger)
+        return PlayingFixedStepResult(
+            next_mode="cutscene",
+            campaign_sentiment=float(campaign_sentiment),
+            mission_end_return_seconds=float(mission_end_return_seconds),
+            doors_open_before_cutscene=next_doors,
+            continue_fixed_loop=False,
+        )
+
+    return PlayingFixedStepResult(
+        next_mode=mode,
+        campaign_sentiment=float(campaign_sentiment),
+        mission_end_return_seconds=float(mission_end_return_seconds),
+        doors_open_before_cutscene=bool(doors_open_before_cutscene),
+        continue_fixed_loop=False,
+    )
 
 
 @dataclass
