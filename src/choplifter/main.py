@@ -1,23 +1,3 @@
-def draw_debug_overlay(target):
-    font = pygame.font.SysFont(None, 32)
-    overlay = font.render("DEBUG MODE", True, (255, 0, 0))
-    target.blit(overlay, (12, 12))
-
-
-debug_mode = False
-debug_weather_modes = ["clear", "rain", "fog", "dust", "storm"]
-debug_weather_index = 0
-
-def draw_debug_overlay(target):
-    font = pygame.font.SysFont(None, 32)
-    overlay = font.render("DEBUG MODE", True, (255, 0, 0))
-    target.blit(overlay, (12, 12))
-
-def set_debug_weather_mode(mode):
-    weather_mode = mode
-    weather_timer = 0.0
-    weather_duration = 9999.0  # Prevent auto-cycling
-
 from .app.keyboard_events import handle_keyboard_event
 
 from .game_types import EnemyKind
@@ -32,7 +12,7 @@ from .accessibility import load_accessibility
 from .controls import load_controls, matches_key, pressed
 from .debug_overlay import DebugOverlay
 from .game_logging import create_session_logger
-from .helicopter import Facing, Helicopter, HelicopterInput, update_helicopter
+from .helicopter import Facing, Helicopter, update_helicopter
 from . import haptics
 from .mission import update_mission
 from .mission_configs import get_mission_config_by_id
@@ -84,12 +64,35 @@ from .app.gamepads import init_connected_joysticks, handle_joy_device_added, han
 from .app.toast import ToastState
 from .app.session import create_mission_and_helicopter
 from .app.flow import apply_mission_preview, reset_game
-from .app.menu_helpers import cycle_index, move_pause_focus
 from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapshot
 from .app.accessibility_toggles import toggle_particles, toggle_flashes, toggle_screenshake
 from .app.doors import toggle_doors_with_logging
+from .app.runtime_state import GameRuntimeState
+from .app.game_update import (
+    apply_playing_stat_events_feedback,
+    build_helicopter_input,
+    collect_playing_stat_events,
+    resolve_playing_mission_end_transition,
+    step_playing_helicopter,
+)
+from .app.mode_update import resolve_post_frame_mode_transitions
+from .app.event_loop import (
+    handle_debug_weather_keydown,
+    handle_gamepad_pause_button,
+    handle_mission_end_gamepad_navigation,
+    handle_mission_end_keyboard_navigation,
+    handle_pause_quit_confirm_keydown,
+    resolve_paused_mode_inputs,
+    handle_select_chopper_gamepad,
+    handle_select_mission_gamepad,
+    should_skip_on_gamepad_buttons,
+)
 
-import random
+
+def draw_debug_overlay(target):
+    font = pygame.font.SysFont(None, 32)
+    overlay = font.render("DEBUG MODE", True, (255, 0, 0))
+    target.blit(overlay, (12, 12))
 
 
 def run() -> None:
@@ -220,12 +223,10 @@ def run() -> None:
 
     # Intro cutscene plays on every launch.
     mode: str = "intro"  # intro | select_mission | select_chopper | playing | paused | cutscene | mission_end
-    mission_end_return_seconds: float = 0.0
+    runtime = GameRuntimeState()
+    just_paused_with_start = False
     prev_menu_dir = 0
     prev_menu_vert = 0
-    pause_focus: str = "choppers"  # choppers | restart_mission | restart_game | mute | quit
-    quit_confirm: bool = False
-    muted = False
 
     flares = FlareState()
 
@@ -243,7 +244,7 @@ def run() -> None:
     prev_stats: MissionStatsSnapshot = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
 
     def apply_mission_preview_wrapper() -> None:
-        nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment, mission_end_return_seconds
+        nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
         mission, helicopter, accumulator, prev_stats = apply_mission_preview(
             create_mission_and_helicopter,
             heli_settings,
@@ -258,11 +259,11 @@ def run() -> None:
         )
         mission.sentiment = float(campaign_sentiment)
         mission.audio = audio
-        mission_end_return_seconds = 0.0
+        runtime.mission_end_return_seconds = 0.0
         audio.log_audio_channel_snapshot(tag="mission_preview", logger=logger)
 
     def reset_game_wrapper() -> None:
-        nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment, mission_end_return_seconds
+        nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_btn_rb_down, prev_btn_lb_down, prev_btn_back_down
         # Stop chopper warning beeps on game reset
@@ -280,7 +281,7 @@ def run() -> None:
             logger,
             flares,
         )
-        mission_end_return_seconds = 0.0
+        runtime.mission_end_return_seconds = 0.0
         mission.sentiment = float(campaign_sentiment)
         mission.audio = audio
         audio.log_audio_channel_snapshot(tag="restart", logger=logger)
@@ -393,51 +394,50 @@ def run() -> None:
                 prev_btn_y_down = False
                 prev_btn_back_down = False
             elif event.type == pygame.KEYDOWN:
-                # In mission_end mode, route navigation back to Mission Select.
-                if mode == "mission_end" or mission.ended:
-                    if event.key in (pygame.K_ESCAPE, pygame.K_PAUSE):
-                        mode = "select_mission"
-                        set_toast("Mission ended: returning to Mission Select")
-                        continue
-                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                        mode = "select_mission"
-                        set_toast("Mission ended: returning to Mission Select")
-                        continue
-                    # Only allow mission-end navigation keys in mission_end mode.
+                handled_mission_end, next_mode = handle_mission_end_keyboard_navigation(
+                    key=event.key,
+                    mode=mode,
+                    mission_ended=bool(mission.ended),
+                    set_toast=set_toast,
+                )
+                if handled_mission_end:
+                    mode = next_mode
                     continue
-                # --- Handle quit confirmation in pause menu for keyboard ---
-                if mode == "paused" and quit_confirm:
-                    if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+
+                handled_quit_confirm, keep_running, quit_confirm = handle_pause_quit_confirm_keydown(
+                    mode=mode,
+                    quit_confirm=runtime.quit_confirm,
+                    key=event.key,
+                )
+                if handled_quit_confirm:
+                    if not keep_running:
                         logger.info(f"PAUSE MENU: Keyboard confirm quit (Enter/Space) on quit_confirm, exiting game")
                         running = False
-                        continue
-                    elif event.key == pygame.K_ESCAPE:
+                    else:
                         logger.info(f"PAUSE MENU: Keyboard cancel quit (Escape) on quit_confirm, returning to pause menu")
-                        quit_confirm = False
-                        continue
-                # F3 toggles debug mode (keyboard only)
-                if event.key == pygame.K_F3:
-                    debug_mode = not debug_mode
-                    set_toast(f"Debug mode: {'ON' if debug_mode else 'OFF'} (F3)")
-                # F5/F6 cycle weather if debug mode is on (keyboard only)
-                elif debug_mode and event.key == pygame.K_F5:
-                    debug_weather_index = (debug_weather_index + 1) % len(debug_weather_modes)
-                    set_debug_weather_mode(debug_weather_modes[debug_weather_index])
-                    set_toast(f"Weather: {debug_weather_modes[debug_weather_index]}")
-                elif debug_mode and event.key == pygame.K_F6:
-                    debug_weather_index = (debug_weather_index - 1) % len(debug_weather_modes)
-                    set_debug_weather_mode(debug_weather_modes[debug_weather_index])
-                    set_toast(f"Weather: {debug_weather_modes[debug_weather_index]}")
+                    runtime.quit_confirm = quit_confirm
+                    continue
+                handled_debug_key, debug_mode, debug_weather_index, debug_toast, selected_weather_mode = handle_debug_weather_keydown(
+                    key=event.key,
+                    debug_mode=debug_mode,
+                    debug_weather_index=debug_weather_index,
+                    debug_weather_modes=debug_weather_modes,
+                )
+                if handled_debug_key:
+                    if selected_weather_mode is not None:
+                        set_debug_weather_mode(selected_weather_mode)
+                    if debug_toast:
+                        set_toast(debug_toast)
                 (
                     mode,
-                    pause_focus,
-                    muted,
+                    runtime.pause_focus,
+                    runtime.muted,
                     selected_mission_index,
                     selected_mission_id,
                     selected_chopper_index,
                     selected_chopper_asset,
                     debug,
-                    quit_confirm
+                    runtime.quit_confirm
                 ) = handle_keyboard_event(
                     event,
                     mode=mode,
@@ -448,8 +448,8 @@ def run() -> None:
                     logger=logger,
                     chopper_choices=chopper_choices,
                     mission_choices=mission_choices,
-                    pause_focus=pause_focus,
-                    muted=muted,
+                    pause_focus=runtime.pause_focus,
+                    muted=runtime.muted,
                     set_toast=set_toast,
                     reset_game=reset_game_wrapper,
                     apply_mission_preview=apply_mission_preview_wrapper,
@@ -470,7 +470,7 @@ def run() -> None:
                     selected_chopper_index=selected_chopper_index,
                     selected_chopper_asset=selected_chopper_asset,
                     debug=debug,
-                    quit_confirm=quit_confirm
+                    quit_confirm=runtime.quit_confirm
                 )
             elif event.type == pygame.JOYBUTTONDOWN:
                 # Debug: print which button was pressed
@@ -478,10 +478,13 @@ def run() -> None:
                     logger.info(f"GAMEPAD BUTTONDOWN: button={event.button}")
                 # Map gamepad buttons to actions
                 # X (2): fire, B (1): flare, A (0): doors, Y (3): reverse, Back (6): facing, Start (7): pause/restart
-                if mode == "mission_end":
-                    if event.button == 7:  # Start button
-                        mode = "select_mission"
-                        set_toast("Mission ended: returning to Mission Select")
+                handled_mission_end, next_mode = handle_mission_end_gamepad_navigation(
+                    button=event.button,
+                    mode=mode,
+                    set_toast=set_toast,
+                )
+                if handled_mission_end:
+                    mode = next_mode
                 elif mode == "playing":
                     if event.button == 2:  # X button: fire
                         if logger:
@@ -533,11 +536,11 @@ def run() -> None:
                 # debug=debug
                 # )
             # Quit confirmation: if quit_confirm is True and A is pressed, exit; if B is pressed, cancel
-            if quit_confirm:
+            if runtime.quit_confirm:
                 if a_down and not prev_btn_a_down:
                     running = False
                 elif b_down and not prev_btn_b_down:
-                    quit_confirm = False
+                    runtime.quit_confirm = False
 
         keys = pygame.key.get_pressed()
         kb_tilt_left = pressed(keys, controls.tilt_left)
@@ -595,119 +598,160 @@ def run() -> None:
 
 
 
-            # --- GAMEPAD PAUSE BUTTON HANDLING (fixed: require release before unpause) ---
-            # Only allow Start to unpause if it was released after pausing
+            # --- GAMEPAD PAUSE BUTTON HANDLING ---
             if start_down and not prev_btn_start_down:
                 logger.info(f"GAMEPAD: Start button pressed (start_down={start_down}, prev_btn_start_down={prev_btn_start_down}, mode={mode})")
 
-            # Track if we just paused with Start, to require release before unpause
-            if 'just_paused_with_start' not in locals():
-                just_paused_with_start = False
-
-            if mode == "playing" and (start_down and not prev_btn_start_down):
-                logger.info(f"PAUSE: Gamepad Start pressed, entering pause menu (mode=playing)")
-                mode = "paused"
-                pause_focus = "choppers"
-                audio.play_pause_toggle()
-                audio.set_pause_menu_active(True)
-                just_paused_with_start = True
-            elif mode != "playing" and (start_down and not prev_btn_start_down):
+            if mode != "playing" and (start_down and not prev_btn_start_down):
                 logger.info(f"GAMEPAD: Start button pressed but pause not triggered (mode={mode})")
 
-            # Only allow unpause with Start if it was released after pausing
-            if mode == "paused":
-                # Start/B resumes, but Start only if it was released after pausing
-                can_unpause_with_start = (not start_down and prev_btn_start_down and just_paused_with_start) or (not just_paused_with_start)
-                if ((start_down and not prev_btn_start_down and not just_paused_with_start) or (b_down and not prev_btn_b_down)):
-                    logger.info(f"UNPAUSE: Gamepad Start or B pressed, resuming game (mode=paused)")
-                    mode = "playing"
-                    audio.play_pause_toggle()
-                    audio.set_pause_menu_active(False)
-                    quit_confirm = False
-                    just_paused_with_start = False
-                # Reset just_paused_with_start when Start is released
-                if not start_down and prev_btn_start_down and just_paused_with_start:
-                    just_paused_with_start = False
+            prev_mode = mode
+            mode, just_paused_with_start, toggled_pause_state, clear_quit_confirm = handle_gamepad_pause_button(
+                mode=mode,
+                start_down=start_down,
+                prev_btn_start_down=prev_btn_start_down,
+                b_down=b_down,
+                prev_btn_b_down=prev_btn_b_down,
+                just_paused_with_start=just_paused_with_start,
+            )
+            if toggled_pause_state:
+                audio.play_pause_toggle()
+                audio.set_pause_menu_active(mode == "paused")
+            if prev_mode == "playing" and mode == "paused":
+                logger.info(f"PAUSE: Gamepad Start pressed, entering pause menu (mode=playing)")
+                runtime.pause_focus = "choppers"
+            if prev_mode == "paused" and mode == "playing":
+                logger.info(f"UNPAUSE: Gamepad Start or B pressed, resuming game (mode=paused)")
+            if clear_quit_confirm:
+                runtime.quit_confirm = False
 
             if mode == "select_chopper":
-                if menu_dir != 0 and menu_dir != prev_menu_dir:
-                    selected_chopper_index = cycle_index(selected_chopper_index, menu_dir, len(chopper_choices))
+                prev_mode = mode
+                mode, selected_chopper_index, chopper_selection_changed, chopper_confirmed = handle_select_chopper_gamepad(
+                    menu_dir=menu_dir,
+                    prev_menu_dir=prev_menu_dir,
+                    a_down=a_down,
+                    prev_btn_a_down=prev_btn_a_down,
+                    start_down=start_down,
+                    prev_btn_start_down=prev_btn_start_down,
+                    b_down=b_down,
+                    prev_btn_b_down=prev_btn_b_down,
+                    back_down=back_down,
+                    prev_btn_back_down=prev_btn_back_down,
+                    selected_chopper_index=selected_chopper_index,
+                    chopper_count=len(chopper_choices),
+                )
+                if chopper_selection_changed:
                     selected_chopper_asset = chopper_choices[selected_chopper_index][0]
                     audio.play_menu_select()
-                # Gamepad: A/Start to select, B/Back to go back
-                if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
-                    mode = "playing"
+                if chopper_confirmed:
                     set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
                     if selected_mission_id == "city":
                         play_satellite_reallocating()
                     reset_game_wrapper()
-                elif (b_down and not prev_btn_b_down) or (back_down and not prev_btn_back_down):
-                    mode = "select_mission"
+                elif prev_mode == "select_chopper" and mode == "select_mission":
                     set_toast("Back to Mission Select")
             elif mode == "intro":
-                skip_btn = (
-                    (a_down and not prev_btn_a_down)
-                    or (b_down and not prev_btn_b_down)
-                    or (x_down and not prev_btn_x_down)
-                    or (y_down and not prev_btn_y_down)
-                    or (start_down and not prev_btn_start_down)
-                    or (rb_down and not prev_btn_rb_down)
-                    or (lb_down and not prev_btn_lb_down)
+                skip_btn = should_skip_on_gamepad_buttons(
+                    a_down=a_down,
+                    prev_btn_a_down=prev_btn_a_down,
+                    b_down=b_down,
+                    prev_btn_b_down=prev_btn_b_down,
+                    x_down=x_down,
+                    prev_btn_x_down=prev_btn_x_down,
+                    y_down=y_down,
+                    prev_btn_y_down=prev_btn_y_down,
+                    start_down=start_down,
+                    prev_btn_start_down=prev_btn_start_down,
+                    rb_down=rb_down,
+                    prev_btn_rb_down=prev_btn_rb_down,
+                    lb_down=lb_down,
+                    prev_btn_lb_down=prev_btn_lb_down,
                 )
                 if skip_btn:
                     mode = "select_mission"
                     skip_intro(cutscenes.intro)
             elif mode == "cutscene":
-                skip_btn = (
-                    (a_down and not prev_btn_a_down)
-                    or (b_down and not prev_btn_b_down)
-                    or (x_down and not prev_btn_x_down)
-                    or (y_down and not prev_btn_y_down)
-                    or (start_down and not prev_btn_start_down)
-                    or (rb_down and not prev_btn_rb_down)
-                    or (lb_down and not prev_btn_lb_down)
+                skip_btn = should_skip_on_gamepad_buttons(
+                    a_down=a_down,
+                    prev_btn_a_down=prev_btn_a_down,
+                    b_down=b_down,
+                    prev_btn_b_down=prev_btn_b_down,
+                    x_down=x_down,
+                    prev_btn_x_down=prev_btn_x_down,
+                    y_down=y_down,
+                    prev_btn_y_down=prev_btn_y_down,
+                    start_down=start_down,
+                    prev_btn_start_down=prev_btn_start_down,
+                    rb_down=rb_down,
+                    prev_btn_rb_down=prev_btn_rb_down,
+                    lb_down=lb_down,
+                    prev_btn_lb_down=prev_btn_lb_down,
                 )
                 if skip_btn:
                     mode = "playing"
                     skip_mission_cutscene(cutscenes.mission)
             elif mode == "select_mission":
-                if menu_dir != 0 and menu_dir != prev_menu_dir:
-                    selected_mission_index = cycle_index(selected_mission_index, menu_dir, len(mission_choices))
+                prev_mode = mode
+                mode, selected_mission_index, mission_selection_changed = handle_select_mission_gamepad(
+                    menu_dir=menu_dir,
+                    prev_menu_dir=prev_menu_dir,
+                    a_down=a_down,
+                    prev_btn_a_down=prev_btn_a_down,
+                    start_down=start_down,
+                    prev_btn_start_down=prev_btn_start_down,
+                    selected_mission_index=selected_mission_index,
+                    mission_count=len(mission_choices),
+                )
+                if mission_selection_changed:
                     selected_mission_id = mission_choices[selected_mission_index][0]
                     audio.play_menu_select()
                     apply_mission_preview_wrapper()
-                if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
-                    mode = "select_chopper"
+                if prev_mode == "select_mission" and mode == "select_chopper":
                     set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")
             elif mode == "paused":
-                # Accessibility toggles.
-                if x_down and not prev_btn_x_down:
-                    toggle_particles_wrapper()
-                if y_down and not prev_btn_y_down:
-                    toggle_flashes_wrapper()
-                if rb_down and not prev_btn_rb_down:
-                    toggle_screenshake_wrapper()
+                paused = resolve_paused_mode_inputs(
+                    pause_focus=runtime.pause_focus,
+                    quit_confirm=runtime.quit_confirm,
+                    selected_chopper_index=selected_chopper_index,
+                    chopper_count=len(chopper_choices),
+                    menu_vert=menu_vert,
+                    prev_menu_vert=prev_menu_vert,
+                    menu_dir=menu_dir,
+                    prev_menu_dir=prev_menu_dir,
+                    a_down=a_down,
+                    prev_btn_a_down=prev_btn_a_down,
+                    b_down=b_down,
+                    prev_btn_b_down=prev_btn_b_down,
+                    x_down=x_down,
+                    prev_btn_x_down=prev_btn_x_down,
+                    y_down=y_down,
+                    prev_btn_y_down=prev_btn_y_down,
+                    rb_down=rb_down,
+                    prev_btn_rb_down=prev_btn_rb_down,
+                    back_down=back_down,
+                    prev_btn_back_down=prev_btn_back_down,
+                    crash_active=bool(getattr(mission, "crash_active", False)),
+                )
 
-                # Up/Down selects section.
-                if menu_vert != 0 and menu_vert != prev_menu_vert:
-                    prev_pause_focus = pause_focus
-                    pause_focus = move_pause_focus(pause_focus, -1 if menu_vert < 0 else 1)
-                    if pause_focus != prev_pause_focus:
-                        audio.play_menu_select()
-                        quit_confirm = False
-
-
-                # Left/Right changes chopper when focused.
-                if pause_focus == "choppers" and menu_dir != 0 and menu_dir != prev_menu_dir:
-                    selected_chopper_index = cycle_index(selected_chopper_index, menu_dir, len(chopper_choices))
+                runtime.pause_focus = paused.pause_focus
+                runtime.quit_confirm = paused.quit_confirm
+                if paused.selected_chopper_index != selected_chopper_index:
+                    selected_chopper_index = paused.selected_chopper_index
                     selected_chopper_asset = chopper_choices[selected_chopper_index][0]
                     helicopter.skin_asset = selected_chopper_asset
+                if paused.play_menu_select:
                     audio.play_menu_select()
-                    quit_confirm = False
 
-                # A activates current focus.
-                if a_down and not prev_btn_a_down:
-                    if pause_focus == "restart_mission":
+                if paused.toggle_particles:
+                    toggle_particles_wrapper()
+                if paused.toggle_flashes:
+                    toggle_flashes_wrapper()
+                if paused.toggle_screenshake:
+                    toggle_screenshake_wrapper()
+
+                if paused.action != "none":
+                    if paused.action == "restart_mission":
                         logger.info(f"PAUSE MENU: A pressed on restart_mission")
                         if selected_mission_id == "city":
                             play_satellite_reallocating()
@@ -715,60 +759,44 @@ def run() -> None:
                         mode = "playing"
                         audio.play_pause_toggle()
                         audio.set_pause_menu_active(False)
-                        quit_confirm = False
-                    elif pause_focus == "restart_game":
+                        runtime.quit_confirm = False
+                    elif paused.action == "restart_game":
                         logger.info(f"PAUSE MENU: A pressed on restart_game")
                         mode = "select_mission"
-                        pause_focus = "choppers"
                         set_toast("Restart Game")
                         audio.play_pause_toggle()
                         audio.set_pause_menu_active(False)
-                        quit_confirm = False
-                    elif pause_focus == "mute":
-                        logger.info(f"PAUSE MENU: A pressed on mute (muted={not muted})")
-                        muted = not muted
-                        audio.set_muted(muted)
-                        quit_confirm = False
-                    elif pause_focus == "quit":
-                        if not quit_confirm:
-                            logger.info(f"PAUSE MENU: A pressed on quit, showing confirmation dialog")
-                            quit_confirm = True
-                        else:
-                            logger.info(f"PAUSE MENU: A pressed on quit_confirm, exiting game (gamepad A)")
-                            running = False
+                        runtime.quit_confirm = False
+                    elif paused.action == "toggle_mute":
+                        logger.info(f"PAUSE MENU: A pressed on mute (muted={not runtime.muted})")
+                        runtime.muted = not runtime.muted
+                        audio.set_muted(runtime.muted)
+                        runtime.quit_confirm = False
+                    elif paused.action == "quit_prompt":
+                        logger.info(f"PAUSE MENU: A pressed on quit, showing confirmation dialog")
+                    elif paused.action == "quit_exit":
+                        logger.info(f"PAUSE MENU: A pressed on quit_confirm, exiting game (gamepad A)")
+                        running = False
 
-                # Keyboard support for quit_confirm (Enter/Space to confirm, Escape to cancel)
-                if quit_confirm and hasattr(event, "key"):
-                    if event.type == pygame.KEYDOWN:
-                        if event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                            logger.info(f"PAUSE MENU: Keyboard confirm quit (Enter/Space) on quit_confirm, exiting game")
-                            running = False
-                        elif event.key == pygame.K_ESCAPE:
-                            logger.info(f"PAUSE MENU: Keyboard cancel quit (Escape) on quit_confirm, returning to pause menu")
-                            quit_confirm = False
-                if b_down and not prev_btn_b_down and quit_confirm:
+                if paused.cancel_quit_confirm:
                     logger.info(f"PAUSE MENU: B pressed on quit_confirm, canceling quit and returning to pause menu")
-                    quit_confirm = False
+                    runtime.quit_confirm = False
 
-                if b_down and not prev_btn_b_down:
+                if paused.trigger_flare:
                     try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
 
-                if a_down and not prev_btn_a_down:
-                    if not getattr(mission, "crash_active", False):
-                        toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count, set_toast)
-                if y_down and not prev_btn_y_down:
-                    if not getattr(mission, "crash_active", False):
-                        helicopter.reverse_flip()
-                if back_down and not prev_btn_back_down:
-                    if not getattr(mission, "crash_active", False):
-                        helicopter.cycle_facing()
-                if x_down and not prev_btn_x_down:
-                    if not getattr(mission, "crash_active", False):
-                        spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
-                        if helicopter.facing is Facing.FORWARD:
-                            audio.play_bomb()
-                        else:
-                            audio.play_shoot()
+                if paused.toggle_doors:
+                    toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count, set_toast)
+                if paused.reverse_flip:
+                    helicopter.reverse_flip()
+                if paused.cycle_facing:
+                    helicopter.cycle_facing()
+                if paused.fire_weapon:
+                    spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
+                    if helicopter.facing is Facing.FORWARD:
+                        audio.play_bomb()
+                    else:
+                        audio.play_shoot()
 
             prev_btn_a_down = a_down
             prev_btn_b_down = b_down
@@ -781,13 +809,17 @@ def run() -> None:
             prev_menu_dir = menu_dir
             prev_menu_vert = menu_vert
 
-        # Disable all helicopter input if in mission_end mode
-        helicopter_input = HelicopterInput(
-            tilt_left=(kb_tilt_left or gp_tilt_left) if mode == "playing" else False,
-            tilt_right=(kb_tilt_right or gp_tilt_right) if mode == "playing" else False,
-            lift_up=(kb_lift_up or gp_lift_up) if mode == "playing" else False,
-            lift_down=(kb_lift_down or gp_lift_down) if mode == "playing" else False,
-            brake=kb_brake if mode == "playing" else False,
+        helicopter_input = build_helicopter_input(
+            mode=mode,
+            kb_tilt_left=kb_tilt_left,
+            kb_tilt_right=kb_tilt_right,
+            kb_lift_up=kb_lift_up,
+            kb_lift_down=kb_lift_down,
+            kb_brake=kb_brake,
+            gp_tilt_left=gp_tilt_left,
+            gp_tilt_right=gp_tilt_right,
+            gp_lift_up=gp_lift_up,
+            gp_lift_down=gp_lift_down,
         )
 
         # Fixed-timestep update.
@@ -798,58 +830,53 @@ def run() -> None:
         while accumulator >= tick.dt:
             if mode == "playing":
                 update_flares(flares, mission=mission, helicopter=helicopter, dt=tick.dt)
-                if getattr(mission, "crash_active", False):
-                    # Crash animation drives the helicopter pose; stop the flight loop and warning beeps.
-                    audio.stop_flying()
-                    audio.stop_chopper_warning_beeps()
-                else:
-                    was_grounded = helicopter.grounded
-                    # If the helicopter starts airborne, there may be no ground->air transition
-                    # to kick off the flying loop. Start it as soon as the player applies lift.
-                    if (helicopter_input.lift_up or helicopter_input.lift_down) and not helicopter.grounded:
-                        audio.start_flying()
-
-                    update_helicopter(
+                heli_step = step_playing_helicopter(
+                    mission=mission,
+                    helicopter=helicopter,
+                    helicopter_input=helicopter_input,
+                    tick_dt=tick.dt,
+                    physics=physics,
+                    heli_settings=heli_settings,
+                    audio=audio,
+                    update_helicopter_fn=update_helicopter,
+                )
+                if heli_step.landed:
+                    hostage_crush_check_logged(
+                        mission,
                         helicopter,
-                        helicopter_input,
-                        tick.dt,
-                        physics,
-                        heli_settings,
-                        world_width=float(mission.world_width),
-                        invulnerable=(mission.invuln_seconds > 0.0 or mission.ended),
+                        heli_step.landing_vy,
+                        safe_landing_vy=physics.safe_landing_vy,
+                        logger=logger,
                     )
-                    if was_grounded and not helicopter.grounded:
-                        audio.start_flying()
-                    if not was_grounded and helicopter.grounded:
-                        hostage_crush_check_logged(
-                            mission,
-                            helicopter,
-                            helicopter.last_landing_vy,
-                            safe_landing_vy=physics.safe_landing_vy,
-                            logger=logger,
-                        )
 
-                        # Cinematic feedback on rough landings.
-                        rough_landing_feedback(
-                            state=screenshake,
-                            landing_vy=float(helicopter.last_landing_vy),
-                            safe_landing_vy=float(physics.safe_landing_vy),
-                            invuln_seconds=float(mission.invuln_seconds),
-                            ended=bool(mission.ended),
-                            audio=audio,
-                            screenshake_enabled=screenshake_enabled,
-                        )
-                        audio.stop_flying()
+                    # Cinematic feedback on rough landings.
+                    rough_landing_feedback(
+                        state=screenshake,
+                        landing_vy=heli_step.landing_vy,
+                        safe_landing_vy=float(physics.safe_landing_vy),
+                        invuln_seconds=float(mission.invuln_seconds),
+                        ended=bool(mission.ended),
+                        audio=audio,
+                        screenshake_enabled=screenshake_enabled,
+                    )
                 update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
 
-                # If mission ended, show the mission-end screen briefly, then return to Mission Select.
-                if mission.ended:
-                    campaign_sentiment = float(mission.sentiment)
-                    # Stop chopper warning beeps immediately on mission end
+                playing_end = resolve_playing_mission_end_transition(
+                    mission_ended=bool(mission.ended),
+                    sentiment=float(mission.sentiment),
+                    mission_end_delay_s=5.0,
+                )
+                if playing_end.ended:
+                    if playing_end.campaign_sentiment is not None:
+                        campaign_sentiment = playing_end.campaign_sentiment
+                    # Stop chopper warning beeps immediately on mission end.
                     audio.stop_chopper_warning_beeps()
-                    mode = "mission_end"
-                    mission_end_return_seconds = 5.0
-                    set_toast("Mission ended. Returning to Mission Select in 5s.")
+                    if playing_end.next_mode is not None:
+                        mode = playing_end.next_mode
+                    if playing_end.next_mission_end_return_seconds is not None:
+                        runtime.mission_end_return_seconds = playing_end.next_mission_end_return_seconds
+                    if playing_end.toast_message:
+                        set_toast(playing_end.toast_message)
                     continue
 
                 # Consume cinematic feedback impulses produced by mission damage events.
@@ -862,20 +889,20 @@ def run() -> None:
 
                 helicopter.damage_flash_seconds = max(0.0, helicopter.damage_flash_seconds - tick.dt)
 
-                saved_delta = mission.stats.saved - prev_stats.saved
-                if saved_delta > 0:
-                    audio.play_rescue()
-                    prev_stats.saved = mission.stats.saved
-
-                boarded_now = boarded_count(mission)
-                boarded_delta = boarded_now - prev_stats.boarded
-                if boarded_delta > 0:
-                    audio.play_board()
-                    prev_stats.boarded = boarded_now
+                stat_events = collect_playing_stat_events(
+                    mission=mission,
+                    prev_stats=prev_stats,
+                    boarded_count=boarded_count,
+                )
+                apply_playing_stat_events_feedback(
+                    stat_events=stat_events,
+                    audio=audio,
+                    set_toast=set_toast,
+                )
 
                 # One-shot hostage rescue cutscene when the first 16 hostages are onboard.
                 if (
-                    boarded_now >= cutscene_config.HOSTAGE_RESCUE_CUTSCENE_THRESHOLD
+                    stat_events.boarded_now >= cutscene_config.HOSTAGE_RESCUE_CUTSCENE_THRESHOLD
                     and cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID not in mission.cutscenes_played
                 ):
                     mission.cutscenes_played.add(cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID)
@@ -898,74 +925,32 @@ def run() -> None:
                         audio.stop_flying()
                         audio.log_audio_channel_snapshot(tag="cutscene_enter", logger=logger)
 
-                open_compounds = sum(1 for c in mission.compounds if c.is_open)
-                if open_compounds > prev_stats.open_compounds:
-                    audio.play_explosion_small()
-                    prev_stats.open_compounds = open_compounds
-
-                tank_delta = mission.stats.tanks_destroyed - prev_stats.tanks_destroyed
-                if tank_delta > 0:
-                    audio.play_explosion_big()
-                    prev_stats.tanks_destroyed = mission.stats.tanks_destroyed
-
-                artillery_delta = mission.stats.artillery_fired - prev_stats.artillery_fired
-                if artillery_delta > 0:
-                    for _ in range(artillery_delta):
-                        audio.play_artillery_shot()
-                    prev_stats.artillery_fired = mission.stats.artillery_fired
-
-                artillery_hit_delta = mission.stats.artillery_hits - prev_stats.artillery_hits
-                if artillery_hit_delta > 0:
-                    for _ in range(artillery_hit_delta):
-                        audio.play_artillery_impact()
-                    prev_stats.artillery_hits = mission.stats.artillery_hits
-
-                jets_entered_delta = mission.stats.jets_entered - prev_stats.jets_entered
-                if jets_entered_delta > 0:
-                    audio.play_jet_flyby()
-                    prev_stats.jets_entered = mission.stats.jets_entered
-
-                mine_delta = mission.stats.mines_detonated - prev_stats.mines_detonated
-                if mine_delta > 0:
-                    for _ in range(mine_delta):
-                        audio.play_mine_explosion()
-                    prev_stats.mines_detonated = mission.stats.mines_detonated
-
-                if mission.crashes != prev_stats.crashes:
-                    if mission.ended:
-                        set_toast(f"THE END: {mission.end_reason} (Enter/Esc/Start=Mission Select)")
-                    else:
-                        set_toast(f"CRASH {mission.crashes}/3 — respawn (invuln {mission.invuln_seconds:0.1f}s)")
-                        audio.play_crash()
-                    prev_stats.crashes = mission.crashes
-
-                lost_delta = mission.stats.lost_in_transit - prev_stats.lost_in_transit
-                if lost_delta > 0:
-                    set_toast(f"Passengers lost in crash: +{lost_delta}")
-                    prev_stats.lost_in_transit = mission.stats.lost_in_transit
-
             accumulator -= tick.dt
 
         toast.update(frame_dt)
 
-        if mode == "intro":
-            if update_intro(cutscenes.intro, frame_dt):
-                mode = "select_mission"
+        intro_finished = bool(mode == "intro" and update_intro(cutscenes.intro, frame_dt))
+        cutscene_finished = bool(mode == "cutscene" and update_mission_cutscene(cutscenes.mission, frame_dt))
 
-        if mode == "cutscene":
-            if update_mission_cutscene(cutscenes.mission, frame_dt):
-                mode = "playing"
-                # Restore doors state after cutscene and log
-                prev_state = helicopter.doors_open
-                helicopter.doors_open = doors_open_before_cutscene
-                logger.info(f"DOORS: restored after cutscene | was_open={prev_state} | restored_open={helicopter.doors_open}")
-                audio.log_audio_channel_snapshot(tag="cutscene_exit", logger=logger)
+        mode_transition = resolve_post_frame_mode_transitions(
+            mode=mode,
+            frame_dt=frame_dt,
+            mission_end_return_seconds=runtime.mission_end_return_seconds,
+            intro_finished=intro_finished,
+            cutscene_finished=cutscene_finished,
+        )
+        mode = mode_transition.mode
+        runtime.mission_end_return_seconds = mode_transition.mission_end_return_seconds
 
-        if mode == "mission_end":
-            mission_end_return_seconds = max(0.0, mission_end_return_seconds - frame_dt)
-            if mission_end_return_seconds <= 0.0:
-                mode = "select_mission"
-                set_toast("Mission ended: returning to Mission Select")
+        if mode_transition.restore_doors_after_cutscene:
+            # Restore doors state after cutscene and log.
+            prev_state = helicopter.doors_open
+            helicopter.doors_open = doors_open_before_cutscene
+            logger.info(f"DOORS: restored after cutscene | was_open={prev_state} | restored_open={helicopter.doors_open}")
+            audio.log_audio_channel_snapshot(tag="cutscene_exit", logger=logger)
+
+        if mode_transition.mission_end_auto_returned:
+            set_toast("Mission ended: returning to Mission Select")
 
         # Visual-only sky particles.
         if particles_enabled and mode not in ("intro", "cutscene"):
@@ -1115,15 +1100,15 @@ def run() -> None:
                     title="Paused",
                     hint="Up/Down choose section • Left/Right chopper • Start/B resume • A select • X particles • Y flashes • RB shake",
                     show_mute=True,
-                    mute_selected=(pause_focus == "mute"),
-                    muted=muted,
+                    mute_selected=(runtime.pause_focus == "mute"),
+                    muted=runtime.muted,
                     show_restart=True,
-                    restart_selected=(pause_focus == "restart_mission"),
+                    restart_selected=(runtime.pause_focus == "restart_mission"),
                     show_restart_game=True,
-                    restart_game_selected=(pause_focus == "restart_game"),
+                    restart_game_selected=(runtime.pause_focus == "restart_game"),
                     show_quit=True,
-                    quit_selected=(pause_focus == "quit"),
-                    quit_confirm=quit_confirm,
+                    quit_selected=(runtime.pause_focus == "quit"),
+                    quit_confirm=runtime.quit_confirm,
                 )
             if debug_mode:
                 draw_debug_overlay(target)
