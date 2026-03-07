@@ -53,8 +53,62 @@ if ($Mode -eq 'onefile') { $modeFlag = @('--onefile') }
 # Bundle assets next to the packaged python modules.
 # NOTE: On Windows, PyInstaller uses ';' as the add-data separator.
 $assetsSrc = Join-Path $repoRoot 'src\choplifter\assets'
+$stagedAssets = Join-Path $workPath 'asset-staging'
+
+# Explicit runtime asset manifest. Keep this list tight so source art files
+# (for example .xcf) do not silently inflate distributable builds.
+$assetIncludeExtensions = @(
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.wav',
+    '.ogg',
+    '.avi',
+    '.mpg',
+    '.json'
+)
+
+if (Test-Path $stagedAssets) {
+    Remove-Item -Recurse -Force $stagedAssets
+}
+New-Item -ItemType Directory -Path $stagedAssets | Out-Null
+
+$includedAssets = Get-ChildItem -Path $assetsSrc -Recurse -File |
+    Where-Object { $assetIncludeExtensions -contains $_.Extension.ToLowerInvariant() }
+
+# Prefer modern .avi cutscenes over legacy .mpg files when both exist.
+$aviRelPaths = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
+foreach ($asset in $includedAssets) {
+    if ($asset.Extension.ToLowerInvariant() -eq '.avi') {
+        $aviRel = $asset.FullName.Substring($assetsSrc.Length).TrimStart('\', '/')
+        $aviWithoutExt = [System.IO.Path]::ChangeExtension($aviRel, $null)
+        [void]$aviRelPaths.Add($aviWithoutExt)
+    }
+}
+
+$includedAssets = $includedAssets | Where-Object {
+    if ($_.Extension.ToLowerInvariant() -ne '.mpg') {
+        return $true
+    }
+    $mpgRel = $_.FullName.Substring($assetsSrc.Length).TrimStart('\', '/')
+    $mpgWithoutExt = [System.IO.Path]::ChangeExtension($mpgRel, $null)
+    return -not $aviRelPaths.Contains($mpgWithoutExt)
+}
+
+foreach ($asset in $includedAssets) {
+    $relativePath = $asset.FullName.Substring($assetsSrc.Length).TrimStart('\', '/')
+    $targetPath = Join-Path $stagedAssets $relativePath
+    $targetDir = Split-Path -Parent $targetPath
+    if (-not (Test-Path $targetDir)) {
+        New-Item -ItemType Directory -Path $targetDir | Out-Null
+    }
+    Copy-Item -LiteralPath $asset.FullName -Destination $targetPath -Force
+}
+
+Write-Host ("ASSET_STAGING: included={0} | from={1}" -f $includedAssets.Count, $assetsSrc)
+
 $addData = @(
-    '--add-data', "$assetsSrc;src\\choplifter\\assets"
+    '--add-data', "$stagedAssets;src\\choplifter\\assets"
 )
 
 & $python -m PyInstaller `
