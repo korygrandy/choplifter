@@ -55,13 +55,13 @@ from .app.cutscenes import (
     update_mission_cutscene,
     skip_mission_cutscene,
 )
-import src.choplifter.app.cutscene_config as cutscene_config
 from .app.state import CutsceneState, IntroCutsceneState, MissionCutsceneState
 from .app.input import get_active_joystick, read_gamepad
-from .app.feedback import ScreenShakeState, consume_mission_feedback, rough_landing_feedback, update_screenshake_target
+from .app.feedback import ScreenShakeState, rough_landing_feedback, update_screenshake_target
 from .app.flares import FlareState, reset_flares, try_start_flare_salvo, update_flares
 from .app.gamepads import init_connected_joysticks, handle_joy_device_added, handle_joy_device_removed
 from .app.toast import ToastState
+from .app.ui_constants import MISSION_END_RETURN_DELAY_S, PAUSED_MENU_HINT
 from .app.session import create_mission_and_helicopter
 from .app.flow import apply_mission_preview, reset_game
 from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapshot
@@ -69,13 +69,12 @@ from .app.accessibility_toggles import toggle_particles, toggle_flashes, toggle_
 from .app.doors import toggle_doors_with_logging
 from .app.runtime_state import GameRuntimeState
 from .app.game_update import (
-    apply_playing_stat_events_feedback,
     build_helicopter_input,
-    collect_playing_stat_events,
-    resolve_playing_mission_end_transition,
-    step_playing_helicopter,
+    run_playing_fixed_step,
 )
 from .app.mode_update import resolve_post_frame_mode_transitions
+from .app.frame_update import update_weather_effects, compute_camera_x
+from .app.frame_render import draw_mode_overlays, draw_playing_hud_and_overlays, draw_weather_particles, render_frame_post_fx
 from .app.event_loop import (
     handle_debug_weather_keydown,
     handle_gamepad_pause_button,
@@ -829,8 +828,8 @@ def run() -> None:
 
         while accumulator >= tick.dt:
             if mode == "playing":
-                update_flares(flares, mission=mission, helicopter=helicopter, dt=tick.dt)
-                heli_step = step_playing_helicopter(
+                playing_step = run_playing_fixed_step(
+                    mode=mode,
                     mission=mission,
                     helicopter=helicopter,
                     helicopter_input=helicopter_input,
@@ -838,92 +837,32 @@ def run() -> None:
                     physics=physics,
                     heli_settings=heli_settings,
                     audio=audio,
-                    update_helicopter_fn=update_helicopter,
-                )
-                if heli_step.landed:
-                    hostage_crush_check_logged(
-                        mission,
-                        helicopter,
-                        heli_step.landing_vy,
-                        safe_landing_vy=physics.safe_landing_vy,
-                        logger=logger,
-                    )
-
-                    # Cinematic feedback on rough landings.
-                    rough_landing_feedback(
-                        state=screenshake,
-                        landing_vy=heli_step.landing_vy,
-                        safe_landing_vy=float(physics.safe_landing_vy),
-                        invuln_seconds=float(mission.invuln_seconds),
-                        ended=bool(mission.ended),
-                        audio=audio,
-                        screenshake_enabled=screenshake_enabled,
-                    )
-                update_mission(mission, helicopter, tick.dt, heli_settings, logger=logger)
-
-                playing_end = resolve_playing_mission_end_transition(
-                    mission_ended=bool(mission.ended),
-                    sentiment=float(mission.sentiment),
-                    mission_end_delay_s=5.0,
-                )
-                if playing_end.ended:
-                    if playing_end.campaign_sentiment is not None:
-                        campaign_sentiment = playing_end.campaign_sentiment
-                    # Stop chopper warning beeps immediately on mission end.
-                    audio.stop_chopper_warning_beeps()
-                    if playing_end.next_mode is not None:
-                        mode = playing_end.next_mode
-                    if playing_end.next_mission_end_return_seconds is not None:
-                        runtime.mission_end_return_seconds = playing_end.next_mission_end_return_seconds
-                    if playing_end.toast_message:
-                        set_toast(playing_end.toast_message)
-                    continue
-
-                # Consume cinematic feedback impulses produced by mission damage events.
-                consume_mission_feedback(
-                    state=screenshake,
-                    mission=mission,
-                    audio=audio,
+                    flares=flares,
+                    screenshake=screenshake,
                     screenshake_enabled=screenshake_enabled,
-                )
-
-                helicopter.damage_flash_seconds = max(0.0, helicopter.damage_flash_seconds - tick.dt)
-
-                stat_events = collect_playing_stat_events(
-                    mission=mission,
+                    logger=logger,
                     prev_stats=prev_stats,
                     boarded_count=boarded_count,
-                )
-                apply_playing_stat_events_feedback(
-                    stat_events=stat_events,
-                    audio=audio,
                     set_toast=set_toast,
+                    mission_end_delay_s=MISSION_END_RETURN_DELAY_S,
+                    campaign_sentiment=campaign_sentiment,
+                    mission_end_return_seconds=runtime.mission_end_return_seconds,
+                    doors_open_before_cutscene=doors_open_before_cutscene,
+                    mission_cutscene_state=cutscenes.mission,
+                    assets_dir=assets_dir,
+                    update_flares_fn=update_flares,
+                    update_helicopter_fn=update_helicopter,
+                    hostage_crush_check_fn=hostage_crush_check_logged,
+                    rough_landing_feedback_fn=rough_landing_feedback,
+                    update_mission_fn=update_mission,
+                    start_mission_cutscene_fn=start_mission_cutscene,
                 )
-
-                # One-shot hostage rescue cutscene when the first 16 hostages are onboard.
-                if (
-                    stat_events.boarded_now >= cutscene_config.HOSTAGE_RESCUE_CUTSCENE_THRESHOLD
-                    and cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID not in mission.cutscenes_played
-                ):
-                    mission.cutscenes_played.add(cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID)
-                    cutscene_path = cutscene_config.get_hostage_rescue_cutscene_path(
-                        getattr(mission, "mission_id", ""),
-                        assets_dir,
-                        cutscene_config.HOSTAGE_RESCUE_CUTSCENE_DEFAULT_ASSET,
-                        cutscene_config.HOSTAGE_RESCUE_CUTSCENE_BY_MISSION,
-                    )
-                    # Save doors state before cutscene
-                    doors_open_before_cutscene = helicopter.doors_open
-                    if start_mission_cutscene(
-                        cutscenes.mission,
-                        cutscene_path=cutscene_path,
-                        logger=logger,
-                        event_id=cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID,
-                        mission_id=str(getattr(mission, "mission_id", "")),
-                    ):
-                        mode = "cutscene"
-                        audio.stop_flying()
-                        audio.log_audio_channel_snapshot(tag="cutscene_enter", logger=logger)
+                mode = playing_step.next_mode
+                campaign_sentiment = playing_step.campaign_sentiment
+                runtime.mission_end_return_seconds = playing_step.mission_end_return_seconds
+                doors_open_before_cutscene = playing_step.doors_open_before_cutscene
+                if playing_step.continue_fixed_loop:
+                    continue
 
             accumulator -= tick.dt
 
@@ -952,31 +891,29 @@ def run() -> None:
         if mode_transition.mission_end_auto_returned:
             set_toast("Mission ended: returning to Mission Select")
 
-        # Visual-only sky particles.
-        if particles_enabled and mode not in ("intro", "cutscene"):
-            sky_smoke.update(frame_dt, width=screen.get_width(), horizon_y=int(heli_settings.ground_y))
-            if weather_mode == "rain":
-                rain.update(frame_dt, area_width=window.width, area_height=window.height)
-            if weather_mode == "fog":
-                fog.update(frame_dt, area_width=window.width, area_height=window.height)
-            if weather_mode == "dust":
-                dust.update(frame_dt, heli_pos=helicopter.pos, heli_vel=helicopter.vel, ground_y=heli_settings.ground_y)
-            if weather_mode == "storm":
-                storm_clouds.update(frame_dt)
-                rain.update(frame_dt, area_width=window.width, area_height=window.height)
-                fog.update(frame_dt, area_width=window.width, area_height=window.height)
-                dust.update(frame_dt, heli_pos=helicopter.pos, heli_vel=helicopter.vel, ground_y=heli_settings.ground_y)
-                lightning.update(frame_dt, helicopter_x=helicopter.pos.x, helicopter_y=helicopter.pos.y)
+        update_weather_effects(
+            particles_enabled=particles_enabled,
+            mode=mode,
+            frame_dt=frame_dt,
+            weather_mode=weather_mode,
+            sky_smoke=sky_smoke,
+            rain=rain,
+            fog=fog,
+            dust=dust,
+            storm_clouds=storm_clouds,
+            lightning=lightning,
+            helicopter=helicopter,
+            heli_settings=heli_settings,
+            screen=screen,
+            window=window,
+        )
 
         # Side-scrolling camera (world x -> screen x).
-        world_w = float(mission.world_width)
-        view_w = float(screen.get_width())
-        max_cam_x = max(0.0, world_w - view_w)
-        camera_x = helicopter.pos.x - view_w * 0.5
-        if camera_x < 0.0:
-            camera_x = 0.0
-        elif camera_x > max_cam_x:
-            camera_x = max_cam_x
+        camera_x = compute_camera_x(
+            world_width=float(mission.world_width),
+            view_width=float(screen.get_width()),
+            helicopter_x=float(helicopter.pos.x),
+        )
 
         # Update audio (ducking is applied via bus volumes).
         audio.set_cinematic_ducked(mode == "cutscene", factor=0.5)
@@ -1007,50 +944,18 @@ def run() -> None:
                 dt=frame_dt,
                 enable_fade=(mode == "select_mission"),
             )
-            if particles_enabled:
-                sky_smoke.draw(target, horizon_y=int(heli_settings.ground_y))
-                if weather_mode == "rain":
-                    for p in rain.particles:
-                        pygame.draw.circle(target, (120, 120, 255), (int(p.pos.x), int(p.pos.y)), 2)
-                if weather_mode == "fog":
-                    for p in fog.particles:
-                        # Draw fog as long, semi-transparent ovals (ellipses)
-                        oval_width = int(p.radius * 2.5)
-                        oval_height = int(p.radius * 0.7)
-                        alpha = 32  # ~12.5% opacity
-                        fog_color = (220, 220, 220, alpha)
-                        oval_surf = pygame.Surface((oval_width, oval_height), pygame.SRCALPHA)
-                        pygame.draw.ellipse(oval_surf, fog_color, (0, 0, oval_width, oval_height))
-                        # Center the oval at the particle position
-                        target.blit(oval_surf, (int(p.pos.x - oval_width // 2), int(p.pos.y - oval_height // 2)))
-
-                    # Add long horizontal fog streaks with variance
-                    streak_count = 4
-                    for i in range(streak_count):
-                        # Randomize streak position and size each frame for subtle movement
-                        area_width = target.get_width()
-                        area_height = int(target.get_height() * 0.7)
-                        streak_x = random.randint(0, area_width - 1)
-                        streak_y = random.randint(int(area_height * 0.2), int(area_height * 0.8))
-                        streak_width = random.randint(int(area_width * 0.25), int(area_width * 0.5))
-                        streak_height = random.randint(10, 18)
-                        streak_alpha = random.randint(22, 38)  # 9-15% opacity
-                        streak_color = (210, 210, 210, streak_alpha)
-                        streak_surf = pygame.Surface((streak_width, streak_height), pygame.SRCALPHA)
-                        pygame.draw.ellipse(streak_surf, streak_color, (0, 0, streak_width, streak_height))
-                        target.blit(streak_surf, (streak_x, streak_y))
-                if weather_mode == "dust":
-                    for p in dust.particles:
-                        pygame.draw.circle(target, (180, 160, 120, 80), (int(p.pos.x), int(p.pos.y)), int(p.radius))
-                if weather_mode == "storm":
-                    # Draw background storm clouds (behind chopper)
-                    storm_clouds.draw(target, layer='back')
-                    for p in rain.particles:
-                        pygame.draw.circle(target, (120, 120, 255), (int(p.pos.x), int(p.pos.y)), 2)
-                    # Draw chopper and mission here (between cloud layers)
-                    lightning.draw(target)
-                    # Draw foreground storm clouds (in front of chopper)
-                    storm_clouds.draw(target, layer='front')
+            draw_weather_particles(
+                target=target,
+                particles_enabled=particles_enabled,
+                weather_mode=weather_mode,
+                sky_smoke=sky_smoke,
+                rain=rain,
+                fog=fog,
+                dust=dust,
+                storm_clouds=storm_clouds,
+                lightning=lightning,
+                ground_y=float(heli_settings.ground_y),
+            )
             draw_ground(target, heli_settings.ground_y)
             draw_mission(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
             draw_flares(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
@@ -1062,68 +967,49 @@ def run() -> None:
                 storm_clouds.draw(target, layer='black')
             # HUD/targeting disabled by lightning
             if mode == "playing":
-                if hud_disabled_timer > 0.0:
-                    # Draw a static overlay to indicate HUD/targeting is disabled
-                    overlay_surf = pygame.Surface(target.get_size(), pygame.SRCALPHA)
-                    overlay_surf.fill((40, 40, 40, 180))
-                    target.blit(overlay_surf, (0, 0))
-                else:
-                    draw_hud(target, mission, helicopter)
-
-                # Draw VIP KIA overlay if timer is active
-                if vip_kia_overlay_timer > 0.0:
-                    vip_kia_overlay_timer -= frame_dt
-                    font = pygame.font.SysFont("consolas", 36)
-                    text = font.render("MISSION FAILED. VIP target KIA.", True, (255, 32, 32))
-                    # Fade in/out: full alpha for most of duration, fade last 0.5s and first 0.5s
-                    if vip_kia_overlay_timer < 0.5:
-                        alpha = int(255 * (vip_kia_overlay_timer / 0.5))
-                    elif vip_kia_overlay_timer > 2.5:
-                        alpha = int(255 * (3.0 - vip_kia_overlay_timer) / 0.5)
-                    else:
-                        alpha = 255
-                    overlay = pygame.Surface((screen.get_width(), 60), pygame.SRCALPHA)
-                    bg_alpha = max(0, min(255, int(alpha * 0.5)))
-                    overlay.fill((0, 0, 0, bg_alpha))
-                    text.set_alpha(alpha)
-                    overlay.blit(text, ((screen.get_width() - text.get_width()) // 2, 10))
-                    target.blit(overlay, (0, screen.get_height() // 2 - 30))
-            elif mode == "select_mission":
-                draw_mission_select_overlay(target, mission_choices, selected_mission_index)
-            elif mode == "select_chopper":
-                draw_chopper_select_overlay(target, chopper_choices, selected_chopper_index)
-            elif mode == "paused":
-                draw_chopper_select_overlay(
-                    target,
-                    chopper_choices,
-                    selected_chopper_index,
-                    title="Paused",
-                    hint="Up/Down choose section • Left/Right chopper • Start/B resume • A select • X particles • Y flashes • RB shake",
-                    show_mute=True,
-                    mute_selected=(runtime.pause_focus == "mute"),
-                    muted=runtime.muted,
-                    show_restart=True,
-                    restart_selected=(runtime.pause_focus == "restart_mission"),
-                    show_restart_game=True,
-                    restart_game_selected=(runtime.pause_focus == "restart_game"),
-                    show_quit=True,
-                    quit_selected=(runtime.pause_focus == "quit"),
-                    quit_confirm=runtime.quit_confirm,
+                vip_kia_overlay_timer = draw_playing_hud_and_overlays(
+                    target=target,
+                    screen=screen,
+                    mission=mission,
+                    helicopter=helicopter,
+                    hud_disabled_timer=hud_disabled_timer,
+                    vip_kia_overlay_timer=vip_kia_overlay_timer,
+                    frame_dt=frame_dt,
+                    draw_hud_fn=draw_hud,
                 )
-            if debug_mode:
-                draw_debug_overlay(target)
-            if toast.message:
-                draw_toast(target, toast.message)
-
-            if mode == "playing" and flashes_enabled:
-                draw_damage_flash(target, helicopter)
-
-        if debug.show_overlay and mode == "playing":
-            overlay.draw(target, helicopter, mission, clock.get_fps())
-
-        if target is not screen:
-            screen.fill((0, 0, 0))
-            screen.blit(target, (shake_x, shake_y))
+            else:
+                draw_mode_overlays(
+                    mode=mode,
+                    target=target,
+                    mission_choices=mission_choices,
+                    selected_mission_index=selected_mission_index,
+                    chopper_choices=chopper_choices,
+                    selected_chopper_index=selected_chopper_index,
+                    pause_focus=runtime.pause_focus,
+                    muted=runtime.muted,
+                    quit_confirm=runtime.quit_confirm,
+                    paused_hint=PAUSED_MENU_HINT,
+                    draw_mission_select_overlay_fn=draw_mission_select_overlay,
+                    draw_chopper_select_overlay_fn=draw_chopper_select_overlay,
+                )
+            render_frame_post_fx(
+                mode=mode,
+                target=target,
+                screen=screen,
+                shake_x=shake_x,
+                shake_y=shake_y,
+                debug_mode=debug_mode,
+                debug_show_overlay=bool(debug.show_overlay),
+                toast_message=str(toast.message or ""),
+                flashes_enabled=bool(flashes_enabled),
+                helicopter=helicopter,
+                mission=mission,
+                overlay=overlay,
+                fps=float(clock.get_fps()),
+                draw_debug_overlay_fn=draw_debug_overlay,
+                draw_toast_fn=draw_toast,
+                draw_damage_flash_fn=draw_damage_flash,
+            )
 
         pygame.display.flip()
 
