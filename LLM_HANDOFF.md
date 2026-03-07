@@ -1,6 +1,6 @@
 # LLM Handoff (Current Engineering State)
 
-Last updated: 2026-03-06
+Last updated: 2026-03-07
 
 This file is the canonical engineering handoff for future AI/dev sessions.
 
@@ -8,7 +8,7 @@ This file is the canonical engineering handoff for future AI/dev sessions.
 
 - Runtime: Python 3.13 + Pygame 2.6.1
 - Entry point: `run.py` -> `src.choplifter.main:run`
-- Branch context: refactor work merged, final cleanup completed, fresh onefile/onedir Windows builds generated.
+- Branch context: refactor follow-up on `feature/missile-flare-diversion` with packaging-doc sync and fresh onefile/onedir rebuild.
 
 ## What Is Implemented
 
@@ -64,27 +64,38 @@ This file is the canonical engineering handoff for future AI/dev sessions.
 
 ### Current Build Size Reality
 
-Onefile size is currently high (roughly 300MB+) due mostly to media and video/runtime dependencies.
+Onefile size is currently high due mostly to media and video/runtime dependencies.
+
+Current measured baseline:
+- `pyinstaller-dist/Choplifter.exe`: about `318.34 MB`
+- `pyinstaller-dist/Choplifter/Choplifter.exe`: about `5.97 MB`
+- `pyinstaller-dist/Choplifter/_internal`: about `427.77 MB`
 
 Main contributors:
 - `src/choplifter/assets/intro.mpg` (very large)
 - `src/choplifter/assets/hostage-rescue-cutscene.mpg`
-- bundled `imageio-ffmpeg` executable
+- bundled `imageio-ffmpeg` executable (about `83.58 MB`)
 - large WAV assets
+
+Current script behavior (`scripts/build_windows_exe.ps1`):
+- Stages runtime assets into `pyinstaller-build/asset-staging` using explicit extension allow-list.
+- Excludes non-runtime source assets (for example `.xcf`) from packaged output.
+- Excludes legacy `.mpg` variants when same-path `.avi` variants exist.
+- Still includes `imageio` / `imageio-ffmpeg` metadata by default.
 
 ## Recommended Next Engineering Steps
 
-1. Re-encode intro/cutscene media to compressed MP4.
-2. Add optional "lite media" packaging mode (skip video dependencies, use cutscene fallback path).
+1. Optimize PNG/JPG assets losslessly and re-measure package outputs.
+2. Add optional "lite media" packaging mode if distribution size needs major further reduction.
 3. Convert heavy WAV effects to OGG where acceptable.
-4. Use explicit asset include lists to avoid shipping non-runtime source assets.
+4. Keep the explicit asset-manifest staging approach and update docs when include rules change.
 
 ## Validation Commands
 
 - Import smoke test:
   - `./.venv/Scripts/python.exe -c "from src.choplifter.main import run; print('import-ok')"`
 - Run game:
-  - `./.venv/Scripts/python.exe run.py`
+  - `& "C:\dev\choplifter\choplifter\.venv\Scripts\python.exe" "C:\dev\choplifter\choplifter\run.py"`
 
 ## Notes for Future Refactors
 

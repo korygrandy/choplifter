@@ -23,13 +23,13 @@ This is the active backlog after the latest mission/main refactor and packaging 
 
 - [x] Reduce onefile build size.
 - [x] Re-encode intro and mission cutscene media to smaller formats (`intro.avi`, `hostage-rescue-cutscene.avi`).
-- [ ] Evaluate a "lite media" build mode that skips video dependencies for smaller distribution builds.
-- [ ] Convert largest WAV effects to compressed audio where quality remains acceptable.
+- [ ] Evaluate a "lite media" build mode that skips video dependencies for smaller distribution builds. (deferred/skipped for now)
+- [ ] Convert largest WAV effects to compressed audio where quality remains acceptable. (deferred/skipped for now; `.ogg` assets already integrated and playing)
 
 ### High Priority Gameplay Requests (Post-Merge)
 
 - [ ] Pause audio behavior: mute all sounds while paused, then restore on unpause unless player mute is enabled.
-	- [ ] On entering `paused`, hard-mute active channels/buses for gameplay + ambience + SFX.
+ 	- [ ] On entering `paused`, hard-mute active channels/buses for gameplay + ambience + SFX.
 	- [ ] On resuming, restore previous volumes only when player mute toggle is OFF.
 	- [ ] Keep audio muted after unpause when player mute toggle is ON.
 	- [ ] Add regression checks for pause via keyboard and gamepad paths.
@@ -50,18 +50,20 @@ This is the active backlog after the latest mission/main refactor and packaging 
 ### Onefile Size Reduction Baseline (Measured)
 
 - Current onefile output:
-	- Latest measured `pyinstaller-dist/Choplifter.exe` is about `227.17 MB`.
+	- Latest measured `pyinstaller-dist/Choplifter.exe` is about `318.34 MB`.
 	- Previous baseline was about `330.56 MB`.
-	- Net reduction so far is about `103.39 MB`.
+	- Net reduction so far is about `12.22 MB`.
 - Largest media payloads in `src/choplifter/assets`:
-	- `intro.avi` (re-encoded, smaller than previous `intro.mpg`).
-	- `hostage-rescue-cutscene.avi` (re-encoded, smaller than previous `hostage-rescue-cutscene.mpg`).
+	- `intro.mpg`.
+	- `hostage-rescue-cutscene.mpg`.
 	- `chopper-flying.wav` about `9.92 MB`
 - Packaging/runtime contributors in onedir:
 	- bundled ffmpeg from `imageio-ffmpeg` about `83.58 MB` (inside `_internal`)
-	- `numpy` about `19.46 MB`
+	- `numpy` about `5.80 MB`
 - Current script behavior:
-	- `scripts/build_windows_exe.ps1` stages assets and skips legacy `intro.mpg`/`hostage-rescue-cutscene.mpg` when `.avi` alternatives are present.
+	- `scripts/build_windows_exe.ps1` stages assets with an explicit include list and excludes non-runtime source files (for example `.xcf`).
+	- Legacy `intro.mpg`/`hostage-rescue-cutscene.mpg` are skipped when `.avi` alternatives are present.
+	- Latest staging stats: `31` staged runtime files from `32` source files (`1` source `.xcf`, `0` staged `.xcf`).
 	- Video dependencies (`imageio`, `imageio-ffmpeg`) are still included by default.
 
 ### Onefile Size Reduction Plan (Highest Impact First)
@@ -69,21 +71,21 @@ This is the active backlog after the latest mission/main refactor and packaging 
 - [x] Re-encode intro and mission cutscene videos first.
 	- `intro.avi` and `hostage-rescue-cutscene.avi` are now used by default.
 	- Legacy `.mpg` variants are excluded from build staging when `.avi` files are present.
-- [ ] Create a "lite media" profile with no video playback dependency.
+- [ ] Create a "lite media" profile with no video playback dependency. (deferred/skipped for now)
 	- Add a build flag in `scripts/build_windows_exe.ps1` (for example `-LiteMedia`).
 	- In lite mode:
 		- Do not include `imageio` / `imageio-ffmpeg` metadata collection.
 		- Do not include large video files in `--add-data`.
 		- Use existing fallback intro/title-card behavior when video is unavailable.
 	- Expected win: roughly `-100 MB` more (ffmpeg + numpy + related hooks), plus skipped video assets.
-- [ ] Compress/convert WAV SFX to OGG.
+- [ ] Compress/convert WAV SFX to OGG. (deferred/skipped for now)
 	- Convert largest SFX (`chopper-flying.wav`, `fighter-jet-flyby.wav`, etc.) to `.ogg`.
 	- Update asset loading in `src/choplifter/audio.py` and `src/choplifter/audio_extra.py` to prefer `.ogg`.
 	- Expected win: usually `-10 MB` to `-25 MB` depending quality settings.
-- [ ] Stop shipping non-runtime source assets.
+- [x] Stop shipping non-runtime source assets.
 	- Exclude files such as `chopper-one.xcf` from packaged output.
 	- Replace broad asset inclusion with explicit include patterns or an asset manifest.
-	- Expected win: small but clean (`~4.44 MB` immediate, plus long-term hygiene).
+	- Completed via explicit manifest staging in `scripts/build_windows_exe.ps1`; staged output now excludes `.xcf` files.
 - [ ] Optimize images losslessly.
 	- Run PNG/JPG optimization pass (for example `oxipng`, `jpegoptim`, or `mozjpeg`).
 	- Expected win: modest (`~2 MB` to `~8 MB`) without visual quality loss.
@@ -93,10 +95,10 @@ This is the active backlog after the latest mission/main refactor and packaging 
 
 ### Recommended Execution Order
 
-1. Add and validate `-LiteMedia` profile (no ffmpeg/imageio + fallback intro).
-2. Optionally convert large SFX to OGG.
-3. Finalize explicit asset manifest/include list.
-4. Build and re-measure onefile and onedir outputs.
+1. [x] Finalize explicit asset manifest/include list.
+2. [x] Build and re-measure onefile and onedir outputs.
+3. [ ] Optimize images losslessly if further reduction is needed.
+4. [ ] Revisit `-LiteMedia` and/or audio conversion pipeline later if distribution size still needs major reduction.
 
 ## Gameplay / UX Improvements
 

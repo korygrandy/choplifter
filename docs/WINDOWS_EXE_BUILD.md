@@ -25,6 +25,19 @@ From repo root:
 - Onedir EXE: `pyinstaller-dist/Choplifter/Choplifter.exe`
 - Onefile EXE: `pyinstaller-dist/Choplifter.exe`
 
+## Asset Manifest Behavior
+
+The build script now stages assets through an explicit runtime manifest before invoking PyInstaller.
+
+- Source: `src/choplifter/assets`
+- Staging folder: `pyinstaller-build/asset-staging`
+- Included extensions: `.png`, `.jpg`, `.jpeg`, `.wav`, `.ogg`, `.avi`, `.mpg`, `.json`
+
+Additional staging rule:
+- If both `.avi` and `.mpg` exist for the same relative media path, the legacy `.mpg` variant is excluded.
+
+This prevents non-runtime source files (for example `.xcf`) from being bundled into distributable EXEs.
+
 ## Signing (Optional but Recommended)
 
 The build script supports signing with `-Sign`.
@@ -46,20 +59,24 @@ Unsigned executables can trigger SmartScreen warnings. Signing plus consistent p
 
 ## Build Size (Important)
 
-Recent onefile builds are large (about 300MB+) primarily due to media and video runtime dependencies.
+Recent onefile builds are large primarily due to media and video runtime dependencies.
+
+Current measured baseline:
+- `pyinstaller-dist/Choplifter.exe`: about `318.34 MB`
+- `pyinstaller-dist/Choplifter/_internal` payload: about `427.77 MB`
 
 Largest contributors typically include:
 - `src/choplifter/assets/intro.mpg`
 - `src/choplifter/assets/hostage-rescue-cutscene.mpg`
-- bundled `imageio-ffmpeg` executable/runtime
+- bundled `imageio-ffmpeg` executable/runtime (about `83.58 MB`)
 - large WAV files
 
 ## Size Reduction Plan
 
-1. Re-encode large MPG files to compressed MP4.
-2. Add optional "lite media" build profile (skip video runtime/deps, use cutscene fallback).
+1. Keep explicit runtime asset staging (already implemented) and monitor staged payload deltas after content changes.
+2. Add optional "lite media" build profile (skip video runtime/deps, use cutscene fallback) if distribution size must drop further.
 3. Convert heavy WAV assets to compressed OGG where acceptable.
-4. Include runtime assets explicitly rather than bundling broad source trees.
+4. Optimize PNG/JPG assets losslessly for small incremental reductions.
 
 ## Troubleshooting
 

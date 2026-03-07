@@ -85,9 +85,18 @@ Outputs:
 - `pyinstaller-dist/Choplifter/Choplifter.exe` (onedir)
 - `pyinstaller-dist/Choplifter.exe` (onefile)
 
+Current packaging behavior:
+- Assets are staged through an explicit runtime manifest at `pyinstaller-build/asset-staging` before PyInstaller runs.
+- Included extensions: `.png`, `.jpg`, `.jpeg`, `.wav`, `.ogg`, `.avi`, `.mpg`, `.json`.
+- Non-runtime source assets (for example `.xcf`) are excluded from staged output.
+- Legacy `.mpg` files are excluded when same-path `.avi` variants exist.
+
 ## Build Size Notes
 
 Current onefile size is primarily driven by media payload and ffmpeg/runtime dependencies.
+
+Latest measured onefile baseline:
+- `pyinstaller-dist/Choplifter.exe`: about `318.34 MB`
 
 Largest contributors are typically:
 - `src/choplifter/assets/intro.mpg`
