@@ -26,6 +26,27 @@ This is the active backlog after the latest mission/main refactor and packaging 
 - [ ] Evaluate a "lite media" build mode that skips video dependencies for smaller distribution builds.
 - [ ] Convert largest WAV effects to compressed audio where quality remains acceptable.
 
+### High Priority Gameplay Requests (Post-Merge)
+
+- [ ] Pause audio behavior: mute all sounds while paused, then restore on unpause unless player mute is enabled.
+	- [ ] On entering `paused`, hard-mute active channels/buses for gameplay + ambience + SFX.
+	- [ ] On resuming, restore previous volumes only when player mute toggle is OFF.
+	- [ ] Keep audio muted after unpause when player mute toggle is ON.
+	- [ ] Add regression checks for pause via keyboard and gamepad paths.
+- [ ] BARAK grounded-hit collision fix.
+	- [ ] Ensure BARAK missiles register damage when chopper is grounded outside the LZ.
+	- [ ] Preserve safe/no-hit behavior only when chopper is grounded inside the LZ.
+	- [ ] Add focused debug logging around grounded collision branch and LZ overlap evaluation.
+	- [ ] Add deterministic tests for airborne, grounded-in-LZ, and grounded-outside-LZ collision cases.
+- [ ] Update LZ texture/art to embassy-style building.
+	- [ ] Replace current LZ visual asset with embassy-style art variant.
+	- [ ] Verify readability at gameplay camera scales and with weather overlays.
+	- [ ] Confirm collision/landing bounds remain unchanged after art swap.
+- [ ] Mission start objective overlay for City Siege.
+	- [ ] On City Siege mission start, show: `Rescue the VIP [VIP indicator] hostage`.
+	- [ ] Use the existing VIP indicator icon/crown style in the overlay text row.
+	- [ ] Ensure overlay timing, fade, and z-order do not conflict with cutscene or HUD.
+
 ### Onefile Size Reduction Baseline (Measured)
 
 - Current onefile output:
