@@ -614,8 +614,12 @@ def run() -> None:
                 just_paused_with_start=just_paused_with_start,
             )
             if toggled_pause_state:
-                audio.play_pause_toggle()
-                audio.set_pause_menu_active(mode == "paused")
+                if mode == "paused":
+                    audio.play_pause_toggle()
+                    audio.set_pause_menu_active(True)
+                else:
+                    audio.set_pause_menu_active(False)
+                    audio.play_pause_toggle()
             if prev_mode == "playing" and mode == "paused":
                 logger.info(f"PAUSE: Gamepad Start pressed, entering pause menu (mode=playing)")
                 runtime.pause_focus = "choppers"
@@ -756,15 +760,15 @@ def run() -> None:
                             play_satellite_reallocating()
                         reset_game_wrapper()
                         mode = "playing"
-                        audio.play_pause_toggle()
                         audio.set_pause_menu_active(False)
+                        audio.play_pause_toggle()
                         runtime.quit_confirm = False
                     elif paused.action == "restart_game":
                         logger.info(f"PAUSE MENU: A pressed on restart_game")
                         mode = "select_mission"
                         set_toast("Restart Game")
-                        audio.play_pause_toggle()
                         audio.set_pause_menu_active(False)
+                        audio.play_pause_toggle()
                         runtime.quit_confirm = False
                     elif paused.action == "toggle_mute":
                         logger.info(f"PAUSE MENU: A pressed on mute (muted={not runtime.muted})")

@@ -673,22 +673,32 @@ class AudioBank:
             # ...existing code...
 
     def _apply_mute_state(self) -> None:
-        # When muted, mute everything.
-        # When pause menu is active, mute gameplay (sfx/music) but keep UI audible.
-        if self._muted:
-            mute_sfx = True
-            mute_ui = True
-            mute_music = True
-        else:
-            mute_sfx = bool(self._pause_menu_active)
-            mute_ui = False
-            mute_music = bool(self._pause_menu_active)
+        # Pause behavior requirement: hard-mute all buses while paused.
+        # User mute always wins and remains muted after unpause.
+        paused = bool(self._pause_menu_active)
+        user_muted = bool(self._muted)
+        mute_sfx = paused or user_muted
+        mute_ui = paused or user_muted
+        mute_music = paused or user_muted
 
         duck = float(self._duck_current_factor) * float(self._cinematic_duck_factor)
         if self.mixer is not None:
-            self.mixer.set_bus_volume("sfx", (0.0 if mute_sfx else 1.0) * duck)
-            self.mixer.set_bus_volume("ui", 0.0 if mute_ui else 1.0)
-            self.mixer.set_bus_volume("music", (0.0 if mute_music else 1.0) * duck)
+            sfx_vol = (0.0 if mute_sfx else 1.0) * duck
+            ui_vol = 0.0 if mute_ui else 1.0
+            music_vol = (0.0 if mute_music else 1.0) * duck
+            self.mixer.set_bus_volume("sfx", sfx_vol)
+            self.mixer.set_bus_volume("ui", ui_vol)
+            self.mixer.set_bus_volume("music", music_vol)
+
+            # Dedicated channels are not part of bus pools, so mirror the same
+            # effective bus volumes explicitly to keep pause/mute behavior coherent.
+            try:
+                pygame.mixer.Channel(DEDICATED_CH_FLYING_LOOP).set_volume(music_vol)
+                pygame.mixer.Channel(DEDICATED_CH_BARAK_DEPLOY).set_volume(sfx_vol)
+                pygame.mixer.Channel(DEDICATED_CH_BARAK_LAUNCH).set_volume(sfx_vol)
+                pygame.mixer.Channel(7).set_volume(sfx_vol)  # warning beeps
+            except Exception:
+                pass
             return
 
         # Fallback: global pause/unpause (not bus-aware).

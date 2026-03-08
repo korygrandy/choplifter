@@ -19,8 +19,8 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
         audio.set_pause_menu_active(True)
     elif mode == "paused" and event.key == pygame.K_ESCAPE:
         mode = "playing"
-        audio.play_pause_toggle()
         audio.set_pause_menu_active(False)
+        audio.play_pause_toggle()
     elif matches_key(event.key, controls.quit):
         # Always return a 9-tuple, using current values for unchanged fields
         return (
@@ -94,14 +94,14 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
             if pause_focus == "restart_mission":
                 reset_game()
                 mode = "playing"
-                audio.play_pause_toggle()
                 audio.set_pause_menu_active(False)
+                audio.play_pause_toggle()
             elif pause_focus == "restart_game":
                 mode = "select_mission"
                 pause_focus = "choppers"
                 set_toast("Restart Game")
-                audio.play_pause_toggle()
                 audio.set_pause_menu_active(False)
+                audio.play_pause_toggle()
             elif pause_focus == "mute":
                 muted = not muted
                 audio.set_muted(muted)
@@ -113,8 +113,8 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
                         logger.info(f"PAUSE MENU: Keyboard pressed on quit, showing confirmation dialog")
             else:
                 mode = "playing"
-                audio.play_pause_toggle()
                 audio.set_pause_menu_active(False)
+                audio.play_pause_toggle()
     elif matches_key(event.key, controls.restart) and mission.ended:
         reset_game()
     elif matches_key(event.key, controls.toggle_debug):

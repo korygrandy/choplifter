@@ -28,11 +28,11 @@ This is the active backlog after the latest mission/main refactor and packaging 
 
 ### High Priority Gameplay Requests (Post-Merge)
 
-- [ ] Pause audio behavior: mute all sounds while paused, then restore on unpause unless player mute is enabled.
- 	- [ ] On entering `paused`, hard-mute active channels/buses for gameplay + ambience + SFX.
-	- [ ] On resuming, restore previous volumes only when player mute toggle is OFF.
-	- [ ] Keep audio muted after unpause when player mute toggle is ON.
-	- [ ] Add regression checks for pause via keyboard and gamepad paths.
+- [x] Pause audio behavior: mute all sounds while paused, then restore on unpause unless player mute is enabled.
+ 	- [x] On entering `paused`, hard-mute active channels/buses for gameplay + ambience + SFX.
+	- [x] On resuming, restore previous volumes only when player mute toggle is OFF.
+	- [x] Keep audio muted after unpause when player mute toggle is ON.
+	- [x] Add regression checks for pause via keyboard and gamepad paths.
 - [ ] BARAK grounded-hit collision fix.
 	- [ ] Ensure BARAK missiles register damage when chopper is grounded outside the LZ.
 	- [ ] Preserve safe/no-hit behavior only when chopper is grounded inside the LZ.
