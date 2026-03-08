@@ -45,12 +45,6 @@ def _update_hostages(
     prev_eligible = getattr(mission, "_prev_fall_eligible", None)
     eligible = helicopter.doors_open and not helicopter.grounded
 
-    # DEBUG: Log eligibility and timer state every frame when doors are open and airborne.
-    if helicopter.doors_open and not helicopter.grounded:
-        logger.debug(
-            f"[FALL DEBUG] eligible={eligible} | vel.x={helicopter.vel.x:.2f} | doors_open_maxvel_timer={mission.doors_open_maxvel_timer:.2f} | now={now:.2f} | next_fall_time={getattr(mission, 'next_fall_time', 0.0):.2f} | elapsed={getattr(mission, 'elapsed_seconds', 0.0):.2f}"
-        )
-
     if eligible:
         mission.doors_open_maxvel_timer += dt
         if mission.doors_open_maxvel_timer > 1.0:

@@ -673,12 +673,12 @@ class AudioBank:
             # ...existing code...
 
     def _apply_mute_state(self) -> None:
-        # Pause behavior requirement: hard-mute all buses while paused.
-        # User mute always wins and remains muted after unpause.
+        # Pause behavior: mute gameplay channels while paused but keep UI cues
+        # audible for pause-menu navigation. User mute always wins.
         paused = bool(self._pause_menu_active)
         user_muted = bool(self._muted)
         mute_sfx = paused or user_muted
-        mute_ui = paused or user_muted
+        mute_ui = user_muted
         mute_music = paused or user_muted
 
         duck = float(self._duck_current_factor) * float(self._cinematic_duck_factor)
