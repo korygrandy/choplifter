@@ -227,10 +227,8 @@ def _update_enemies(
                             )
                         )
                         e.missile_fired = True
-                        # Debug: print/log missile launch event
-                        print("[DEBUG] BARAK MRAD missile launched at pos:", missile_pos)
                         if logger is not None:
-                            logger.info(f"BARAK MRAD missile launched at {missile_pos}")
+                            logger.debug("BARAK MRAD missile launched at %s", missile_pos)
                         # Play Barak MRAD missile launch SFX
                         if hasattr(mission, "audio") and mission.audio is not None:
                             if hasattr(mission.audio, "play_barak_mrad_launch"):

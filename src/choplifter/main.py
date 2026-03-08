@@ -472,9 +472,8 @@ def run() -> None:
                     quit_confirm=runtime.quit_confirm
                 )
             elif event.type == pygame.JOYBUTTONDOWN:
-                # Debug: print which button was pressed
                 if logger:
-                    logger.info(f"GAMEPAD BUTTONDOWN: button={event.button}")
+                    logger.debug("GAMEPAD BUTTONDOWN: button=%s", event.button)
                 # Map gamepad buttons to actions
                 # X (2): fire, B (1): flare, A (0): doors, Y (3): reverse, Back (6): facing, Start (7): pause/restart
                 handled_mission_end, next_mode = handle_mission_end_gamepad_navigation(
@@ -487,7 +486,7 @@ def run() -> None:
                 elif mode == "playing":
                     if event.button == 2:  # X button: fire
                         if logger:
-                            logger.info(f"DEBUG: Fire button pressed (button=2) in playing mode")
+                            logger.debug("Fire button pressed (button=2) in playing mode")
                         if not getattr(mission, "crash_active", False):
                             spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
                             if helicopter.facing is Facing.FORWARD:
@@ -496,7 +495,7 @@ def run() -> None:
                                 audio.play_shoot()
                     elif event.button == 1:  # B button: flare
                         if logger:
-                            logger.info(f"DEBUG: Flare button pressed (button=1) in playing mode")
+                            logger.debug("Flare button pressed (button=1) in playing mode")
                         try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
                     elif event.button == 0:  # A button: doors
                         if not getattr(mission, "crash_active", False):

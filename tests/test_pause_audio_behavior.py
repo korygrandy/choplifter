@@ -69,7 +69,7 @@ class PauseAudioBehaviorTests(unittest.TestCase):
             barak_mrad_launch=None,
         )
 
-    def test_pause_menu_hard_mutes_all_buses(self) -> None:
+    def test_pause_menu_mutes_gameplay_buses_but_keeps_ui(self) -> None:
         mixer = _RecordingMixer()
         bank = self._make_bank(mixer)
 
@@ -77,7 +77,7 @@ class PauseAudioBehaviorTests(unittest.TestCase):
 
         self.assertEqual(
             mixer.calls[-3:],
-            [("sfx", 0.0), ("ui", 0.0), ("music", 0.0)],
+            [("sfx", 0.0), ("ui", 1.0), ("music", 0.0)],
         )
 
     def test_unpause_respects_user_mute(self) -> None:

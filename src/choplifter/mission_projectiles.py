@@ -6,7 +6,7 @@ from typing import Callable
 
 from . import haptics
 from .game_types import EnemyKind, HostageState, ProjectileKind
-from .helicopter import Helicopter
+from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
 from .mission_helpers import (
     _hits_circle,
@@ -16,6 +16,27 @@ from .mission_helpers import (
 )
 from .mission_state import MissionState
 from .settings import HelicopterSettings
+
+
+def _barak_should_apply_damage(*, grounded: bool, in_lz: bool) -> bool:
+    """BARAK missiles are safe only while grounded inside the LZ/base zone."""
+    return not (grounded and in_lz)
+
+
+def _barak_ground_impact_can_damage(*, grounded: bool, in_lz: bool, impact_hits_helicopter: bool) -> bool:
+    """Grounded-outside-LZ fallback: near-ground missile impacts can still damage."""
+    return bool(grounded and impact_hits_helicopter and (not in_lz))
+
+
+def _barak_target_point(helicopter: Helicopter) -> Vec2:
+    """Preferred BARAK impact point: front-mid section of the helicopter nose."""
+    if helicopter.facing is Facing.RIGHT:
+        x_off = 32.0
+    elif helicopter.facing is Facing.LEFT:
+        x_off = -32.0
+    else:
+        x_off = 10.0
+    return Vec2(helicopter.pos.x + x_off, helicopter.pos.y + 2.0)
 
 
 def _update_projectiles(
@@ -74,8 +95,9 @@ def _update_projectiles(
                     p.current_angle = start_angle + (end_angle - start_angle) * p.rotation_progress
                     p.vel = Vec2(0.0, 0.0)
             elif p.missile_state == "homing":
-                dx = helicopter.pos.x - p.pos.x
-                dy = (helicopter.pos.y + 24.0) - p.pos.y
+                target = _barak_target_point(helicopter)
+                dx = target.x - p.pos.x
+                dy = target.y - p.pos.y
                 angle = math.atan2(dy, dx)
                 speed = 360.0 * 3.0
                 p.vel = Vec2(math.cos(angle) * speed, math.sin(angle) * speed)
@@ -108,18 +130,36 @@ def _update_projectiles(
 
         # Helicopter collision (enemy projectiles only).
         if p.kind in (ProjectileKind.ENEMY_BULLET, ProjectileKind.ENEMY_ARTILLERY):
-            if _hits_circle(p.pos, helicopter.pos, radius=26.0):
+            barak_target = _barak_target_point(helicopter) if getattr(p, "is_barak_missile", False) else helicopter.pos
+            hit_radius = 22.0 if getattr(p, "is_barak_missile", False) else 26.0
+            if _hits_circle(p.pos, barak_target, radius=hit_radius):
                 if getattr(p, "is_barak_missile", False):
-                    mission.explosions.emit_fire_plume(p.pos, strength=1.0)
-                    mission.explosions.emit_explosion(p.pos, strength=0.85)
-                    mission.impact_sparks.emit_hit(p.pos, p.vel, strength=1.35)
-                    mission.burning.add_site(p.pos, intensity=0.55)
-                    damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
+                    in_lz = bool(mission.base.contains_point(helicopter.pos))
+                    apply_damage = _barak_should_apply_damage(
+                        grounded=bool(helicopter.grounded),
+                        in_lz=in_lz,
+                    )
+                    if logger is not None:
+                        logger.debug(
+                            "BARAK_COLLISION: mode=direct_hit grounded=%s in_lz=%s apply_damage=%s target=(%.1f,%.1f)",
+                            bool(helicopter.grounded),
+                            in_lz,
+                            apply_damage,
+                            barak_target.x,
+                            barak_target.y,
+                        )
+                    mission.explosions.emit_fire_plume(barak_target, strength=1.0)
+                    mission.explosions.emit_explosion(barak_target, strength=0.85)
+                    mission.impact_sparks.emit_hit(barak_target, p.vel, strength=1.35)
+                    mission.burning.add_site(barak_target, intensity=0.55)
+                    if apply_damage:
+                        damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
                 elif p.kind is ProjectileKind.ENEMY_ARTILLERY:
                     mission.stats.artillery_hits += 1
                     mission.impact_sparks.emit_hit(p.pos, p.vel, strength=1.25)
                     damage_helicopter(mission, helicopter, 10.0, logger, source="ARTILLERY")
                 else:
+                    mission.impact_sparks.emit_hit(p.pos, p.vel, strength=0.95)
                     damage_helicopter(mission, helicopter, 10.0, logger, source="ENEMY_BULLET")
                 p.alive = False
                 continue
@@ -127,10 +167,31 @@ def _update_projectiles(
         # Ground collision.
         if p.pos.y >= heli.ground_y - 6.0:
             if getattr(p, "is_barak_missile", False):
-                mission.explosions.emit_fire_plume(p.pos, strength=0.92)
-                mission.explosions.emit_explosion(p.pos, strength=0.72)
-                mission.impact_sparks.emit_hit(p.pos, p.vel, strength=1.20)
-                mission.burning.add_site(p.pos, intensity=0.40)
+                in_lz = bool(mission.base.contains_point(helicopter.pos))
+                barak_target = _barak_target_point(helicopter)
+                near_ground_impact = _hits_circle(p.pos, barak_target, radius=36.0)
+                apply_damage = _barak_ground_impact_can_damage(
+                    grounded=bool(helicopter.grounded),
+                    in_lz=in_lz,
+                    impact_hits_helicopter=near_ground_impact,
+                )
+                impact_pos = barak_target if apply_damage else p.pos
+                if logger is not None:
+                    logger.debug(
+                        "BARAK_COLLISION: mode=ground_impact grounded=%s in_lz=%s near=%s apply_damage=%s target=(%.1f,%.1f)",
+                        bool(helicopter.grounded),
+                        in_lz,
+                        near_ground_impact,
+                        apply_damage,
+                        barak_target.x,
+                        barak_target.y,
+                    )
+                mission.explosions.emit_fire_plume(impact_pos, strength=0.92)
+                mission.explosions.emit_explosion(impact_pos, strength=0.72)
+                mission.impact_sparks.emit_hit(impact_pos, p.vel, strength=1.20)
+                mission.burning.add_site(impact_pos, intensity=0.40)
+                if apply_damage:
+                    damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
             elif p.kind is ProjectileKind.BOMB:
                 _bomb_explode(mission, p.pos, logger)
             p.alive = False
