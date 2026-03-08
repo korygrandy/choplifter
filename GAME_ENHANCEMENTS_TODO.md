@@ -105,7 +105,7 @@ This is the active backlog after the latest mission/main refactor and packaging 
 ## Gameplay / UX Improvements
 
 - [ ] Rescue readability polish (boarding feedback, grounded/doors clarity).
-	- [ ] Define boarding UX states (`approaching`, `boarding`, `boarded`, `blocked`).
+	- [x] Define boarding UX states (`approaching`, `boarding`, `boarded`, `blocked`).
 	- [x] Add clear boardability indicator when helicopter is in valid pickup conditions.
 	- [x] Add outcome toasts for blocked boarding reasons (`Too high`, `Too fast`, `Doors closed`, `Not grounded`).
 	- [x] Add/confirm grounded-state indicator in HUD.

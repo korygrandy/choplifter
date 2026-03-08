@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
+from ..app.boarding_status import compute_boarding_ux_status
 from ..game_types import HostageState
 from ..helicopter import Helicopter
 
@@ -339,28 +340,13 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
     font = _HUD_FONT
     small = _HUD_SMALL_FONT
 
-    boarded = sum(1 for h in mission.hostages if h.state is HostageState.BOARDED)
+    boarding_ux = compute_boarding_ux_status(mission, helicopter)
+    boarded = boarding_ux.boarded
     saved = mission.stats.saved
     doors_state = "OPEN" if helicopter.doors_open else "CLOSED"
     grounded_state = "YES" if helicopter.grounded else "NO"
     rescue_ready = "READY" if helicopter.grounded and helicopter.doors_open else "NOT READY"
-    nearby_boardable = sum(
-        1
-        for h in mission.hostages
-        if h.state in (HostageState.WAITING, HostageState.MOVING_TO_LZ)
-        and abs(h.pos.x - helicopter.pos.x) <= 260.0
-        and abs(h.pos.y - helicopter.pos.y) <= 140.0
-    )
-    if boarded >= 16:
-        boarding_status = "FULL"
-    elif not helicopter.grounded:
-        boarding_status = "BLOCKED: LAND"
-    elif not helicopter.doors_open:
-        boarding_status = "BLOCKED: OPEN DOORS"
-    elif nearby_boardable <= 0:
-        boarding_status = "WAITING: NO HOSTAGES NEAR"
-    else:
-        boarding_status = "AVAILABLE"
+    boarding_status = f"{boarding_ux.state.upper()}: {boarding_ux.detail}"
 
     hud_x = 12
     lives_y = 8
