@@ -51,6 +51,9 @@ class Projectile:
     rotate_dir: int = 0  # +1 for CW, -1 for CCW
     target_angle: float = 0.0  # angle to rotate to (radians)
     current_angle: float = math.pi/2  # vertical up
+    flare_diversion_resolved: bool = False
+    flare_diversion_allowed: bool = False
+    flare_seen_post_liftoff: bool = False
 
 @dataclass
 class Enemy:

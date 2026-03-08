@@ -161,7 +161,7 @@ Ordered from least complex to most complex.
 
 ### 3) Behavioral Logic (State Layer)
 
-- [ ] Missile/flar diversion behavior.
+- [x] Missile/flar diversion behavior.
 	- If flares are active, override BARAK target vector to decoy direction `(0, -1)`.
 	- Normalize naming to `flare` across code/data (keep compatibility aliases if needed).
 	- Define diversion eligibility (range, timing window, missile types).
