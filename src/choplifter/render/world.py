@@ -132,13 +132,15 @@ def _draw_hostages(screen: pygame.Surface, mission: MissionState, *, camera_x: f
             pygame.draw.circle(screen, color, (x, y), 4)
             continue
 
-        # Old style: simple person dot (beige with dark outline), or purple for VIP
+        # Keep VIP marker a clearly filled purple dot that stays readable under effects.
         if getattr(h, "is_vip", False):
-            body_color = (160, 60, 200)  # Purple
+            body_color = (170, 65, 220)
+            pygame.draw.circle(screen, body_color, (x, y), 6)
+            pygame.draw.circle(screen, (25, 25, 25), (x, y), 6, 1)
         else:
             body_color = (245, 235, 210)  # Beige
-        pygame.draw.circle(screen, body_color, (x, y), 5)
-        pygame.draw.circle(screen, (25, 25, 25), (x, y), 5, 1)
+            pygame.draw.circle(screen, body_color, (x, y), 5)
+            pygame.draw.circle(screen, (25, 25, 25), (x, y), 5, 1)
 
         # Tiny accent for EXITING so it's visually distinct.
         if h.state is HostageState.EXITING:
@@ -156,6 +158,7 @@ def _draw_hostages(screen: pygame.Surface, mission: MissionState, *, camera_x: f
 
 
 def _draw_vip_crown(screen: pygame.Surface, x: int, y: int, *, mission_time: float) -> None:
+    # Position crown directly above the VIP circle marker.
     crown_y = y - 12
     alpha = int(127.5 * (math.sin(mission_time * 5.2) + 1.0))
     alpha = max(36, min(255, alpha))
@@ -167,10 +170,7 @@ def _draw_vip_crown(screen: pygame.Surface, x: int, y: int, *, mission_time: flo
     crown.set_alpha(alpha)
     screen.blit(crown, (x - crown.get_width() // 2, crown_y - crown.get_height() // 2))
 
-    # Small halo ring to improve readability over bright backgrounds.
-    halo = pygame.Surface((18, 18), pygame.SRCALPHA)
-    pygame.draw.circle(halo, (255, 235, 140, max(26, alpha // 3)), (9, 9), 7, 2)
-    screen.blit(halo, (x - 9, crown_y - 9))
+
 def toggle_thermal_mode():
     global thermal_mode
     thermal_mode = not thermal_mode

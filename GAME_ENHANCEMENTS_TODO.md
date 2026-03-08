@@ -33,19 +33,19 @@ This is the active backlog after the latest mission/main refactor and packaging 
 	- [x] On resuming, restore previous volumes only when player mute toggle is OFF.
 	- [x] Keep audio muted after unpause when player mute toggle is ON.
 	- [x] Add regression checks for pause via keyboard and gamepad paths.
-- [ ] BARAK grounded-hit collision fix.
-	- [ ] Ensure BARAK missiles register damage when chopper is grounded outside the LZ.
-	- [ ] Preserve safe/no-hit behavior only when chopper is grounded inside the LZ.
-	- [ ] Add focused debug logging around grounded collision branch and LZ overlap evaluation.
-	- [ ] Add deterministic tests for airborne, grounded-in-LZ, and grounded-outside-LZ collision cases.
+- [x] BARAK grounded-hit collision fix.
+	- [x] Ensure BARAK missiles register damage when chopper is grounded outside the LZ.
+	- [x] Preserve safe/no-hit behavior only when chopper is grounded inside the LZ.
+	- [x] Add focused debug logging around grounded collision branch and LZ overlap evaluation.
+	- [x] Add deterministic tests for airborne, grounded-in-LZ, and grounded-outside-LZ collision cases.
 - [ ] Update LZ texture/art to embassy-style building.
 	- [ ] Replace current LZ visual asset with embassy-style art variant.
 	- [ ] Verify readability at gameplay camera scales and with weather overlays.
 	- [ ] Confirm collision/landing bounds remain unchanged after art swap.
-- [ ] Mission start objective overlay for City Siege.
-	- [ ] On City Siege mission start, show: `Rescue the VIP [VIP indicator] hostage`.
-	- [ ] Use the existing VIP indicator icon/crown style in the overlay text row.
-	- [ ] Ensure overlay timing, fade, and z-order do not conflict with cutscene or HUD.
+- [x] Mission start objective overlay for City Siege.
+	- [x] On City Siege mission start, show: `Rescue the VIP [VIP indicator] hostage`.
+	- [x] Use the existing VIP indicator icon/crown style in the overlay text row.
+	- [x] Ensure overlay timing, fade, and z-order do not conflict with cutscene or HUD.
 
 ### Onefile Size Reduction Baseline (Measured)
 

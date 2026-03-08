@@ -68,6 +68,7 @@ from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapsho
 from .app.accessibility_toggles import toggle_particles, toggle_flashes, toggle_screenshake
 from .app.doors import toggle_doors_with_logging
 from .app.runtime_state import GameRuntimeState
+from .app.objective_overlay import get_mission_objective_overlay_duration
 from .app.game_update import (
     build_helicopter_input,
     run_playing_fixed_step,
@@ -97,6 +98,7 @@ def draw_debug_overlay(target):
 def run() -> None:
     vip_kia_overlay_timer = 0.0
     vip_kia_overlay_shown = False
+    city_objective_overlay_timer = 0.0
     from .render.world import toggle_thermal_mode
 
     def set_debug_weather_mode(mode):
@@ -265,6 +267,7 @@ def run() -> None:
         nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_btn_rb_down, prev_btn_lb_down, prev_btn_back_down
+        nonlocal city_objective_overlay_timer
         # Stop chopper warning beeps on game reset
         audio.stop_chopper_warning_beeps()
         mission, helicopter, accumulator, prev_stats = reset_game(
@@ -292,6 +295,7 @@ def run() -> None:
         prev_btn_rb_down = False
         prev_btn_lb_down = False
         prev_btn_back_down = False
+        city_objective_overlay_timer = get_mission_objective_overlay_duration(mission_id=selected_mission_id)
 
     def toggle_particles_wrapper() -> None:
         nonlocal particles_enabled
@@ -970,13 +974,14 @@ def run() -> None:
                 storm_clouds.draw(target, layer='black')
             # HUD/targeting disabled by lightning
             if mode == "playing":
-                vip_kia_overlay_timer = draw_playing_hud_and_overlays(
+                vip_kia_overlay_timer, city_objective_overlay_timer = draw_playing_hud_and_overlays(
                     target=target,
                     screen=screen,
                     mission=mission,
                     helicopter=helicopter,
                     hud_disabled_timer=hud_disabled_timer,
                     vip_kia_overlay_timer=vip_kia_overlay_timer,
+                    city_objective_overlay_timer=city_objective_overlay_timer,
                     frame_dt=frame_dt,
                     draw_hud_fn=draw_hud,
                 )
