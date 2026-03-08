@@ -112,6 +112,7 @@ def _barak_homing_target(
     mission: MissionState,
     missile: object,
     helicopter: Helicopter,
+    dt: float,
 ) -> tuple[Vec2, bool]:
     tuning = mission.tuning
     if not bool(getattr(missile, "flare_seen_post_liftoff", False)):
@@ -130,13 +131,82 @@ def _barak_homing_target(
         missile.flare_diversion_resolved = True
 
     if bool(getattr(missile, "flare_diversion_allowed", False)):
-        # Decoy vector: upward (0,-1) with optional light x-bias toward nearest flare ember.
-        x_bias = 0.0
-        if flare_pos is not None:
-            x_bias = clamp(flare_pos.x - missile.pos.x, -64.0, 64.0)
-        return Vec2(missile.pos.x + x_bias, missile.pos.y - 220.0), True
+        heli_target = _barak_target_point(helicopter)
+
+        if int(getattr(missile, "diversion_miss_side", 0)) == 0:
+            side_hint = (flare_pos.x - heli_target.x) if flare_pos is not None else (missile.pos.x - heli_target.x)
+            missile.diversion_miss_side = 1 if side_hint >= 0.0 else -1
+
+        spin_rate_deg = float(getattr(tuning, "barak_flare_spin_rate_deg", 520.0))
+        missile.diversion_spin_phase = float(getattr(missile, "diversion_spin_phase", 0.0)) + (
+            math.radians(max(0.0, spin_rate_deg)) * max(0.0, dt)
+        )
+
+        near_miss_radius = max(24.0, float(getattr(tuning, "barak_flare_near_miss_radius_px", 34.0)))
+        spin_amp = max(0.0, float(getattr(tuning, "barak_flare_spin_amplitude_px", 10.0)))
+        side = 1.0 if int(getattr(missile, "diversion_miss_side", 1)) >= 0 else -1.0
+        phase = float(getattr(missile, "diversion_spin_phase", 0.0))
+        passed_nose = bool(getattr(missile, "diversion_pass_armed", False))
+
+        if not passed_nose:
+            # Phase 1: sell a near-hit by driving almost through the nose line with small side bias.
+            offset_x = (side * near_miss_radius * 0.55) + (math.cos(phase) * spin_amp * 0.45)
+            offset_y = math.sin(phase) * spin_amp * 0.35
+        else:
+            # Phase 2: after passing the nose, peel away in a wider arc before detonation.
+            offset_x = (side * near_miss_radius * 2.20) + (math.cos(phase) * spin_amp * 1.35)
+            offset_y = (-near_miss_radius * 0.90) + (math.sin(phase) * spin_amp * 1.10)
+        return Vec2(heli_target.x + offset_x, heli_target.y + offset_y), True
 
     return _barak_target_point(helicopter), False
+
+
+def _barak_diversion_collision_target(*, mission: MissionState, missile: object, helicopter: Helicopter) -> Vec2:
+    base = _barak_target_point(helicopter)
+    if not (
+        bool(getattr(missile, "flare_seen_post_liftoff", False))
+        and bool(getattr(missile, "flare_diversion_allowed", False))
+    ):
+        return base
+
+    side = int(getattr(missile, "diversion_miss_side", 0))
+    if side == 0:
+        side = 1 if missile.pos.x >= base.x else -1
+
+    near_miss_radius = max(26.0, float(getattr(mission.tuning, "barak_flare_near_miss_radius_px", 42.0)))
+    # Keep the collision center outside normal direct-hit radius while still looking like a close shave.
+    collision_offset = max(28.0, near_miss_radius * 0.9)
+    return Vec2(base.x + (1.0 if side >= 0 else -1.0) * collision_offset, base.y)
+
+
+def _barak_is_successfully_diverted(missile: object) -> bool:
+    return bool(getattr(missile, "flare_seen_post_liftoff", False)) and bool(
+        getattr(missile, "flare_diversion_allowed", False)
+    )
+
+
+def _barak_should_explode_after_near_miss(
+    *,
+    missile: object,
+    distance_to_nose: float,
+    arm_radius: float,
+    detonate_distance: float,
+) -> bool:
+    armed = bool(getattr(missile, "diversion_pass_armed", False))
+    prev_dist = float(getattr(missile, "diversion_prev_nose_distance", -1.0))
+
+    if (not armed) and distance_to_nose <= arm_radius:
+        missile.diversion_pass_armed = True
+        armed = True
+
+    should_explode = bool(
+        armed
+        and prev_dist >= 0.0
+        and distance_to_nose >= detonate_distance
+        and distance_to_nose > prev_dist + 1.0
+    )
+    missile.diversion_prev_nose_distance = distance_to_nose
+    return should_explode
 
 
 def _update_projectiles(
@@ -202,6 +272,7 @@ def _update_projectiles(
                     mission=mission,
                     missile=p,
                     helicopter=helicopter,
+                    dt=dt,
                 )
                 dx = target.x - p.pos.x
                 dy = target.y - p.pos.y
@@ -222,6 +293,32 @@ def _update_projectiles(
                 if diverted and logger is not None:
                     logger.debug("BARAK_DIVERTED: target=(%.1f, %.1f)", target.x, target.y)
                 p.vel = Vec2(math.cos(p.current_angle) * speed, math.sin(p.current_angle) * speed)
+
+                if diverted:
+                    nose = _barak_target_point(helicopter)
+                    dist_to_nose = math.hypot(p.pos.x - nose.x, p.pos.y - nose.y)
+                    arm_radius = max(
+                        30.0,
+                        float(getattr(mission.tuning, "barak_flare_near_miss_arm_radius_px", 54.0)),
+                    )
+                    detonate_distance = max(
+                        arm_radius + 6.0,
+                        float(getattr(mission.tuning, "barak_flare_post_pass_explode_distance_px", 68.0)),
+                    )
+                    if _barak_should_explode_after_near_miss(
+                        missile=p,
+                        distance_to_nose=dist_to_nose,
+                        arm_radius=arm_radius,
+                        detonate_distance=detonate_distance,
+                    ):
+                        mission.explosions.emit_fire_plume(p.pos, strength=0.78)
+                        mission.explosions.emit_explosion(p.pos, strength=0.64)
+                        mission.impact_sparks.emit_hit(p.pos, p.vel, strength=1.08)
+                        mission.burning.add_site(p.pos, intensity=0.26)
+                        if logger is not None:
+                            logger.debug("BARAK_DIVERTED_NEAR_MISS_DETONATE: dist=%.1f", dist_to_nose)
+                        p.alive = False
+                        continue
 
         # Enemy collision (player projectiles only).
         if p.kind in (ProjectileKind.BULLET, ProjectileKind.BOMB):
@@ -250,18 +347,28 @@ def _update_projectiles(
 
         # Helicopter collision (enemy projectiles only).
         if p.kind in (ProjectileKind.ENEMY_BULLET, ProjectileKind.ENEMY_ARTILLERY):
-            barak_target = _barak_target_point(helicopter) if getattr(p, "is_barak_missile", False) else helicopter.pos
-            hit_radius = 22.0 if getattr(p, "is_barak_missile", False) else 26.0
+            if getattr(p, "is_barak_missile", False):
+                barak_target = _barak_diversion_collision_target(
+                    mission=mission,
+                    missile=p,
+                    helicopter=helicopter,
+                )
+                diverted_collision = _barak_is_successfully_diverted(p)
+                hit_radius = 14.0 if diverted_collision else 22.0
+            else:
+                barak_target = helicopter.pos
+                hit_radius = 26.0
             if _hits_circle(p.pos, barak_target, radius=hit_radius):
                 if getattr(p, "is_barak_missile", False):
                     in_lz = bool(mission.base.contains_point(helicopter.pos))
-                    apply_damage = _barak_should_apply_damage(
+                    apply_damage = (not diverted_collision) and _barak_should_apply_damage(
                         grounded=bool(helicopter.grounded),
                         in_lz=in_lz,
                     )
                     if logger is not None:
                         logger.debug(
-                            "BARAK_COLLISION: mode=direct_hit grounded=%s in_lz=%s apply_damage=%s target=(%.1f,%.1f)",
+                            "BARAK_COLLISION: mode=direct_hit diverted=%s grounded=%s in_lz=%s apply_damage=%s target=(%.1f,%.1f)",
+                            diverted_collision,
                             bool(helicopter.grounded),
                             in_lz,
                             apply_damage,
@@ -288,9 +395,15 @@ def _update_projectiles(
         if p.pos.y >= heli.ground_y - 6.0:
             if getattr(p, "is_barak_missile", False):
                 in_lz = bool(mission.base.contains_point(helicopter.pos))
-                barak_target = _barak_target_point(helicopter)
-                near_ground_impact = _hits_circle(p.pos, barak_target, radius=36.0)
-                apply_damage = _barak_ground_impact_can_damage(
+                barak_target = _barak_diversion_collision_target(
+                    mission=mission,
+                    missile=p,
+                    helicopter=helicopter,
+                )
+                diverted_collision = _barak_is_successfully_diverted(p)
+                near_ground_radius = 22.0 if diverted_collision else 36.0
+                near_ground_impact = _hits_circle(p.pos, barak_target, radius=near_ground_radius)
+                apply_damage = (not diverted_collision) and _barak_ground_impact_can_damage(
                     grounded=bool(helicopter.grounded),
                     in_lz=in_lz,
                     impact_hits_helicopter=near_ground_impact,
@@ -298,7 +411,8 @@ def _update_projectiles(
                 impact_pos = barak_target if apply_damage else p.pos
                 if logger is not None:
                     logger.debug(
-                        "BARAK_COLLISION: mode=ground_impact grounded=%s in_lz=%s near=%s apply_damage=%s target=(%.1f,%.1f)",
+                        "BARAK_COLLISION: mode=ground_impact diverted=%s grounded=%s in_lz=%s near=%s apply_damage=%s target=(%.1f,%.1f)",
+                        diverted_collision,
                         bool(helicopter.grounded),
                         in_lz,
                         near_ground_impact,

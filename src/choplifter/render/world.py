@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from ..game_types import EnemyKind, HostageState, ProjectileKind
+from ..barak_mrad import BARAK_LAUNCHER_VISIBLE_STATES
 from ..mission_helpers import sentiment_band_label, sentiment_contributions
 
 if TYPE_CHECKING:
@@ -437,7 +438,7 @@ def _draw_enemies(screen: pygame.Surface, mission: MissionState, *, camera_x: fl
             screen.blit(img, (x - img_rect.width // 2, y))
 
             # Draw the launcher (rectangle) if deploying or later
-            if getattr(e, "mrad_state", None) in ("deploying", "aiming", "launching", "done"):
+            if getattr(e, "mrad_state", None) in BARAK_LAUNCHER_VISIBLE_STATES:
                 # Launcher base position: on top of vehicle, offset 40px left and 8px up
                 base_x = x - 40
                 base_y = y + 18 - 8 - 10  # raise by 10 pixels

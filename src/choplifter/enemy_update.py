@@ -8,9 +8,33 @@ from .entities import Enemy, Projectile
 from .game_types import EnemyKind, ProjectileKind
 from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
+from .barak_mrad import (
+    BARAK_STATE_DEPLOY,
+    BARAK_STATE_LAUNCH,
+    BARAK_STATE_MOVE,
+    BARAK_STATE_RELOAD,
+    BARAK_STATE_RETRACT,
+)
 from .mission_helpers import _difficulty_scale, _hits_circle, sentiment_progression_pressure_multiplier
 from .mission_state import MissionState
 from .settings import HelicopterSettings
+
+
+def _transition_barak_state(e: Enemy, new_state: str, *, logger: logging.Logger | None, reason: str) -> None:
+    old_state = str(getattr(e, "mrad_state", BARAK_STATE_MOVE))
+    if old_state == new_state:
+        return
+    e.mrad_state = new_state
+    e.mrad_state_seconds = 0.0
+    if logger is not None:
+        logger.debug("BARAK_STATE: %s -> %s (%s)", old_state, new_state, reason)
+
+
+def _emit_barak_transition_fx(mission: MissionState, e: Enemy, *, strength: float) -> None:
+    try:
+        mission.impact_sparks.emit_hit(Vec2(e.pos.x - 32.0, e.pos.y - 26.0), Vec2(0.0, -10.0), strength=strength)
+    except Exception:
+        pass
 
 
 def _update_enemies(
@@ -150,35 +174,50 @@ def _update_enemies(
 
         # --- BARAK MRAD MOVEMENT, DEPLOYMENT, AND AIMING LOGIC ---
         if e.kind is EnemyKind.BARAK_MRAD:
+            e.mrad_state_seconds = float(getattr(e, "mrad_state_seconds", 0.0)) + dt
             if mission.compounds:
                 leftmost = min(mission.compounds, key=lambda c: c.pos.x)
                 target_x = leftmost.pos.x + leftmost.width + 24.0
-                if e.mrad_state == "moving":
+
+                # Fail-safe recovery path in case any state gets stuck.
+                if e.mrad_state_seconds > max(0.5, float(getattr(tuning, "barak_state_fail_safe_s", 8.0))):
+                    if e.mrad_state in (BARAK_STATE_DEPLOY, BARAK_STATE_LAUNCH):
+                        _transition_barak_state(e, BARAK_STATE_RETRACT, logger=logger, reason="fail_safe")
+                    elif e.mrad_state == BARAK_STATE_RETRACT:
+                        _transition_barak_state(e, BARAK_STATE_RELOAD, logger=logger, reason="fail_safe")
+                        e.mrad_reload_seconds = max(0.25, float(getattr(tuning, "barak_reload_seconds", 4.0)))
+                    elif e.mrad_state == BARAK_STATE_RELOAD:
+                        _transition_barak_state(e, BARAK_STATE_MOVE, logger=logger, reason="fail_safe")
+                    else:
+                        _transition_barak_state(e, BARAK_STATE_DEPLOY, logger=logger, reason="fail_safe")
+
+                if e.mrad_state == BARAK_STATE_MOVE:
                     if e.pos.x < target_x:
                         e.pos.x += e.vel.x * dt
                         if e.pos.x >= target_x:
                             e.pos.x = target_x
                             e.vel.x = 0.0
                             e.entered_screen = True
-                            e.mrad_state = "deploying"
+                            _transition_barak_state(e, BARAK_STATE_DEPLOY, logger=logger, reason="arrived")
+                            _emit_barak_transition_fx(mission, e, strength=0.45)
                             if hasattr(mission, "audio") and mission.audio is not None:
                                 if hasattr(mission.audio, "play_barak_mrad_deploy"):
                                     mission.audio.play_barak_mrad_deploy()
                     else:
                         e.vel.x = 0.0
                         e.entered_screen = True
-                        e.mrad_state = "deploying"
+                        _transition_barak_state(e, BARAK_STATE_DEPLOY, logger=logger, reason="already_in_position")
+                        _emit_barak_transition_fx(mission, e, strength=0.45)
                         if hasattr(mission, "audio") and mission.audio is not None:
                             if hasattr(mission.audio, "play_barak_mrad_deploy"):
                                 mission.audio.play_barak_mrad_deploy()
-                elif e.mrad_state == "deploying":
-                    # Animate launcher_angle from 0 (horizontal) to pi/2 (vertical)
-                    deploy_speed = 1.5  # radians/sec
-                    ext_speed = 1.2  # extension per second
+                elif e.mrad_state == BARAK_STATE_DEPLOY:
+                    # Synchronize rotation and extension to full launch posture.
+                    deploy_speed = float(getattr(tuning, "barak_deploy_angle_speed_rad_s", 1.5))
+                    ext_speed = float(getattr(tuning, "barak_deploy_extension_speed_s", 1.2))
                     target_angle = math.pi / 2
                     angle_done = False
                     ext_done = False
-                    # Animate angle
                     if abs(e.launcher_angle - target_angle) < deploy_speed * dt:
                         e.launcher_angle = target_angle
                         angle_done = True
@@ -194,22 +233,17 @@ def _update_enemies(
                             e.launcher_ext_progress = 1.0
                     else:
                         ext_done = True
-                    # Only finish deploying when both are done
                     if angle_done and ext_done:
-                        e.mrad_state = "launching"
-                elif e.mrad_state == "launching":
-                    # Missile launch logic: spawn missile once, play launch animation, then transition to 'done'
+                        _transition_barak_state(e, BARAK_STATE_LAUNCH, logger=logger, reason="deploy_complete")
+                elif e.mrad_state == BARAK_STATE_LAUNCH:
                     e.launcher_ext_progress = 1.0
                     if not e.missile_fired:
-                        # Missile launches straight up from the tip of the launcher
-                        # Calculate missile start position based on launcher geometry
                         launcher_length = 44.0 * e.launcher_ext_progress
-                        # Offset missile 30px left relative to BARAK sprite
                         missile_pos = Vec2(
                             e.pos.x - 40 + launcher_length * math.cos(e.launcher_angle),
                             e.pos.y - 28.0 - launcher_length * math.sin(e.launcher_angle),
                         )
-                        missile_angle = e.launcher_angle  # Should be vertical (pi/2)
+                        missile_angle = e.launcher_angle
                         missile_speed = 120.0
                         missile_vel = Vec2(
                             math.cos(missile_angle) * missile_speed,
@@ -233,8 +267,35 @@ def _update_enemies(
                         if hasattr(mission, "audio") and mission.audio is not None:
                             if hasattr(mission.audio, "play_barak_mrad_launch"):
                                 mission.audio.play_barak_mrad_launch()
-                    # After firing, transition to 'done' state
-                    e.mrad_state = "done"
+                    _transition_barak_state(e, BARAK_STATE_RETRACT, logger=logger, reason="launch_complete")
+                    _emit_barak_transition_fx(mission, e, strength=0.52)
+                elif e.mrad_state == BARAK_STATE_RETRACT:
+                    retract_angle_speed = float(getattr(tuning, "barak_retract_angle_speed_rad_s", 1.9))
+                    retract_ext_speed = float(getattr(tuning, "barak_retract_extension_speed_s", 1.4))
+                    target_angle = 0.0
+                    angle_done = False
+                    if abs(e.launcher_angle - target_angle) <= retract_angle_speed * dt:
+                        e.launcher_angle = target_angle
+                        angle_done = True
+                    elif e.launcher_angle < target_angle:
+                        e.launcher_angle += retract_angle_speed * dt
+                    else:
+                        e.launcher_angle -= retract_angle_speed * dt
+
+                    if e.launcher_ext_progress > 0.0:
+                        e.launcher_ext_progress = max(0.0, e.launcher_ext_progress - retract_ext_speed * dt)
+
+                    if angle_done and e.launcher_ext_progress <= 0.0:
+                        e.missile_fired = False
+                        e.mrad_reload_seconds = max(0.25, float(getattr(tuning, "barak_reload_seconds", 4.0)))
+                        _transition_barak_state(e, BARAK_STATE_RELOAD, logger=logger, reason="retract_complete")
+                        _emit_barak_transition_fx(mission, e, strength=0.30)
+                elif e.mrad_state == BARAK_STATE_RELOAD:
+                    e.launcher_angle = 0.0
+                    e.launcher_ext_progress = 0.0
+                    e.mrad_reload_seconds = max(0.0, float(getattr(e, "mrad_reload_seconds", 0.0)) - dt)
+                    if e.mrad_reload_seconds <= 0.0:
+                        _transition_barak_state(e, BARAK_STATE_MOVE, logger=logger, reason="reload_complete")
             continue
 
         if e.kind is EnemyKind.TANK:

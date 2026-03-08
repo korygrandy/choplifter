@@ -1,6 +1,7 @@
 from .app.keyboard_events import handle_keyboard_event
 
 from .game_types import EnemyKind
+from .barak_mrad import BARAK_STATE_DEPLOY
 
 from pathlib import Path
 import random
@@ -376,7 +377,9 @@ def run() -> None:
                         # Stop vehicle
                         e.vel.x = 0.0
                         # Begin missile silo deploy sequence
-                        e.mrad_state = "deploying"
+                        e.mrad_state = BARAK_STATE_DEPLOY
+                        e.mrad_state_seconds = 0.0
+                        e.mrad_reload_seconds = 0.0
                         e.launcher_angle = 0.0  # Start horizontal
                         e.launcher_ext_progress = 0.0  # Start retracted
                         e.missile_fired = False  # Allow re-trigger

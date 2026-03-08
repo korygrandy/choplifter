@@ -32,6 +32,20 @@ class DebugOverlay:
         tank_tell = THREAT_TELL_MATRIX[EnemyKind.TANK]
         jet_tell = THREAT_TELL_MATRIX[EnemyKind.JET]
         mine_tell = THREAT_TELL_MATRIX[EnemyKind.AIR_MINE]
+        barak = next((e for e in mission.enemies if e.kind is EnemyKind.BARAK_MRAD and e.alive), None)
+        if barak is None:
+            barak_state_line = "barak: none"
+            barak_pose_line = "barak_pose: --"
+        else:
+            barak_state_line = (
+                f"barak: {getattr(barak, 'mrad_state', '?')} "
+                f"t={float(getattr(barak, 'mrad_state_seconds', 0.0)):0.1f}s "
+                f"reload={float(getattr(barak, 'mrad_reload_seconds', 0.0)):0.1f}s"
+            )
+            barak_pose_line = (
+                f"barak_pose: ang={float(getattr(barak, 'launcher_angle', 0.0)):0.2f} "
+                f"ext={float(getattr(barak, 'launcher_ext_progress', 0.0)):0.2f}"
+            )
 
         lines = [
             f"FPS: {fps:0.1f}",
@@ -56,6 +70,8 @@ class DebugOverlay:
             f"matrix[tank]: lead={tank_tell.lead_time_s:0.2f}s range={int(tank_tell.effective_range_px)}px",
             f"matrix[jet ]: lead={jet_tell.lead_time_s:0.2f}s range={int(jet_tell.effective_range_px)}px",
             f"matrix[mine]: lead={mine_tell.lead_time_s:0.2f}s range={int(mine_tell.effective_range_px)}px",
+            barak_state_line,
+            barak_pose_line,
             f"compounds: {compound_states}",
         ]
 

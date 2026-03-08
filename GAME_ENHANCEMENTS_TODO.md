@@ -171,7 +171,7 @@ Ordered from least complex to most complex.
 	- Handle edge cases (flare expiry mid-flight, no active flare, multiple flares).
 	- Add tunables (chance, radius, max turn rate, flare lifetime).
 	- Add tests for diversion success/failure branches.
-- [ ] MRAP and launcher state cycle.
+- [x] MRAP and launcher state cycle.
 	- Implement `Retract -> Move -> Deploy` state machine using timer/state variables.
 	- Formalize full cycle (`Retract -> Move -> Deploy -> Launch -> Retract`).
 	- Replace ad-hoc string transitions with explicit state constants.
