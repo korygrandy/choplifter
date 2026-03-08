@@ -15,7 +15,7 @@ from src.choplifter.game_types import EnemyKind
 from src.choplifter.helicopter import Facing
 from src.choplifter.math2d import Vec2
 from src.choplifter.mission_configs import MissionTuning
-from src.choplifter.enemy_update import _update_enemies
+from src.choplifter.enemy_update import _barak_next_reload_seconds, _update_enemies
 
 
 class _DummyAudio:
@@ -36,6 +36,13 @@ class _DummySparks:
 
 
 class BarakMradStateCycleTests(unittest.TestCase):
+    def test_next_reload_seconds_within_configured_bounds(self) -> None:
+        tuning = MissionTuning(barak_reload_min_seconds=4.0, barak_reload_max_seconds=6.0)
+        for _ in range(64):
+            value = _barak_next_reload_seconds(tuning)
+            self.assertGreaterEqual(value, 4.0)
+            self.assertLessEqual(value, 6.0)
+
     def _build_mission(self, tuning: MissionTuning, enemy: Enemy) -> SimpleNamespace:
         return SimpleNamespace(
             sentiment=50.0,
@@ -65,6 +72,8 @@ class BarakMradStateCycleTests(unittest.TestCase):
     def test_cycle_transitions_retract_move_deploy_launch_retract_reload(self) -> None:
         tuning = MissionTuning(
             barak_reload_seconds=0.4,
+            barak_reload_min_seconds=0.4,
+            barak_reload_max_seconds=0.4,
             barak_state_fail_safe_s=6.0,
             barak_deploy_angle_speed_rad_s=3.0,
             barak_deploy_extension_speed_s=3.0,

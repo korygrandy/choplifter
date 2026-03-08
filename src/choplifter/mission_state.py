@@ -5,6 +5,7 @@ from .fx_particles import DustStormSystem, ExplosionSystem, FlareSystem, Helicop
 from .game_types import HostageState, EnemyKind, ProjectileKind
 from .math2d import Vec2
 from .mission_configs import MissionTuning, LevelConfig
+from .supply_drops import SupplyDropManager
 from .settings import HelicopterSettings
 from .helicopter import Helicopter, Facing
 
@@ -31,6 +32,9 @@ class MissionState:
     heli_damage_fx: HelicopterDamageFxSystem = field(default_factory=HelicopterDamageFxSystem)
     explosions: ExplosionSystem = field(default_factory=ExplosionSystem)
     flares: FlareSystem = field(default_factory=FlareSystem)
+    supply_drops: SupplyDropManager = field(default_factory=SupplyDropManager)
+    munitions_bullets: int = 240
+    munitions_bombs: int = 24
     elapsed_seconds: float = 0.0
     pending_air_mine_pos: Vec2 | None = None
     pending_air_mine_seconds: float = 0.0

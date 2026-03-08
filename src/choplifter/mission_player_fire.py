@@ -7,12 +7,16 @@ from .game_types import ProjectileKind
 from .helicopter import Facing, Helicopter
 from .math2d import Vec2
 from .mission_state import MissionState
+from .supply_drops import consume_player_weapon
 
 
-def spawn_projectile_from_helicopter(mission: MissionState, helicopter: Helicopter) -> None:
+def spawn_projectile_from_helicopter(mission: MissionState, helicopter: Helicopter) -> bool:
     # Minimal: side-facing shoots bullets, forward-facing drops a bomb.
     if mission.ended:
-        return
+        return False
+
+    if not consume_player_weapon(mission, facing_name=helicopter.facing.name):
+        return False
 
     if helicopter.facing is Facing.FORWARD:
         mission.projectiles.append(
@@ -23,7 +27,7 @@ def spawn_projectile_from_helicopter(mission: MissionState, helicopter: Helicopt
                 ttl=2.5,
             )
         )
-        return
+        return True
 
     direction = -1.0 if helicopter.facing is Facing.LEFT else 1.0
     mission.projectiles.append(
@@ -34,6 +38,7 @@ def spawn_projectile_from_helicopter(mission: MissionState, helicopter: Helicopt
             ttl=1.2,
         )
     )
+    return True
 
 
 def spawn_projectile_from_helicopter_logged(
@@ -41,8 +46,11 @@ def spawn_projectile_from_helicopter_logged(
     helicopter: Helicopter,
     logger: logging.Logger | None,
 ) -> None:
-    spawn_projectile_from_helicopter(mission, helicopter)
+    fired = spawn_projectile_from_helicopter(mission, helicopter)
     if logger is None:
+        return
+    if not fired:
+        logger.info("Fire: DRY")
         return
     if helicopter.facing is Facing.FORWARD:
         logger.info("Fire: BOMB")
