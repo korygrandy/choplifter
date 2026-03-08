@@ -4,6 +4,7 @@ import logging
 import random
 from typing import Callable
 
+from .boarding_telemetry import BOARDING_FAIL_DOORS_CLOSED, BOARDING_FAIL_FULL, BOARDING_FAIL_NOT_GROUNDED, record_boarding_failure
 from .game_types import HostageState
 from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
@@ -176,6 +177,12 @@ def _update_hostages(
 
         if h.state is HostageState.MOVING_TO_LZ:
             if not lz_available:
+                if not helicopter.grounded:
+                    record_boarding_failure(mission, BOARDING_FAIL_NOT_GROUNDED)
+                elif not helicopter.doors_open:
+                    record_boarding_failure(mission, BOARDING_FAIL_DOORS_CLOSED)
+                elif boarded_count_fn(mission) >= capacity:
+                    record_boarding_failure(mission, BOARDING_FAIL_FULL)
                 h.state = HostageState.WAITING
                 h.move_speed = 0.0
                 moving_to_lz = max(0, moving_to_lz - 1)
@@ -201,6 +208,7 @@ def _update_hostages(
                     h.move_speed = 0.0
                     moving_to_lz = max(0, moving_to_lz - 1)
                 else:
+                    record_boarding_failure(mission, BOARDING_FAIL_FULL)
                     h.state = HostageState.WAITING
                     h.move_speed = 0.0
                     moving_to_lz = max(0, moving_to_lz - 1)

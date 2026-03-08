@@ -1,5 +1,7 @@
 from typing import Callable
 
+from ..boarding_telemetry import BOARDING_FAIL_NOT_GROUNDED, record_boarding_failure
+
 
 def _set_toast_debounced(mission, set_toast: Callable[[str], None] | None, message: str, *, cooldown_s: float = 0.65) -> None:
     if set_toast is None or not message:
@@ -28,6 +30,7 @@ def toggle_doors_with_logging(
     if not helicopter.grounded:
         if logger is not None:
             logger.info("DOORS: toggle blocked (not grounded)")
+        record_boarding_failure(mission, BOARDING_FAIL_NOT_GROUNDED)
         _set_toast_debounced(mission, set_toast, "Cannot open doors while airborne")
         return
 

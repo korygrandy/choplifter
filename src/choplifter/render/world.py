@@ -602,11 +602,13 @@ def _draw_end(
 
     # Render debrief stats in a clipped viewport; auto-scroll if content exceeds available height.
     viewport_top = rect.bottom + 21
-    viewport_bottom = max(viewport_top + 40, prompt_rect.top - 10)
+    bottom_inner_padding = 10
+    viewport_bottom = max(viewport_top + 40, prompt_rect.top - bottom_inner_padding)
     viewport_rect = pygame.Rect(20, viewport_top, max(1, screen.get_width() - 40), max(1, viewport_bottom - viewport_top))
 
     line_step = 28
-    content_height = len(lines) * line_step
+    top_inner_padding = 10
+    content_height = top_inner_padding + len(lines) * line_step + bottom_inner_padding
     max_scroll = max(0.0, float(content_height - viewport_rect.height))
 
     scroll_offset = 0.0
@@ -629,7 +631,7 @@ def _draw_end(
 
     previous_clip = screen.get_clip()
     screen.set_clip(viewport_rect)
-    y = viewport_rect.top - int(scroll_offset)
+    y = viewport_rect.top + top_inner_padding + (line_step // 2) - int(scroll_offset)
     for line in lines:
         s = small.render(line, True, (235, 235, 235))
         r = s.get_rect(center=(screen.get_width() // 2, y))
