@@ -6,6 +6,7 @@ from .helicopter import Helicopter
 from .game_types import EnemyKind
 from .mission_helpers import boarded_count
 from .mission_state import MissionState
+from .threat_tells import THREAT_TELL_MATRIX
 
 
 class DebugOverlay:
@@ -28,6 +29,9 @@ class DebugOverlay:
             for e in mission.enemies
             if e.kind is EnemyKind.TANK and float(getattr(e, "muzzle_flash_seconds", 0.0)) > 0.0
         )
+        tank_tell = THREAT_TELL_MATRIX[EnemyKind.TANK]
+        jet_tell = THREAT_TELL_MATRIX[EnemyKind.JET]
+        mine_tell = THREAT_TELL_MATRIX[EnemyKind.AIR_MINE]
 
         lines = [
             f"FPS: {fps:0.1f}",
@@ -49,6 +53,9 @@ class DebugOverlay:
             f"sentiment: {mission.sentiment:0.1f}",
             f"threat_tells: tank={tank_tell_active} flash={tank_flash_active}",
             f"threat_warn: jet={mission.jet_warning_seconds:0.1f}s mine={mission.mine_warning_seconds:0.1f}s",
+            f"matrix[tank]: lead={tank_tell.lead_time_s:0.2f}s range={int(tank_tell.effective_range_px)}px",
+            f"matrix[jet ]: lead={jet_tell.lead_time_s:0.2f}s range={int(jet_tell.effective_range_px)}px",
+            f"matrix[mine]: lead={mine_tell.lead_time_s:0.2f}s range={int(mine_tell.effective_range_px)}px",
             f"compounds: {compound_states}",
         ]
 
