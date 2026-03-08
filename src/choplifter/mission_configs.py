@@ -65,9 +65,12 @@ class MissionTuning:
     # The game randomly mixes a more readable/controlled style with a more chaotic style.
     hostage_controlled_move_speed: float = 40.0
     hostage_controlled_max_moving_to_lz: int = 4
+    hostage_controlled_start_radius: float = 260.0
     hostage_chaotic_move_speed: float = 52.0
     hostage_chaotic_max_moving_to_lz: int = 12
+    hostage_chaotic_start_radius: float = 340.0
     hostage_chaos_probability: float = 0.35
+    hostage_boarding_radius: float = 64.0
 
 
 @dataclass(frozen=True)

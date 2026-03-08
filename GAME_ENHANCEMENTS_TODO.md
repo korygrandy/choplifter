@@ -113,9 +113,9 @@ This is the active backlog after the latest mission/main refactor and packaging 
 	- [x] Add cooldown/debounce for prompt flicker to avoid noisy UI.
 	- [x] Add accessibility pass for color + shape readability.
 	- [x] Add telemetry counters for failed board attempts by reason.
-	- [ ] Tune boarding thresholds after playtest.
-- [ ] Threat readability pass (distinct tells for tanks/jets/mines).
-	- [ ] Create threat tell matrix per enemy (cue, lead time, effective range).
+	- [x] Tune boarding thresholds after playtest.
+- [x] Threat readability pass (distinct tells for tanks/jets/mines).
+	- [x] Create threat tell matrix per enemy (cue, lead time, effective range).
 	- [x] Tanks: add pre-fire turret tell and muzzle flash timing window.
 	- [x] Jets: add early warning cue before attack run.
 	- [x] Mines: add visibility pulse/glint and proximity warning cue.

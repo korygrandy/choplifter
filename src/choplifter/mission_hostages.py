@@ -100,8 +100,8 @@ def _update_hostages(
 
     lz_available = helicopter.grounded and helicopter.doors_open and boarded < capacity
 
-    # Boarding radius around helicopter.
-    load_radius = 58.0
+    # Boarding radius tuned from playtest feedback and exposed via mission tuning.
+    load_radius = max(30.0, float(getattr(mission.tuning, "hostage_boarding_radius", 58.0)))
     load_r2 = load_radius * load_radius
 
     controlled_speed = mission.tuning.hostage_controlled_move_speed
@@ -159,7 +159,11 @@ def _update_hostages(
                 # Mix both behaviors: sometimes a controlled queue, sometimes a chaotic rush.
                 is_chaotic = random.random() < chaos_p
                 cap = chaotic_cap if is_chaotic else controlled_cap
-                start_radius = 320.0 if is_chaotic else 240.0
+                start_radius = (
+                    float(getattr(mission.tuning, "hostage_chaotic_start_radius", 320.0))
+                    if is_chaotic
+                    else float(getattr(mission.tuning, "hostage_controlled_start_radius", 240.0))
+                )
 
                 if moving_to_lz >= cap:
                     continue
