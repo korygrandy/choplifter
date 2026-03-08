@@ -97,9 +97,53 @@ Current script behavior (`scripts/build_windows_exe.ps1`):
 - Run game:
   - `& "C:\dev\choplifter\choplifter\.venv\Scripts\python.exe" "C:\dev\choplifter\choplifter\run.py"`
 
+## Current Work: Airport Special Ops Mission (In Progress)
+
+### Branch: `feature/airport-special-ops-mission`
+
+**Status:** Phase 1 integration complete - base structure and placeholders working
+
+**What's Done:**
+- Mission selection menu includes "Airport Special Ops"
+- Mission config created in `mission_configs.py` with wider world (2800px), adjusted enemy timing
+- Seven new module scaffolds created in `src/choplifter/`:
+  - `bus_ai.py`, `hostage_logic.py`, `enemy_spawns.py`, `mission_tech.py`
+  - `vehicle_assets.py`, `objective_manager.py`, `cutscene_manager.py`
+- Integration into `main.py`:
+  - Imports for all new modules (using `from .module import *`)
+  - Placeholder state variables initialized after mission creation
+  - Conditional update logic in fixed-step loop (currently just `pass` placeholder)
+  - Conditional rendering: `draw_mission()` always runs, then airport placeholders drawn on top
+- Placeholder shapes render at specific world coordinates (x=1200-1320):
+  - Blue rectangle = bus, white circle = hostage, red triangle = enemy
+  - Green square = tech, gold circle = objective, yellow star = cutscene trigger
+- Base game fully functional: helicopter physics, enemies, projectiles, all working
+
+**What's Not Done:**
+- All module logic (bus AI, hostage boarding, enemy spawns, etc.) - just TODOs
+- Actual vehicle sprites/assets
+- Collision detection for bus
+- Damage model for bus
+- New enemy types (UAV, Merkava)
+- Mission Tech repair mechanic
+- Cutscene integration
+- Objective tracking system
+
+**Next Session Should:**
+1. Pick one module to implement first (recommend `bus_ai.py` for visible progress)
+2. Add basic bus movement along a path
+3. Test collision with obstacles
+4. Iterate on one feature at a time
+
+**Testing:**
+- Select "Airport Special Ops" from mission menu
+- Fly helicopter to x=1200-1320 to see placeholders
+- All base game features working (enemies, shooting, compounds, etc.)
+
 ## Notes for Future Refactors
 
 - Keep `mission.py` compatibility exports stable while migrating internals.
 - Prefer small extraction steps with immediate diagnostics and smoke tests.
 - Avoid broad behavior changes during structural refactors.
 - If changing controls or mode flow, update `README.md` and this file in the same change.
+- Airport mission modules use wildcard imports (`from .module import *`) - may need cleanup later.
