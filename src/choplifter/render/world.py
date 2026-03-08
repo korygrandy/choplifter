@@ -597,11 +597,11 @@ def _draw_end(
 
     # Keep restart prompt anchored to the bottom so it stays visible while stats scroll.
     prompt = small.render("Press Enter (or Start) to restart", True, (235, 235, 235))
-    prompt_rect = prompt.get_rect(center=(screen.get_width() // 2, screen.get_height() - 20))
+    prompt_rect = prompt.get_rect(center=(screen.get_width() // 2, screen.get_height() - 10))
     screen.blit(prompt, prompt_rect)
 
     # Render debrief stats in a clipped viewport; auto-scroll if content exceeds available height.
-    viewport_top = rect.bottom + 11
+    viewport_top = rect.bottom + 21
     viewport_bottom = max(viewport_top + 40, prompt_rect.top - 10)
     viewport_rect = pygame.Rect(20, viewport_top, max(1, screen.get_width() - 40), max(1, viewport_bottom - viewport_top))
 

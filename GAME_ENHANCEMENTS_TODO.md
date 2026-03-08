@@ -111,7 +111,7 @@ This is the active backlog after the latest mission/main refactor and packaging 
 	- [x] Add/confirm grounded-state indicator in HUD.
 	- [x] Add/confirm door-state indicator in HUD (`OPEN`/`CLOSED`).
 	- [x] Add cooldown/debounce for prompt flicker to avoid noisy UI.
-	- [ ] Add accessibility pass for color + shape readability.
+	- [x] Add accessibility pass for color + shape readability.
 	- [ ] Add telemetry counters for failed board attempts by reason.
 	- [ ] Tune boarding thresholds after playtest.
 - [ ] Threat readability pass (distinct tells for tanks/jets/mines).

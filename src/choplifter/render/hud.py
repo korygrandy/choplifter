@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
-from ..app.boarding_status import compute_boarding_ux_status
+from ..app.boarding_status import compute_boarding_ux_status, get_boarding_ux_visual
 from ..game_types import HostageState
 from ..helicopter import Helicopter
 
@@ -341,12 +341,14 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
     small = _HUD_SMALL_FONT
 
     boarding_ux = compute_boarding_ux_status(mission, helicopter)
+    boarding_visual = get_boarding_ux_visual(boarding_ux)
     boarded = boarding_ux.boarded
     saved = mission.stats.saved
     doors_state = "OPEN" if helicopter.doors_open else "CLOSED"
     grounded_state = "YES" if helicopter.grounded else "NO"
     rescue_ready = "READY" if helicopter.grounded and helicopter.doors_open else "NOT READY"
     boarding_status = f"{boarding_ux.state.upper()}: {boarding_ux.detail}"
+    boarding_line = f"Boarding: {boarding_visual.symbol} {boarding_status}"
 
     hud_x = 12
     lives_y = 8
@@ -429,7 +431,7 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
             f"Rescue flow: Open compound -> land -> doors (E) -> load {boarded}/16",
             "Unload flow: land at base flag -> doors (E)",
             f"LZ status: {rescue_ready} | Grounded: {grounded_state} | Doors: {doors_state}",
-            f"Boarding: {boarding_status}",
+            boarding_line,
         ]
     else:
         lines = [
@@ -437,7 +439,7 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
             f"Rescue flow: Open compound -> land -> doors (E) -> load {boarded}/16",
             "Unload flow: land at base flag -> doors (E)",
             f"LZ status: {rescue_ready} | Grounded: {grounded_state} | Doors: {doors_state}",
-            f"Boarding: {boarding_status}",
+            boarding_line,
         ]
 
     if mission.invuln_seconds > 0.0:
@@ -458,8 +460,21 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
     x = 12
     y = screen.get_height() - 12 - len(lines) * 20
     for i, line in enumerate(lines):
-        surf = font.render(line, True, (240, 240, 240))
-        screen.blit(surf, (x, y + i * 20))
+        line_y = y + i * 20
+        if line.startswith("Boarding:"):
+            badge = pygame.Rect(x, line_y + 3, 14, 14)
+            pygame.draw.rect(screen, (20, 24, 30), badge, border_radius=3)
+            pygame.draw.rect(screen, boarding_visual.color, badge, 2, border_radius=3)
+            cue = small.render(boarding_visual.symbol, True, boarding_visual.color)
+            cue_x = badge.centerx - cue.get_width() // 2
+            cue_y = badge.centery - cue.get_height() // 2
+            screen.blit(cue, (cue_x, cue_y))
+
+            surf = font.render(line, True, boarding_visual.color)
+            screen.blit(surf, (x + 20, line_y))
+        else:
+            surf = font.render(line, True, (240, 240, 240))
+            screen.blit(surf, (x, line_y))
 
 
 def draw_toast(screen: pygame.Surface, message: str) -> None:
