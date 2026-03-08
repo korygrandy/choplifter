@@ -123,7 +123,7 @@ This is the active backlog after the latest mission/main refactor and packaging 
 	- [x] Add colorblind-safe cue alternatives.
 	- [x] Add debug overlay for active tell windows.
 	- [x] Balance false positives vs missed warnings.
-- [ ] Sentiment/consequence meter in debrief and progression.
+- [x] Sentiment/consequence meter in debrief and progression.
 	- [x] Define sentiment inputs (rescues, losses, collateral, objective quality).
 	- [x] Define scoring bands and labels (`Excellent`/`Good`/`Mixed`/`Poor`/`Critical`).
 	- [x] Add debrief meter UI with reason breakdown lines.
