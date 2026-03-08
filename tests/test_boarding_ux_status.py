@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 import unittest
 
-from src.choplifter.app.boarding_status import compute_boarding_ux_status
+from src.choplifter.app.boarding_status import BoardingUxStatus, compute_boarding_ux_status, get_boarding_ux_visual
 from src.choplifter.game_types import HostageState
 
 
@@ -73,6 +73,20 @@ class BoardingUxStatusTests(unittest.TestCase):
 
         self.assertEqual(status.state, "blocked")
         self.assertEqual(status.detail, "FULL")
+
+    def test_visual_mapping_uses_distinct_shape_and_color_per_state(self) -> None:
+        approaching = get_boarding_ux_visual(BoardingUxStatus(state="approaching", detail="x", boarded=0, nearby=0))
+        boarding = get_boarding_ux_visual(BoardingUxStatus(state="boarding", detail="x", boarded=0, nearby=0))
+        boarded = get_boarding_ux_visual(BoardingUxStatus(state="boarded", detail="x", boarded=0, nearby=0))
+        blocked = get_boarding_ux_visual(BoardingUxStatus(state="blocked", detail="x", boarded=0, nearby=0))
+
+        self.assertEqual(approaching.symbol, ">>")
+        self.assertEqual(boarding.symbol, "+")
+        self.assertEqual(boarded.symbol, "[]")
+        self.assertEqual(blocked.symbol, "!")
+
+        self.assertNotEqual(approaching.color, boarding.color)
+        self.assertNotEqual(boarded.color, blocked.color)
 
 
 if __name__ == "__main__":

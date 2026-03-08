@@ -18,6 +18,12 @@ class BoardingUxStatus:
     nearby: int
 
 
+@dataclass(frozen=True)
+class BoardingUxVisual:
+    symbol: str
+    color: tuple[int, int, int]
+
+
 def compute_boarding_ux_status(
     mission: MissionState,
     helicopter: Helicopter,
@@ -54,3 +60,14 @@ def compute_boarding_ux_status(
     if not helicopter.doors_open:
         return BoardingUxStatus(state="blocked", detail="OPEN DOORS", boarded=boarded, nearby=nearby)
     return BoardingUxStatus(state="blocked", detail="NO HOSTAGES NEAR", boarded=boarded, nearby=nearby)
+
+
+def get_boarding_ux_visual(status: BoardingUxStatus) -> BoardingUxVisual:
+    """Provide color + shape token cues for accessibility/readability."""
+    visual_by_state = {
+        "approaching": BoardingUxVisual(symbol=">>", color=(246, 196, 92)),
+        "boarding": BoardingUxVisual(symbol="+", color=(116, 224, 146)),
+        "boarded": BoardingUxVisual(symbol="[]", color=(128, 186, 255)),
+        "blocked": BoardingUxVisual(symbol="!", color=(255, 118, 118)),
+    }
+    return visual_by_state.get(status.state, BoardingUxVisual(symbol="?", color=(225, 225, 225)))
