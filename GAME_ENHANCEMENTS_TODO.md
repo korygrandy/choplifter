@@ -38,10 +38,12 @@ This is the active backlog after the latest mission/main refactor and packaging 
 	- [x] Preserve safe/no-hit behavior only when chopper is grounded inside the LZ.
 	- [x] Add focused debug logging around grounded collision branch and LZ overlap evaluation.
 	- [x] Add deterministic tests for airborne, grounded-in-LZ, and grounded-outside-LZ collision cases.
-- [ ] Update LZ texture/art to embassy-style building.
-	- [ ] Replace current LZ visual asset with embassy-style art variant.
-	- [ ] Verify readability at gameplay camera scales and with weather overlays.
-	- [ ] Confirm collision/landing bounds remain unchanged after art swap.
+- [x] Update LZ texture/art to embassy-style building.
+	- [x] Replace current LZ visual asset with embassy-style art variant.
+	- [x] Verify readability at gameplay camera scales and with weather overlays.
+	- [x] Confirm collision/landing bounds remain unchanged after art swap.
+	- [x] Add unload-active animation pulse to embassy facade accents.
+	- [x] Tune unload/ambient animation speeds after quick playtest pass.
 - [x] Mission start objective overlay for City Siege.
 	- [x] On City Siege mission start, show: `Rescue the VIP [VIP indicator] hostage`.
 	- [x] Use the existing VIP indicator icon/crown style in the overlay text row.
