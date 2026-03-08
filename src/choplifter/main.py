@@ -36,6 +36,14 @@ from .rendering import (
     draw_sky,
     draw_toast,
 )
+# --- Airport Special Ops mission modules ---
+from .bus_ai import *
+from .hostage_logic import *
+from .enemy_spawns import *
+from .mission_tech import *
+from .vehicle_assets import *
+from .objective_manager import *
+from .cutscene_manager import *
 from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, PhysicsSettings, WindowSettings
 from .sky_smoke import SkySmokeSystem
 from .fx.rain import RainSystem
@@ -235,6 +243,8 @@ def run() -> None:
 
 
 
+
+    # --- Mission initialization ---
     mission, helicopter = create_mission_and_helicopter(
         heli_settings=heli_settings,
         mission_id=selected_mission_id,
@@ -244,6 +254,14 @@ def run() -> None:
     campaign_sentiment = float(getattr(mission, "sentiment", 50.0))
 
     prev_stats: MissionStatsSnapshot = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
+
+    # --- Airport Special Ops mission: placeholder entity state ---
+    airport_bus_state = None
+    airport_hostage_state = None
+    airport_enemy_state = None
+    airport_tech_state = None
+    airport_objective_state = None
+    airport_cutscene_state = None
 
     def apply_mission_preview_wrapper() -> None:
         nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
@@ -836,6 +854,7 @@ def run() -> None:
         if accumulator > 0.25:
             accumulator = 0.25
 
+
         while accumulator >= tick.dt:
             if mode == "playing":
                 playing_step = run_playing_fixed_step(
@@ -871,6 +890,17 @@ def run() -> None:
                 campaign_sentiment = playing_step.campaign_sentiment
                 runtime.mission_end_return_seconds = playing_step.mission_end_return_seconds
                 doors_open_before_cutscene = playing_step.doors_open_before_cutscene
+                
+                # --- Airport Special Ops: update placeholder logic ---
+                if selected_mission_id == "airport":
+                    # TODO: Replace with real update functions as modules are implemented
+                    # Example: airport_bus_state = update_bus_ai(airport_bus_state, tick.dt, ...)
+                    # Example: airport_hostage_state = update_hostage_logic(airport_hostage_state, tick.dt, ...)
+                    # Example: airport_enemy_state = update_enemy_spawns(airport_enemy_state, tick.dt, ...)
+                    # Example: airport_tech_state = update_mission_tech(airport_tech_state, tick.dt, ...)
+                    # Example: airport_objective_state = update_objective_manager(airport_objective_state, tick.dt, ...)
+                    pass  # Placeholder for Airport Special Ops mission-specific logic
+                
                 if playing_step.continue_fixed_loop:
                     continue
 
@@ -945,6 +975,7 @@ def run() -> None:
         elif mode == "cutscene":
             draw_mission_cutscene(cutscenes.mission, target, skip_hint=skip_hint)
 
+
         else:
             # Background above the horizon.
             draw_sky(
@@ -968,6 +999,42 @@ def run() -> None:
             )
             draw_ground(target, heli_settings.ground_y)
             draw_mission(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
+            
+            # --- Airport Special Ops: placeholder rendering (drawn on top of normal mission entities) ---
+            if selected_mission_id == "airport":
+                # TODO: Replace with real rendering as modules are implemented
+                # Example: draw_airport_bus(target, airport_bus_state, camera_x)
+                # Example: draw_airport_hostages(target, airport_hostage_state, camera_x)
+                # Example: draw_airport_enemies(target, airport_enemy_state, camera_x)
+                # Example: draw_airport_tech(target, airport_tech_state, camera_x)
+                # Example: draw_airport_objectives(target, airport_objective_state, camera_x)
+                # Example: draw_airport_cutscenes(target, airport_cutscene_state, camera_x)
+                # Placeholder: draw a simple rectangle for the bus
+                bus_rect = pygame.Rect(int(1200 - camera_x), int(heli_settings.ground_y - 24), 64, 24)
+                pygame.draw.rect(target, (80, 120, 200), bus_rect, border_radius=6)
+                pygame.draw.rect(target, (30, 40, 60), bus_rect, 2, border_radius=6)
+                # Placeholder: draw a simple circle for a hostage
+                pygame.draw.circle(target, (245, 235, 210), (int(1232 - camera_x), int(heli_settings.ground_y - 28)), 8)
+                pygame.draw.circle(target, (25, 25, 25), (int(1232 - camera_x), int(heli_settings.ground_y - 28)), 8, 1)
+                # Placeholder: draw a simple triangle for an enemy
+                pygame.draw.polygon(target, (200, 40, 40), [
+                    (int(1280 - camera_x), int(heli_settings.ground_y - 24)),
+                    (int(1270 - camera_x), int(heli_settings.ground_y - 44)),
+                    (int(1290 - camera_x), int(heli_settings.ground_y - 44)),
+                ])
+                # Placeholder: draw a tech icon (wrench)
+                pygame.draw.rect(target, (120, 200, 120), pygame.Rect(int(1250 - camera_x), int(heli_settings.ground_y - 40), 12, 12), border_radius=3)
+                # Placeholder: draw an objective marker
+                pygame.draw.circle(target, (255, 215, 0), (int(1300 - camera_x), int(heli_settings.ground_y - 50)), 6)
+                # Placeholder: draw a cutscene trigger (star)
+                pygame.draw.polygon(target, (255, 255, 0), [
+                    (int(1320 - camera_x), int(heli_settings.ground_y - 60)),
+                    (int(1325 - camera_x), int(heli_settings.ground_y - 50)),
+                    (int(1330 - camera_x), int(heli_settings.ground_y - 60)),
+                    (int(1322 - camera_x), int(heli_settings.ground_y - 54)),
+                    (int(1328 - camera_x), int(heli_settings.ground_y - 54)),
+                ])
+            
             draw_flares(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
             draw_helicopter_damage_fx(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
             draw_helicopter(target, helicopter, camera_x=camera_x, boarded=boarded_count(mission))
