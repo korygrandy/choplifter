@@ -67,17 +67,162 @@ def _draw_base(screen: pygame.Surface, mission: MissionState, *, camera_x: float
         int(mission.base.width),
         int(mission.base.height),
     )
-    pygame.draw.rect(screen, (60, 60, 75), r, border_radius=8)
-    pygame.draw.rect(screen, (210, 210, 210), r, 2, border_radius=8)
 
-    # Simple flag pole marker.
-    pole_x = r.right - 26
-    pygame.draw.line(screen, (230, 230, 230), (pole_x, r.top + 10), (pole_x, r.bottom - 10), 3)
-    pygame.draw.polygon(
-        screen,
-        (200, 40, 40),
-        [(pole_x, r.top + 14), (pole_x + 22, r.top + 22), (pole_x, r.top + 30)],
+    def _is_unload_active() -> bool:
+        if float(getattr(mission, "unload_release_seconds", 0.0)) > 0.0:
+            return True
+        for h in getattr(mission, "hostages", []):
+            if getattr(h, "state", None) is HostageState.EXITING:
+                return True
+        return False
+
+    unload_active = _is_unload_active()
+    t = float(getattr(mission, "elapsed_seconds", 0.0))
+    unload_pulse = (math.sin(t * 6.2) + 1.0) * 0.5 if unload_active else 0.0
+
+    # Embassy body.
+    main_color = (176, 182, 194)
+    shadow_color = (120, 126, 140)
+    frame_color = (54, 60, 74)
+    trim_color = (214, 218, 226)
+
+    pygame.draw.rect(screen, main_color, r, border_radius=6)
+    pygame.draw.rect(screen, frame_color, r, 2, border_radius=6)
+
+    # Lower facade brick texture (light gray) for depth.
+    brick_band_h = max(10, int(r.height * 0.20))
+    brick_band = pygame.Rect(r.x + 2, r.bottom - brick_band_h - 2, r.width - 4, brick_band_h)
+    pygame.draw.rect(screen, (202, 207, 216), brick_band, border_radius=3)
+    brick_h = 4
+    brick_w = 10
+    mortar = (146, 152, 164)
+    for row_y in range(brick_band.y + brick_h, brick_band.bottom, brick_h):
+        pygame.draw.line(screen, mortar, (brick_band.x, row_y), (brick_band.right, row_y), 1)
+    for row_i, y0 in enumerate(range(brick_band.y, brick_band.bottom, brick_h)):
+        x_off = 0 if row_i % 2 == 0 else brick_w // 2
+        for x0 in range(brick_band.x + x_off + brick_w, brick_band.right, brick_w):
+            y1 = min(brick_band.bottom, y0 + brick_h)
+            pygame.draw.line(screen, mortar, (x0, y0), (x0, y1), 1)
+    pygame.draw.line(screen, shadow_color, (brick_band.x, brick_band.y), (brick_band.right, brick_band.y), 1)
+
+    # Roof and central pediment.
+    roof_h = max(8, int(r.height * 0.16))
+    roof = pygame.Rect(r.x - 3, r.y - roof_h + 2, r.width + 6, roof_h)
+    pygame.draw.rect(screen, trim_color, roof, border_radius=4)
+    pygame.draw.rect(screen, frame_color, roof, 1, border_radius=4)
+
+    pediment_h = max(10, int(r.height * 0.22))
+    pediment = [
+        (r.centerx - 26, roof.bottom + 2),
+        (r.centerx + 26, roof.bottom + 2),
+        (r.centerx, roof.bottom - pediment_h),
+    ]
+    pygame.draw.polygon(screen, (198, 204, 214), pediment)
+
+    # Subtle tile texture for the triangular pediment roof.
+    apex_x, apex_y = pediment[2]
+    base_y = pediment[0][1]
+    row_spacing = 3
+    seam_spacing = 8
+    tile_row_color = (170, 176, 188)
+    tile_seam_color = (152, 158, 172)
+    for row_i, y in enumerate(range(apex_y + 2, base_y - 1, row_spacing)):
+        depth_t = (y - apex_y) / max(1, (base_y - apex_y))
+        half_span = max(1, int((pediment[1][0] - apex_x) * depth_t))
+        x_left = apex_x - half_span + 1
+        x_right = apex_x + half_span - 1
+        if x_right <= x_left:
+            continue
+        pygame.draw.line(screen, tile_row_color, (x_left, y), (x_right, y), 1)
+        seam_offset = 0 if row_i % 2 == 0 else seam_spacing // 2
+        for sx in range(x_left + seam_offset, x_right, seam_spacing):
+            pygame.draw.line(screen, tile_seam_color, (sx, y), (sx, min(base_y - 1, y + 2)), 1)
+
+    pygame.draw.polygon(screen, frame_color, pediment, 1)
+
+    # Entry doors and stairs.
+    entry_w = max(20, int(r.width * 0.22))
+    entry_h = max(22, int(r.height * 0.44))
+    entry = pygame.Rect(r.centerx - entry_w // 2, r.bottom - entry_h - 4, entry_w, entry_h)
+
+    # Embassy placard label.
+    placard_w = max(44, int(r.width * 0.42))
+    placard_h = max(10, int(r.height * 0.12))
+    placard_y = roof.bottom + 4
+    placard = pygame.Rect(r.centerx - placard_w // 2, placard_y, placard_w, placard_h)
+    pygame.draw.rect(screen, (36, 42, 56), placard, border_radius=2)
+    placard_border_boost = int(26 * unload_pulse)
+    placard_border = (
+        min(255, 184 + placard_border_boost),
+        min(255, 190 + placard_border_boost),
+        min(255, 204 + placard_border_boost),
     )
+    pygame.draw.rect(screen, placard_border, placard, 1, border_radius=2)
+    font_size = max(8, min(13, int(placard_h * 0.8)))
+    placard_font = pygame.font.SysFont("consolas", font_size, bold=True)
+    placard_text = placard_font.render("US EMBASSY", True, (232, 236, 244))
+    text_x = placard.centerx - placard_text.get_width() // 2
+    text_y = placard.centery - placard_text.get_height() // 2
+    screen.blit(placard_text, (text_x, text_y))
+
+    pygame.draw.rect(screen, (58, 68, 84), entry, border_radius=3)
+    pygame.draw.rect(screen, (22, 26, 34), entry, 1, border_radius=3)
+    pygame.draw.line(screen, (86, 98, 118), (entry.centerx, entry.y + 2), (entry.centerx, entry.bottom - 2), 1)
+    if unload_active:
+        glow = int(32 * unload_pulse)
+        pulse_outline = (min(255, 188 + glow), min(255, 196 + glow), min(255, 214 + glow))
+        pygame.draw.rect(screen, pulse_outline, entry.inflate(4, 4), 1, border_radius=4)
+
+    step_h = max(4, int(r.height * 0.08))
+    step = pygame.Rect(entry.x - 8, entry.bottom, entry.width + 16, step_h)
+    pygame.draw.rect(screen, (132, 138, 150), step, border_radius=2)
+    pygame.draw.rect(screen, frame_color, step, 1, border_radius=2)
+
+    # Windows.
+    win_w = max(9, int(r.width * 0.11))
+    win_h = max(10, int(r.height * 0.16))
+    win_y = r.y + roof_h + 8
+    window_glow = 0
+    if unload_active:
+        window_glow = int((math.sin(t * 7.0) + 1.0) * 30)
+    window_color = (82 + window_glow, 104 + window_glow, 132 + window_glow)
+    window_color = tuple(max(0, min(255, c)) for c in window_color)
+    for i in range(2):
+        lx = r.x + 10 + i * (win_w + 8)
+        rx = r.right - 10 - win_w - i * (win_w + 8)
+        left = pygame.Rect(lx, win_y, win_w, win_h)
+        right = pygame.Rect(rx, win_y, win_w, win_h)
+        pygame.draw.rect(screen, window_color, left, border_radius=2)
+        pygame.draw.rect(screen, window_color, right, border_radius=2)
+        pygame.draw.rect(screen, frame_color, left, 1, border_radius=2)
+        pygame.draw.rect(screen, frame_color, right, 1, border_radius=2)
+
+    # Animated red/white/blue flag.
+    pole_x = r.right - 20
+    pole_top = r.y - 18
+    pole_bottom = r.bottom - 8
+    pygame.draw.line(screen, (228, 228, 236), (pole_x, pole_top), (pole_x, pole_bottom), 3)
+
+    wave_speed = 6.4 if unload_active else 3.5
+    wave_amp = (3.2 + unload_pulse * 0.9) if unload_active else 2.0
+    base_y = pole_top + 8
+    flag_len = max(20, int(r.width * 0.26))
+    stripe_h = 3
+    stripe_colors = ((190, 32, 32), (236, 236, 236), (36, 72, 190))
+
+    for si, color in enumerate(stripe_colors):
+        pts: list[tuple[int, int]] = []
+        for dx in range(flag_len + 1):
+            phase = (dx / max(1.0, flag_len)) * math.pi * 1.7
+            y_off = int(math.sin(t * wave_speed + phase) * wave_amp)
+            y = base_y + si * stripe_h + y_off
+            pts.append((pole_x + 1 + dx, y))
+        pts.append((pole_x + 1 + flag_len, base_y + (si + 1) * stripe_h + 2))
+        pts.append((pole_x + 1, base_y + (si + 1) * stripe_h + 2))
+        pygame.draw.polygon(screen, color, pts)
+
+    # Flag border for readability.
+    pygame.draw.line(screen, frame_color, (pole_x + 1, base_y), (pole_x + 1 + flag_len, base_y + 1), 1)
 
 
 def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
