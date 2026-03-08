@@ -542,8 +542,20 @@ def _draw_supply_drops(screen: pygame.Surface, mission: MissionState, *, camera_
 
         # Crate body with kind accent color.
         kind = str(getattr(d, "kind", "bullets"))
+        ring_phase_offset = 0.0
+        ring_alpha = 90
         if kind == "health":
-            accent = (96, 214, 124)
+            pulse_t = 0.5 + 0.5 * math.sin((t * 5.8) + float(getattr(d, "age_s", 0.0)) * 3.0)
+            dark_red = (110, 20, 20)
+            fire_engine_red = (206, 32, 41)
+            accent = (
+                int(dark_red[0] + (fire_engine_red[0] - dark_red[0]) * pulse_t),
+                int(dark_red[1] + (fire_engine_red[1] - dark_red[1]) * pulse_t),
+                int(dark_red[2] + (fire_engine_red[2] - dark_red[2]) * pulse_t),
+            )
+            # Keep ring pulse intentionally out of phase vs. the plus pulse.
+            ring_phase_offset = math.pi * 0.5
+            ring_alpha = 132
         elif kind == "bullets":
             accent = (95, 175, 255)
         else:
@@ -554,14 +566,14 @@ def _draw_supply_drops(screen: pygame.Surface, mission: MissionState, *, camera_
         pygame.draw.rect(screen, accent, pygame.Rect(crate.x + 2, crate.y + 2, crate.width - 4, 2), border_radius=1)
 
         if kind == "health":
-            cross_rect = pygame.Rect(crate.centerx - 1, crate.y + 3, 2, 4)
-            pygame.draw.rect(screen, (232, 244, 232), cross_rect)
-            pygame.draw.rect(screen, (232, 244, 232), pygame.Rect(crate.centerx - 2, crate.y + 4, 4, 2))
+            # Match the HUD fallback health icon language: a simple red plus.
+            pygame.draw.rect(screen, accent, pygame.Rect(crate.centerx - 1, crate.y + 2, 2, 6), border_radius=1)
+            pygame.draw.rect(screen, accent, pygame.Rect(crate.x + 2, crate.centery - 1, 8, 2), border_radius=1)
 
-        pulse = 0.55 + 0.45 * math.sin((t * 6.0) + float(getattr(d, "age_s", 0.0)) * 4.0)
+        pulse = 0.55 + 0.45 * math.sin((t * 6.0) + float(getattr(d, "age_s", 0.0)) * 4.0 + ring_phase_offset)
         ring_r = int(10 + pulse * 3)
         ring = pygame.Surface((ring_r * 2 + 4, ring_r * 2 + 4), pygame.SRCALPHA)
-        pygame.draw.circle(ring, (accent[0], accent[1], accent[2], 90), (ring.get_width() // 2, ring.get_height() // 2), ring_r, 1)
+        pygame.draw.circle(ring, (accent[0], accent[1], accent[2], ring_alpha), (ring.get_width() // 2, ring.get_height() // 2), ring_r, 1)
         screen.blit(ring, (x - ring.get_width() // 2, y - ring.get_height() // 2))
 
         if int(t * 5.0) % 2 == 0:
