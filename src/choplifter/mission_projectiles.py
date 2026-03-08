@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import math
+import random
 from typing import Callable
 
 from . import haptics
@@ -39,6 +40,105 @@ def _barak_target_point(helicopter: Helicopter) -> Vec2:
     return Vec2(helicopter.pos.x + x_off, helicopter.pos.y + 2.0)
 
 
+def _angle_diff(current: float, target: float) -> float:
+    return (target - current + math.pi) % (2.0 * math.pi) - math.pi
+
+
+def _turn_toward_angle(*, current: float, target: float, max_step: float) -> float:
+    if max_step <= 0.0:
+        return target
+    delta = _angle_diff(current, target)
+    if abs(delta) <= max_step:
+        return target
+    return current + math.copysign(max_step, delta)
+
+
+def _barak_roll_diversion(*, chance: float, random_value: float | None = None) -> bool:
+    chance = clamp(float(chance), 0.0, 1.0)
+    if chance <= 0.0:
+        return False
+    if chance >= 1.0:
+        return True
+    rv = random.random() if random_value is None else float(random_value)
+    return rv <= chance
+
+
+def _barak_find_flare_decoy(
+    *,
+    mission: MissionState,
+    missile_pos: Vec2,
+    radius: float,
+    max_flare_age_s: float,
+) -> Vec2 | None:
+    flare_system = getattr(mission, "flares", None)
+    particles = getattr(flare_system, "particles", None)
+    if not particles:
+        return None
+
+    radius = max(0.0, float(radius))
+    max_flare_age_s = max(0.0, float(max_flare_age_s))
+    if radius <= 0.0 or max_flare_age_s <= 0.0:
+        return None
+
+    radius2 = radius * radius
+    nearest: Vec2 | None = None
+    nearest_d2: float | None = None
+
+    for fp in particles:
+        pos = getattr(fp, "pos", None)
+        if pos is None:
+            continue
+
+        age = float(getattr(fp, "age", 9999.0))
+        ttl = float(getattr(fp, "ttl", 0.0))
+        if age < 0.0 or age > max_flare_age_s or age >= ttl:
+            continue
+
+        dx = float(pos.x) - missile_pos.x
+        dy = float(pos.y) - missile_pos.y
+        d2 = dx * dx + dy * dy
+        if d2 > radius2:
+            continue
+
+        if nearest_d2 is None or d2 < nearest_d2:
+            nearest = Vec2(float(pos.x), float(pos.y))
+            nearest_d2 = d2
+
+    return nearest
+
+
+def _barak_homing_target(
+    *,
+    mission: MissionState,
+    missile: object,
+    helicopter: Helicopter,
+) -> tuple[Vec2, bool]:
+    tuning = mission.tuning
+    if not bool(getattr(missile, "flare_seen_post_liftoff", False)):
+        return _barak_target_point(helicopter), False
+
+    flare_pos = _barak_find_flare_decoy(
+        mission=mission,
+        missile_pos=missile.pos,
+        radius=float(getattr(tuning, "barak_flare_diversion_radius", 0.0)),
+        max_flare_age_s=float(getattr(tuning, "barak_flare_diversion_max_flare_age_s", 0.0)),
+    )
+
+    if not bool(getattr(missile, "flare_diversion_resolved", False)):
+        chance = float(getattr(tuning, "barak_flare_diversion_chance", 1.0))
+        missile.flare_diversion_allowed = _barak_roll_diversion(chance=chance)
+        missile.flare_diversion_resolved = True
+
+    if bool(getattr(missile, "flare_diversion_allowed", False)):
+        # Decoy vector: upward (0,-1) with optional light x-bias toward nearest flare ember.
+        x_bias = 0.0
+        if flare_pos is not None:
+            x_bias = clamp(flare_pos.x - missile.pos.x, -64.0, 64.0)
+        return Vec2(missile.pos.x + x_bias, missile.pos.y - 220.0), True
+
+    return _barak_target_point(helicopter), False
+
+
 def _update_projectiles(
     mission: MissionState,
     dt: float,
@@ -67,6 +167,9 @@ def _update_projectiles(
 
         # BARAK MRAD missile: staged behavior (liftoff -> rotate -> homing).
         if getattr(p, "is_barak_missile", False):
+            if p.missile_state != "liftoff" and float(getattr(mission, "flare_invuln_seconds", 0.0)) > 0.0:
+                p.flare_seen_post_liftoff = True
+
             if p.missile_state == "liftoff":
                 if p.launch_pos is None:
                     p.launch_pos = p.pos.copy()
@@ -95,13 +198,30 @@ def _update_projectiles(
                     p.current_angle = start_angle + (end_angle - start_angle) * p.rotation_progress
                     p.vel = Vec2(0.0, 0.0)
             elif p.missile_state == "homing":
-                target = _barak_target_point(helicopter)
+                target, diverted = _barak_homing_target(
+                    mission=mission,
+                    missile=p,
+                    helicopter=helicopter,
+                )
                 dx = target.x - p.pos.x
                 dy = target.y - p.pos.y
-                angle = math.atan2(dy, dx)
+                desired_angle = math.atan2(dy, dx)
                 speed = 360.0 * 3.0
-                p.vel = Vec2(math.cos(angle) * speed, math.sin(angle) * speed)
-                p.current_angle = angle
+                if diverted:
+                    max_turn_rate_deg = float(getattr(mission.tuning, "barak_flare_diversion_turn_rate_deg", 220.0))
+                    max_turn_step = max(0.0, math.radians(max_turn_rate_deg)) * dt
+                    current_angle = float(getattr(p, "current_angle", desired_angle))
+                    p.current_angle = _turn_toward_angle(
+                        current=current_angle,
+                        target=desired_angle,
+                        max_step=max_turn_step,
+                    )
+                else:
+                    # Preserve pre-diversion hit reliability: non-diverted BARAK homing tracks directly.
+                    p.current_angle = desired_angle
+                if diverted and logger is not None:
+                    logger.debug("BARAK_DIVERTED: target=(%.1f, %.1f)", target.x, target.y)
+                p.vel = Vec2(math.cos(p.current_angle) * speed, math.sin(p.current_angle) * speed)
 
         # Enemy collision (player projectiles only).
         if p.kind in (ProjectileKind.BULLET, ProjectileKind.BOMB):

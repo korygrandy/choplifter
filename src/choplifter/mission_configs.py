@@ -72,6 +72,12 @@ class MissionTuning:
     hostage_chaos_probability: float = 0.35
     hostage_boarding_radius: float = 64.0
 
+    # BARAK missile flare diversion behavior.
+    barak_flare_diversion_chance: float = 0.85
+    barak_flare_diversion_radius: float = 300.0
+    barak_flare_diversion_turn_rate_deg: float = 220.0
+    barak_flare_diversion_max_flare_age_s: float = 1.65
+
 
 @dataclass(frozen=True)
 class LevelConfig:
