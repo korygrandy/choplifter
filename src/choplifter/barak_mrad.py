@@ -1,0 +1,15 @@
+from __future__ import annotations
+
+# Explicit BARAK MRAD launcher states.
+BARAK_STATE_RETRACT = "retract"
+BARAK_STATE_MOVE = "move"
+BARAK_STATE_DEPLOY = "deploy"
+BARAK_STATE_LAUNCH = "launch"
+BARAK_STATE_RELOAD = "reload"
+
+BARAK_LAUNCHER_VISIBLE_STATES = {
+    BARAK_STATE_DEPLOY,
+    BARAK_STATE_LAUNCH,
+    BARAK_STATE_RETRACT,
+    BARAK_STATE_RELOAD,
+}

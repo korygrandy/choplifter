@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 import math
 from .math2d import Vec2
 from .game_types import EnemyKind, HostageState, ProjectileKind
+from .barak_mrad import BARAK_STATE_MOVE
 
 @dataclass
 class Hostage:
@@ -54,6 +55,10 @@ class Projectile:
     flare_diversion_resolved: bool = False
     flare_diversion_allowed: bool = False
     flare_seen_post_liftoff: bool = False
+    diversion_spin_phase: float = 0.0
+    diversion_miss_side: int = 0
+    diversion_pass_armed: bool = False
+    diversion_prev_nose_distance: float = -1.0
 
 @dataclass
 class Enemy:
@@ -72,7 +77,9 @@ class Enemy:
     fire_tell_armed: bool = False
     muzzle_flash_seconds: float = 0.0
     # Barak MRAD-specific state
-    mrad_state: str = "moving"  # moving, deploying, aiming, launching, done
+    mrad_state: str = BARAK_STATE_MOVE
+    mrad_state_seconds: float = 0.0
+    mrad_reload_seconds: float = 0.0
     launcher_angle: float = 0.0  # Radians, for launcher deployment/aim
     missile_fired: bool = False
     launcher_ext_progress: float = 0.0  # 0.0 (retracted) to 1.0 (fully extended)
