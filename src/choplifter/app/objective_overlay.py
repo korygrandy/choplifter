@@ -15,7 +15,7 @@ def get_mission_objective_overlay(*, mission_id: str) -> tuple[str, bool]:
     normalized = str(mission_id or "").strip().lower()
 
     if normalized in CITY_SIEGE_MISSION_IDS:
-        return "Rescue the VIP hostage", True
+        return "Rescue the VIP hostage along with 20 others!", True
     if normalized in AIRPORT_MISSION_IDS:
         return "Rescue hostages and return them to base", False
     if normalized in WORSHIP_MISSION_IDS:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -66,6 +67,39 @@ def _draw_fallback_icon(target: pygame.Surface, kind: str, x: int, y: int, size:
         pygame.draw.circle(target, (220, 220, 220), (cx, cy), max(3, size // 2 - 4), 2)
 
 
+def _draw_vip_crown_indicator(target: pygame.Surface, *, x: int, y: int, size: int, mission_time: float) -> None:
+    cx = x + size // 2
+    cy = y + size // 2 + 2
+
+    # Match in-world VIP marker language: purple hostage circle with black outline.
+    dot_r = max(4, size // 3)
+    pygame.draw.circle(target, (170, 65, 220), (cx, cy), dot_r)
+    pygame.draw.circle(target, (25, 25, 25), (cx, cy), dot_r, 1)
+
+    alpha = int(127.5 * (math.sin(float(mission_time) * 5.2) + 1.0))
+    alpha = max(36, min(255, alpha))
+
+    crown_w = max(10, int(size * 0.95))
+    crown_h = max(7, int(size * 0.62))
+    crown = pygame.Surface((crown_w, crown_h), pygame.SRCALPHA)
+    points = [
+        (1, crown_h - 2),
+        (max(2, crown_w // 4), max(1, crown_h // 3)),
+        (crown_w // 2 - 1, crown_h - 4),
+        (crown_w // 2 + 1, 0),
+        (crown_w // 2 + 3, crown_h - 4),
+        (crown_w - max(2, crown_w // 4), max(1, crown_h // 3)),
+        (crown_w - 1, crown_h - 2),
+    ]
+    pygame.draw.polygon(crown, (255, 220, 70, alpha), points)
+    pygame.draw.polygon(crown, (255, 245, 185, min(255, alpha + 20)), points, 1)
+    crown.set_alpha(alpha)
+
+    crown_x = cx - crown_w // 2
+    crown_y = cy - dot_r - crown_h + 2
+    target.blit(crown, (crown_x, crown_y))
+
+
 def _draw_stat_chip(
     screen: pygame.Surface,
     *,
@@ -78,6 +112,7 @@ def _draw_stat_chip(
     label_font: pygame.font.Font,
     value_font: pygame.font.Font,
     panel_color: tuple[int, int, int, int] = (0, 0, 0, 152),
+    mission_time: float = 0.0,
 ) -> None:
     chip_w = 198
     chip_h = 34
@@ -85,13 +120,16 @@ def _draw_stat_chip(
     panel = pygame.Surface((chip_w, chip_h), pygame.SRCALPHA)
     panel.fill(panel_color)
 
-    icon = _load_hud_icon(icon_name, icon_size)
     ix = 8
     iy = (chip_h - icon_size) // 2
-    if icon is not None:
-        panel.blit(icon, (ix, iy))
+    if icon_kind == "vip":
+        _draw_vip_crown_indicator(panel, x=ix, y=iy, size=icon_size, mission_time=mission_time)
     else:
-        _draw_fallback_icon(panel, icon_kind, ix, iy, icon_size)
+        icon = _load_hud_icon(icon_name, icon_size)
+        if icon is not None:
+            panel.blit(icon, (ix, iy))
+        else:
+            _draw_fallback_icon(panel, icon_kind, ix, iy, icon_size)
 
     label_surf = label_font.render(label, True, (192, 206, 224))
     value_surf = value_font.render(value, True, (245, 245, 245))
@@ -396,6 +434,7 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
             label_font=small,
             value_font=font,
             panel_color=(36, 14, 52, 172),
+            mission_time=float(getattr(mission, "elapsed_seconds", 0.0)),
         )
 
     if is_city_siege and vip_hostage:

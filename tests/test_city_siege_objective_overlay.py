@@ -28,7 +28,7 @@ class CitySiegeObjectiveOverlayTests(unittest.TestCase):
         airport_text, airport_icon = get_mission_objective_overlay(mission_id="airport")
         worship_text, worship_icon = get_mission_objective_overlay(mission_id="worship")
 
-        self.assertEqual(city_text, "Rescue the VIP hostage")
+        self.assertEqual(city_text, "Rescue the VIP hostage along with 20 others!")
         self.assertTrue(city_icon)
         self.assertEqual(airport_text, "Rescue hostages and return them to base")
         self.assertFalse(airport_icon)
