@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import math
+import random
 from typing import Callable
 
 from .entities import Enemy, Projectile
@@ -35,6 +36,13 @@ def _emit_barak_transition_fx(mission: MissionState, e: Enemy, *, strength: floa
         mission.impact_sparks.emit_hit(Vec2(e.pos.x - 32.0, e.pos.y - 26.0), Vec2(0.0, -10.0), strength=strength)
     except Exception:
         pass
+
+
+def _barak_next_reload_seconds(tuning: object) -> float:
+    lo = float(getattr(tuning, "barak_reload_min_seconds", getattr(tuning, "barak_reload_seconds", 4.0)))
+    hi = float(getattr(tuning, "barak_reload_max_seconds", getattr(tuning, "barak_reload_seconds", 4.0)))
+    lo, hi = min(lo, hi), max(lo, hi)
+    return max(0.25, random.uniform(lo, hi))
 
 
 def _update_enemies(
@@ -185,7 +193,7 @@ def _update_enemies(
                         _transition_barak_state(e, BARAK_STATE_RETRACT, logger=logger, reason="fail_safe")
                     elif e.mrad_state == BARAK_STATE_RETRACT:
                         _transition_barak_state(e, BARAK_STATE_RELOAD, logger=logger, reason="fail_safe")
-                        e.mrad_reload_seconds = max(0.25, float(getattr(tuning, "barak_reload_seconds", 4.0)))
+                        e.mrad_reload_seconds = _barak_next_reload_seconds(tuning)
                     elif e.mrad_state == BARAK_STATE_RELOAD:
                         _transition_barak_state(e, BARAK_STATE_MOVE, logger=logger, reason="fail_safe")
                     else:
@@ -287,7 +295,7 @@ def _update_enemies(
 
                     if angle_done and e.launcher_ext_progress <= 0.0:
                         e.missile_fired = False
-                        e.mrad_reload_seconds = max(0.25, float(getattr(tuning, "barak_reload_seconds", 4.0)))
+                        e.mrad_reload_seconds = _barak_next_reload_seconds(tuning)
                         _transition_barak_state(e, BARAK_STATE_RELOAD, logger=logger, reason="retract_complete")
                         _emit_barak_transition_fx(mission, e, strength=0.30)
                 elif e.mrad_state == BARAK_STATE_RELOAD:

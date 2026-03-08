@@ -185,6 +185,36 @@ def _barak_is_successfully_diverted(missile: object) -> bool:
     )
 
 
+def _barak_apply_last_chance_flare_override(*, mission: MissionState, missile: object, helicopter: Helicopter) -> bool:
+    """Resolve late flare diversion close to impact using the standard diversion chance."""
+    if float(getattr(mission, "flare_invuln_seconds", 0.0)) <= 0.0:
+        return False
+    if str(getattr(missile, "missile_state", "")) == "liftoff":
+        return False
+
+    nose = _barak_target_point(helicopter)
+    distance_to_nose = math.hypot(float(missile.pos.x) - nose.x, float(missile.pos.y) - nose.y)
+    override_radius = max(
+        0.0,
+        float(getattr(mission.tuning, "barak_flare_last_chance_override_radius_px", 92.0)),
+    )
+    if distance_to_nose > override_radius:
+        return False
+
+    missile.flare_seen_post_liftoff = True
+
+    if not bool(getattr(missile, "flare_diversion_resolved", False)):
+        chance = float(getattr(mission.tuning, "barak_flare_diversion_chance", 1.0))
+        missile.flare_diversion_allowed = _barak_roll_diversion(chance=chance)
+        missile.flare_diversion_resolved = True
+
+    if bool(getattr(missile, "flare_diversion_allowed", False)):
+        if int(getattr(missile, "diversion_miss_side", 0)) == 0:
+            missile.diversion_miss_side = 1 if float(missile.pos.x) >= nose.x else -1
+        return True
+    return False
+
+
 def _barak_should_explode_after_near_miss(
     *,
     missile: object,
@@ -239,6 +269,12 @@ def _update_projectiles(
         if getattr(p, "is_barak_missile", False):
             if p.missile_state != "liftoff" and float(getattr(mission, "flare_invuln_seconds", 0.0)) > 0.0:
                 p.flare_seen_post_liftoff = True
+
+            _barak_apply_last_chance_flare_override(
+                mission=mission,
+                missile=p,
+                helicopter=helicopter,
+            )
 
             if p.missile_state == "liftoff":
                 if p.launch_pos is None:
@@ -348,6 +384,11 @@ def _update_projectiles(
         # Helicopter collision (enemy projectiles only).
         if p.kind in (ProjectileKind.ENEMY_BULLET, ProjectileKind.ENEMY_ARTILLERY):
             if getattr(p, "is_barak_missile", False):
+                _barak_apply_last_chance_flare_override(
+                    mission=mission,
+                    missile=p,
+                    helicopter=helicopter,
+                )
                 barak_target = _barak_diversion_collision_target(
                     mission=mission,
                     missile=p,
@@ -395,6 +436,11 @@ def _update_projectiles(
         if p.pos.y >= heli.ground_y - 6.0:
             if getattr(p, "is_barak_missile", False):
                 in_lz = bool(mission.base.contains_point(helicopter.pos))
+                _barak_apply_last_chance_flare_override(
+                    mission=mission,
+                    missile=p,
+                    helicopter=helicopter,
+                )
                 barak_target = _barak_diversion_collision_target(
                     mission=mission,
                     missile=p,

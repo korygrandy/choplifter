@@ -6,6 +6,7 @@ import unittest
 from src.choplifter.helicopter import Facing
 from src.choplifter.math2d import Vec2
 from src.choplifter.mission_projectiles import (
+    _barak_apply_last_chance_flare_override,
     _barak_diversion_collision_target,
     _barak_find_flare_decoy,
     _barak_homing_target,
@@ -19,6 +20,118 @@ from src.choplifter.mission_configs import MissionTuning
 
 
 class BarakFlareDiversionTests(unittest.TestCase):
+    def test_last_chance_override_forces_diversion_when_close_and_flare_active(self) -> None:
+        mission = SimpleNamespace(
+            flare_invuln_seconds=0.04,
+            tuning=SimpleNamespace(
+                barak_flare_last_chance_override_radius_px=92.0,
+                barak_flare_diversion_chance=1.0,
+            ),
+        )
+        helicopter = SimpleNamespace(pos=Vec2(740.0, 240.0), facing=Facing.RIGHT)
+        missile = SimpleNamespace(
+            pos=Vec2(760.0, 242.0),
+            missile_state="homing",
+            flare_seen_post_liftoff=False,
+            flare_diversion_resolved=False,
+            flare_diversion_allowed=False,
+            diversion_miss_side=0,
+        )
+
+        self.assertTrue(
+            _barak_apply_last_chance_flare_override(
+                mission=mission,
+                missile=missile,
+                helicopter=helicopter,
+            )
+        )
+        self.assertTrue(missile.flare_seen_post_liftoff)
+        self.assertTrue(missile.flare_diversion_resolved)
+        self.assertTrue(missile.flare_diversion_allowed)
+        self.assertNotEqual(missile.diversion_miss_side, 0)
+
+    def test_last_chance_override_does_not_activate_without_active_flares(self) -> None:
+        mission = SimpleNamespace(
+            flare_invuln_seconds=0.0,
+            tuning=SimpleNamespace(
+                barak_flare_last_chance_override_radius_px=92.0,
+                barak_flare_diversion_chance=1.0,
+            ),
+        )
+        helicopter = SimpleNamespace(pos=Vec2(740.0, 240.0), facing=Facing.RIGHT)
+        missile = SimpleNamespace(
+            pos=Vec2(760.0, 242.0),
+            missile_state="homing",
+            flare_seen_post_liftoff=False,
+            flare_diversion_resolved=False,
+            flare_diversion_allowed=False,
+            diversion_miss_side=0,
+        )
+
+        self.assertFalse(
+            _barak_apply_last_chance_flare_override(
+                mission=mission,
+                missile=missile,
+                helicopter=helicopter,
+            )
+        )
+        self.assertFalse(missile.flare_diversion_allowed)
+
+    def test_last_chance_override_does_not_activate_outside_radius(self) -> None:
+        mission = SimpleNamespace(
+            flare_invuln_seconds=0.04,
+            tuning=SimpleNamespace(
+                barak_flare_last_chance_override_radius_px=92.0,
+                barak_flare_diversion_chance=1.0,
+            ),
+        )
+        helicopter = SimpleNamespace(pos=Vec2(740.0, 240.0), facing=Facing.RIGHT)
+        missile = SimpleNamespace(
+            pos=Vec2(980.0, 242.0),
+            missile_state="homing",
+            flare_seen_post_liftoff=False,
+            flare_diversion_resolved=False,
+            flare_diversion_allowed=False,
+            diversion_miss_side=0,
+        )
+
+        self.assertFalse(
+            _barak_apply_last_chance_flare_override(
+                mission=mission,
+                missile=missile,
+                helicopter=helicopter,
+            )
+        )
+        self.assertFalse(missile.flare_diversion_allowed)
+
+    def test_last_chance_override_respects_diversion_probability(self) -> None:
+        mission = SimpleNamespace(
+            flare_invuln_seconds=0.04,
+            tuning=SimpleNamespace(
+                barak_flare_last_chance_override_radius_px=92.0,
+                barak_flare_diversion_chance=0.0,
+            ),
+        )
+        helicopter = SimpleNamespace(pos=Vec2(740.0, 240.0), facing=Facing.RIGHT)
+        missile = SimpleNamespace(
+            pos=Vec2(760.0, 242.0),
+            missile_state="homing",
+            flare_seen_post_liftoff=False,
+            flare_diversion_resolved=False,
+            flare_diversion_allowed=False,
+            diversion_miss_side=0,
+        )
+
+        self.assertFalse(
+            _barak_apply_last_chance_flare_override(
+                mission=mission,
+                missile=missile,
+                helicopter=helicopter,
+            )
+        )
+        self.assertTrue(missile.flare_diversion_resolved)
+        self.assertFalse(missile.flare_diversion_allowed)
+
     def test_find_flare_decoy_prefers_nearest_active_particle(self) -> None:
         mission = SimpleNamespace(
             flares=SimpleNamespace(

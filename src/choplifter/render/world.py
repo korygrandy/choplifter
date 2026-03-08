@@ -39,6 +39,7 @@ def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: flo
         draw_explosion_particles(screen, mission, camera_x=camera_x)
         draw_dust_storm_particles(screen, mission, camera_x=camera_x)
     _draw_projectiles(screen, mission, camera_x=camera_x)
+    _draw_supply_drops(screen, mission, camera_x=camera_x)
 
     # Draw wind-blown dust clouds if present
     from .particles import draw_wind_dust_clouds
@@ -519,10 +520,54 @@ def _draw_air_mine(screen: pygame.Surface, x: int, y: int, t: float) -> None:
         pygame.draw.line(screen, (25, 25, 25), (sx, sy), (ex, ey), 2)
 
     # Blinking inner dot.
-    if int(t * 5.0) % 2 == 0:
-        pygame.draw.circle(screen, (240, 240, 240), (x, y), 2)
-    else:
-        pygame.draw.circle(screen, (35, 35, 35), (x, y), 2)
+
+
+def _draw_supply_drops(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+    manager = getattr(mission, "supply_drops", None)
+    drops = getattr(manager, "drops", None)
+    if not drops:
+        return
+
+    t = float(getattr(mission, "elapsed_seconds", 0.0))
+    for d in drops:
+        x = int(float(getattr(d, "pos").x) - camera_x)
+        y = int(float(getattr(d, "pos").y))
+
+        # Small parachute canopy.
+        canopy = pygame.Rect(x - 9, y - 18, 18, 8)
+        pygame.draw.ellipse(screen, (230, 230, 236), canopy)
+        pygame.draw.ellipse(screen, (40, 40, 45), canopy, 1)
+        pygame.draw.line(screen, (210, 210, 220), (x - 6, y - 10), (x - 4, y - 2), 1)
+        pygame.draw.line(screen, (210, 210, 220), (x + 6, y - 10), (x + 4, y - 2), 1)
+
+        # Crate body with kind accent color.
+        kind = str(getattr(d, "kind", "bullets"))
+        if kind == "health":
+            accent = (96, 214, 124)
+        elif kind == "bullets":
+            accent = (95, 175, 255)
+        else:
+            accent = (255, 168, 78)
+        crate = pygame.Rect(x - 6, y - 2, 12, 10)
+        pygame.draw.rect(screen, (84, 70, 48), crate, border_radius=2)
+        pygame.draw.rect(screen, (30, 24, 18), crate, 1, border_radius=2)
+        pygame.draw.rect(screen, accent, pygame.Rect(crate.x + 2, crate.y + 2, crate.width - 4, 2), border_radius=1)
+
+        if kind == "health":
+            cross_rect = pygame.Rect(crate.centerx - 1, crate.y + 3, 2, 4)
+            pygame.draw.rect(screen, (232, 244, 232), cross_rect)
+            pygame.draw.rect(screen, (232, 244, 232), pygame.Rect(crate.centerx - 2, crate.y + 4, 4, 2))
+
+        pulse = 0.55 + 0.45 * math.sin((t * 6.0) + float(getattr(d, "age_s", 0.0)) * 4.0)
+        ring_r = int(10 + pulse * 3)
+        ring = pygame.Surface((ring_r * 2 + 4, ring_r * 2 + 4), pygame.SRCALPHA)
+        pygame.draw.circle(ring, (accent[0], accent[1], accent[2], 90), (ring.get_width() // 2, ring.get_height() // 2), ring_r, 1)
+        screen.blit(ring, (x - ring.get_width() // 2, y - ring.get_height() // 2))
+
+        if int(t * 5.0) % 2 == 0:
+            pygame.draw.circle(screen, (240, 240, 240), (x, y), 2)
+        else:
+            pygame.draw.circle(screen, (35, 35, 35), (x, y), 2)
 
 
 def _sentiment_reason_lines(

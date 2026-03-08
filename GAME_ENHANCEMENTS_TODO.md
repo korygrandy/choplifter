@@ -184,8 +184,10 @@ Ordered from least complex to most complex.
 
 ### 4) High Complexity (Systems Layer)
 
-- [ ] Supply drop physics + munitions manager.
+- [x] Supply drop physics + munitions manager.
 	- Build manager for spawn timing, sway motion (`sin` horizontal offset), and gravity.
+- [ ] Add bunker-buster ammo drop that grants bomb armament to the chopper.
+	- Define pickup behavior and HUD/readiness feedback for bunker-buster-equipped state.
 - [ ] Mission enhancements: escort and sabotage.
 	- Add new objective types with new win/loss conditions and multi-entity coordination.
 

@@ -43,6 +43,14 @@ def update_mission(
 
     _update_world_particles(mission, helicopter, dt, heli)
 
+    if hasattr(mission, "supply_drops") and mission.supply_drops is not None:
+        mission.supply_drops.update(
+            mission=mission,
+            helicopter=helicopter,
+            dt=dt,
+            ground_y=heli.ground_y,
+        )
+
     _update_enemies(
         mission,
         helicopter,
