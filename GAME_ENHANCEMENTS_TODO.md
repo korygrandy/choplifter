@@ -1,3 +1,48 @@
+# Planned Mission: Airport Special Ops
+
+## Mission Concept
+Escort a transport bus across an airport tarmac to rescue hostages from a crashed plane and jetway guarded by militants. The player must protect the bus as it travels from right to left, allow hostages to board, then escort the bus and hostages back to the LZ (modeled after an airport tower). The bus is a rectangle placeholder until a sprite is available.
+
+## Mission Flow
+1. Mission start: player and bus at right side, bus begins moving left.
+2. Bus must reach the crashed plane/jetway, under fire from militants.
+3. Hostages board the bus (timed or triggered event).
+4. Player protects bus and hostages as bus returns to LZ.
+5. At LZ, bus doors open and hostages deboard.
+6. Mission success/failure based on hostages rescued, bus survival, and other conditions.
+
+## Open Design Questions & Clarifications
+- How does the mission start? (cutscene, briefing, immediate action)
+- What are the win/lose conditions? (all hostages rescued, bus destroyed, time limit, etc.)
+- Are there optional/bonus objectives? (e.g., no bus damage, defeat all militants)
+- What types of militants are present? (stationary, patrolling, weapon types)
+- Are there environmental hazards? (wreckage, fire, barricades, mines)
+- Will enemies attack the bus, player, or both?
+- How is the bus controlled? (AI path, stops at obstacles, player-escorted)
+- How do hostages board/deboard? (timed, triggered, can be interrupted)
+- Can the bus or hostages take damage? What are the consequences?
+- What tools does the player have to protect the bus? (weapons, air support, haptics)
+- Can the player interact with the environment? (clear obstacles, repair bus, open jetway)
+- Is there risk/reward for leaving the bus to engage enemies?
+- How is the airport LZ/tower area structured? (cover, sightlines, enemy positions)
+- Are there multiple routes or just one path for the bus?
+- Is the crashed plane/jetway a single setpiece or multi-stage area?
+- How is tension maintained? (enemy waves, timed events, bus health)
+- Are there moments of downtime or constant action?
+- How does difficulty scale? (more/tougher enemies, environmental changes)
+- How will the bus, hostages, and LZ be visually distinguished?
+- What feedback will the player get for protecting/failing the bus/hostages?
+- Are there unique audio cues or music for this mission?
+- What new code modules or data structures are needed? (bus AI, hostage logic, enemy spawns)
+- What placeholder assets are required before final art?
+- How will you test and debug the mission flow?
+
+## Implementation Notes
+- Bus uses rectangle placeholder until sprite is ready.
+- LZ modeled after airport tower.
+- Hostage, bus, and enemy logic may require new or updated modules.
+- Track all clarifications and design decisions here as they are resolved.
+
 # Game Enhancements - TODO / Backlog
 
 This is the active backlog after the latest mission/main refactor and packaging pass.
