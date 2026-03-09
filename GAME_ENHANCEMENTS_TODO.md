@@ -256,6 +256,306 @@ This is the active backlog after the latest mission/main refactor and packaging 
 3. [ ] Optimize images losslessly if further reduction is needed.
 4. [ ] Revisit `-LiteMedia` and/or audio conversion pipeline later if distribution size still needs major reduction.
 
+## Cross-Platform Build Support (Windows + macOS)
+
+### Overview & Goals
+
+- **Primary Goal**: Support native executable builds for both Windows and macOS platforms.
+- **Target Audience**: Maximize distribution reach to desktop players across both major PC operating systems.
+- **Build Strategy**: Platform-specific builds generated on respective native hardware (Windows builds on Windows, macOS builds on macOS).
+- **Deliverables**:
+  - Windows: `.exe` onefile + onedir (current)
+  - macOS: `.app` bundle + optional `.dmg` installer
+
+### Current State
+
+- ✅ Windows builds: Fully functional via `scripts/build_windows_exe.ps1`
+  - Onefile: ~318 MB standalone executable
+  - Onedir: ~6 MB exe + ~83 MB `_internal` folder
+  - Video/audio playback tested and working
+  - PyInstaller 6.19.0 with imageio/imageio-ffmpeg dependencies
+- ❌ macOS builds: Not yet implemented
+
+### macOS Build Requirements
+
+#### Hardware/Environment
+- [ ] macOS build machine (physical Mac or CI runner)
+  - Recommended: macOS 10.15 (Catalina) or later for broad compatibility
+  - Cannot cross-compile from Windows reliably
+  - Options:
+    - Local Mac hardware (MacBook, iMac, Mac Mini)
+    - GitHub Actions runner with macOS (e.g., `macos-latest`)
+    - Cloud CI provider (CircleCI, GitLab, etc.)
+
+#### Software Stack
+- [ ] Python 3.13.6 (match Windows version for consistency)
+- [ ] Homebrew package manager (for dependency installation)
+- [ ] PyInstaller 6.19.0+ (same version as Windows)
+- [ ] Required Python packages: `pygame 2.6.1`, `imageio`, `imageio-ffmpeg`, etc.
+- [ ] Xcode Command Line Tools (for compilation if needed)
+
+### Implementation Steps
+
+#### Phase 1: Basic macOS Build (Estimate: 1-3 hours)
+
+- [ ] **Setup macOS development environment**
+  - Install Homebrew: `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
+  - Install Python 3.13: `brew install python@3.13`
+  - Create virtual environment in project: `python3.13 -m venv .venv`
+  - Activate venv: `source .venv/bin/activate`
+  - Install dependencies: `pip install -r requirements.txt`
+
+- [ ] **Verify game functionality on macOS**
+  - Test run game: `python run.py`
+  - Validate video playback (intro cutscenes)
+  - Validate audio playback (all channels)
+  - Test gameplay (helicopter controls, missions, etc.)
+  - Check for case-sensitivity issues (Windows vs macOS filesystem)
+
+- [ ] **Create macOS build script**
+  - Create `scripts/build_macos_app.sh` (bash equivalent to Windows PowerShell script)
+  - Structure:
+    ```bash
+    #!/bin/bash
+    # Build macOS .app bundle with PyInstaller
+    
+    # Activate virtual environment
+    source .venv/bin/activate
+    
+    # Clean previous builds
+    rm -rf build/ dist/ pyinstaller-dist/
+    
+    # Stage assets (same logic as Windows script)
+    # ... copy assets to staging directory ...
+    
+    # Run PyInstaller
+    pyinstaller \
+      --name "Choplifter" \
+      --windowed \
+      --onefile \
+      --icon="src/choplifter/assets/icon.icns" \
+      --add-data "pyinstaller-build/asset-staging:choplifter/assets" \
+      --copy-metadata pygame \
+      --copy-metadata imageio \
+      --copy-metadata imageio-ffmpeg \
+      --collect-data imageio_ffmpeg \
+      --hidden-import pygame \
+      --hidden-import imageio_ffmpeg \
+      run.py
+    
+    # Copy .app to distribution folder
+    mkdir -p pyinstaller-dist/
+    cp -r dist/Choplifter.app pyinstaller-dist/
+    ```
+  - Make executable: `chmod +x scripts/build_macos_app.sh`
+
+- [ ] **Run initial macOS build**
+  - Execute: `./scripts/build_macos_app.sh`
+  - Expected output: `pyinstaller-dist/Choplifter.app`
+  - Test: Double-click `.app` or run `open pyinstaller-dist/Choplifter.app`
+
+#### Phase 2: Polished Distribution (Estimate: 0.5-1 day)
+
+- [ ] **Create DMG installer (optional but recommended)**
+  - Tool: `create-dmg` (install via: `brew install create-dmg`)
+  - Script to create `.dmg`:
+    ```bash
+    create-dmg \
+      --volname "Choplifter" \
+      --window-pos 200 120 \
+      --window-size 800 450 \
+      --icon-size 100 \
+      --icon "Choplifter.app" 200 190 \
+      --hide-extension "Choplifter.app" \
+      --app-drop-link 600 185 \
+      "Choplifter-Installer.dmg" \
+      "pyinstaller-dist/"
+    ```
+  - Result: Drag-and-drop DMG installer for easy installation
+
+- [ ] **Create macOS app icon (`.icns` format)**
+  - Convert existing icon to `.icns` format
+  - Tool: `iconutil` (built into macOS)
+  - Process:
+    1. Create `icon.iconset/` folder with PNG sizes: 16x16, 32x32, 128x128, 256x256, 512x512, 1024x1024
+    2. Convert: `iconutil -c icns icon.iconset -o icon.icns`
+  - Update `--icon` parameter in build script
+
+- [ ] **Bundle size optimization**
+  - Expected: Similar to Windows (~300-350 MB with video assets)
+  - Optimization strategies (same as Windows):
+    - Re-encode video assets to smaller formats
+    - Consider "lite media" build variant
+    - Optimize image assets losslessly
+
+#### Phase 3: Code Signing & Notarization (Estimate: 1-2 days)
+
+- [ ] **Apple Developer Account setup**
+  - Required for: Code signing and notarization (removes Gatekeeper warnings)
+  - Cost: $99/year for Apple Developer Program membership
+  - Not required for testing/development, only for public distribution
+
+- [ ] **Code signing**
+  - Obtain Developer ID certificate from Apple
+  - Sign app: `codesign --deep --force --verify --verbose --sign "Developer ID Application: Your Name" Choplifter.app`
+  - Verify signature: `codesign --verify --verbose Choplifter.app`
+
+- [ ] **Notarization** (removes "unidentified developer" warning)
+  - Submit to Apple: `xcrun notarytool submit Choplifter.dmg --keychain-profile "notary-profile" --wait`
+  - Staple ticket: `xcrun stapler staple Choplifter.dmg`
+  - Note: Requires Apple Developer account ($99/year)
+
+### Build Automation
+
+#### Option A: Local Builds (Manual)
+- [ ] Developer with Mac hardware runs `scripts/build_macos_app.sh` manually
+- [ ] Upload macOS `.app` or `.dmg` alongside Windows `.exe` for each release
+- **Pros**: Simple, no CI setup required
+- **Cons**: Manual process, requires Mac access
+
+#### Option B: GitHub Actions CI (Automated)
+- [ ] Create `.github/workflows/build-release.yml`
+- [ ] Strategy matrix for both platforms:
+  ```yaml
+  strategy:
+    matrix:
+      os: [windows-latest, macos-latest]
+      include:
+        - os: windows-latest
+          build-script: scripts/build_windows_exe.ps1
+          artifact-path: pyinstaller-dist/Choplifter.exe
+        - os: macos-latest
+          build-script: scripts/build_macos_app.sh
+          artifact-path: pyinstaller-dist/Choplifter.app
+  ```
+- [ ] Upload artifacts for both platforms
+- [ ] Optionally: Trigger on Git tags (`v1.0.0`) for release automation
+- **Pros**: Automated, repeatable, both platforms built simultaneously
+- **Cons**: GitHub Actions minutes usage (free tier: 2000 min/month)
+
+### Platform-Specific Gotchas & Solutions
+
+#### macOS-Specific Issues
+- **Case-sensitive filesystem**: 
+  - Solution: Test all asset paths on macOS, fix any case mismatches
+  - Example: `Intro.avi` vs `intro.avi` matters on macOS, not on Windows
+  
+- **Gatekeeper warnings**: 
+  - Issue: Unsigned apps show "unidentified developer" warning
+  - Solution: Code signing + notarization (requires Apple Developer account)
+  - Workaround: Users can right-click → "Open" → "Open Anyway" (first launch only)
+
+- **Video/audio dependencies**:
+  - Verify `imageio-ffmpeg` works on macOS (should be automatic)
+  - Test audio playback with macOS-specific audio backends
+  - Fallback: Use Pygame's default audio mixer if issues arise
+
+- **Retina display scaling**:
+  - Issue: UI may scale incorrectly on high-DPI displays
+  - Solution: Set `pygame.SCALED` flag or handle DPI scaling explicitly
+  - Test on various Mac displays (non-Retina vs Retina)
+
+#### Cross-Platform Code Considerations
+- [ ] **File path handling**:
+  - Always use `os.path.join()` or `pathlib.Path` (never hardcoded `\\` or `/`)
+  - Already using `Path` in most places (verify entire codebase)
+
+- [ ] **Asset loading**:
+  - Verify all asset references use case-consistent filenames
+  - Run: `grep -r "\.avi\|\.png\|\.wav\|\.ogg" src/` and check capitalization
+
+- [ ] **Keyboard/input mapping**:
+  - Test gamepad support on macOS (controllers may map differently)
+  - Verify keyboard shortcuts work (Command vs Ctrl)
+
+### Testing & Validation
+
+#### Pre-Release Checklist (macOS)
+- [ ] Game launches without errors
+- [ ] Intro video plays correctly
+- [ ] Mission cutscenes play correctly
+- [ ] Audio playback functional (all channels: music, SFX, helicopter, explosions)
+- [ ] Helicopter controls responsive (keyboard + gamepad)
+- [ ] All three missions playable end-to-end
+- [ ] Graphics rendering correctly (no artifacts or scaling issues)
+- [ ] Pause/resume functionality works
+- [ ] Save/load game state (if applicable)
+- [ ] Settings persistence (audio levels, controls, accessibility)
+- [ ] Performance acceptable (60 FPS target)
+- [ ] No crashes during extended play sessions
+- [ ] .app bundle size acceptable (document final size)
+- [ ] Gatekeeper behavior documented (signed vs unsigned)
+
+#### Compatibility Testing
+- [ ] Test on multiple macOS versions:
+  - macOS 10.15 Catalina (minimum supported)
+  - macOS 11 Big Sur
+  - macOS 12 Monterey
+  - macOS 13 Ventura
+  - macOS 14 Sonoma (latest at time of release)
+- [ ] Test on Intel and Apple Silicon (M1/M2/M3) Macs
+- [ ] Document minimum system requirements
+
+### Maintenance Plan
+
+#### Ongoing Responsibilities
+- [ ] **Parallel build maintenance**:
+  - Keep `build_windows_exe.ps1` and `build_macos_app.sh` in sync
+  - When adding new assets, update both staging scripts
+  - When updating dependencies, test on both platforms
+
+- [ ] **Dependency updates**:
+  - Update `requirements.txt` with platform-agnostic versions
+  - Test dependency updates on both Windows and macOS before release
+  - Document any platform-specific dependency quirks
+
+- [ ] **Release process**:
+  - Build both platforms for each release
+  - Test both builds before publishing
+  - Upload both artifacts to GitHub Releases (or distribution platform)
+  - Update README with download links for both platforms
+
+- [ ] **Bug tracking**:
+  - Label platform-specific bugs: `platform: windows` / `platform: macos`
+  - Reproduce issues on native platform before attempting fixes
+  - Test fixes on both platforms when possible
+
+#### Documentation Updates Needed
+- [ ] Update `README.md`:
+  - Add macOS installation instructions
+  - Add macOS build instructions for developers
+  - Update system requirements section
+
+- [ ] Update `docs/EXECUTIVE_SUMMARY.md`:
+  - Note cross-platform support
+
+- [ ] Create `docs/MACOS_BUILD.md`:
+  - Detailed macOS build setup instructions
+  - Troubleshooting guide for common macOS-specific issues
+  - Code signing and notarization walkthrough
+
+- [ ] Update `LLM_HANDOFF.md`:
+  - Document macOS build process for AI assistant context
+
+### Effort Estimate Summary
+
+| Phase | Time Estimate | Dependencies |
+|-------|--------------|--------------|
+| Basic macOS build (Phase 1) | 1-3 hours | Mac hardware or CI runner access |
+| Polished distribution (Phase 2) | 0.5-1 day | Phase 1 complete |
+| Code signing & notarization (Phase 3) | 1-2 days | Apple Developer account ($99/year) |
+| CI automation setup | 0.5-1 day | GitHub Actions knowledge |
+| Testing & validation | 0.5-1 day | Access to multiple Mac configurations |
+| **Total (basic build)** | **1-3 hours** | **Mac access only** |
+| **Total (production-ready)** | **3-5 days** | **Mac access + Apple Developer account** |
+
+### Priority Recommendations
+
+1. **Start with Phase 1** (basic build): Get a working `.app` bundle first, even if unsigned
+2. **Defer Phase 3** (signing/notarization): Only necessary for public distribution without warnings; users can bypass Gatekeeper for testing
+3. **Consider CI automation early**: GitHub Actions runner with `macos-latest` provides free build capacity
+4. **Test thoroughly on macOS**: Video playback and audio are most likely pain points
+
 ## Gameplay / UX Improvements
 
 - [ ] Rescue readability polish (boarding feedback, grounded/doors clarity).
