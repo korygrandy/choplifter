@@ -932,7 +932,7 @@ def run() -> None:
                 # --- Airport Special Ops: update placeholder logic ---
                 if selected_mission_id == "airport":
                     if airport_bus_state is not None:
-                        airport_bus_state = update_bus_ai(airport_bus_state, tick.dt)
+                        airport_bus_state = update_bus_ai(airport_bus_state, tick.dt, audio=audio)
                     # TODO: Replace with real update functions as modules are implemented
                     # Example: airport_hostage_state = update_hostage_logic(airport_hostage_state, tick.dt, ...)
                     # Example: airport_enemy_state = update_enemy_spawns(airport_enemy_state, tick.dt, ...)

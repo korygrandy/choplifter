@@ -65,6 +65,7 @@ class BusState:
     elapsed_s: float = 0.0
     start_x: float = 0.0
     stop_x: float = BUS_STOP_X
+    phase: str = "accelerating"  # "accelerating", "cruising", "decelerating", "stopped"
 
 
 def create_bus_state(start_x: float = 1200, ground_y: float = 400) -> BusState:
@@ -78,18 +79,20 @@ def create_bus_state(start_x: float = 1200, ground_y: float = 400) -> BusState:
     return BusState(x=start_x, y=ground_y, start_x=start_x)
 
 
-def update_bus_ai(bus_state: BusState, dt: float) -> BusState:
+def update_bus_ai(bus_state: BusState, dt: float, audio=None) -> BusState:
     """
     Update bus position and behavior.
     
     Args:
         bus_state: Current bus state
         dt: Delta time in seconds
+        audio: Optional AudioBank instance for playing sound effects
         
     Returns:
         Updated bus state
     """
     if bus_state.is_moving:
+        prev_phase = bus_state.phase
         bus_state.elapsed_s += dt
 
         # Ease in from rest based on elapsed time.
@@ -98,6 +101,23 @@ def update_bus_ai(bus_state: BusState, dt: float) -> BusState:
         # Ease out as we approach the final stop x.
         distance_to_stop = max(0.0, bus_state.x - bus_state.stop_x)
         decel_factor = _smoothstep01(distance_to_stop / BUS_DECEL_DISTANCE_PX)
+
+        # Determine which factor is limiting (acceleration vs deceleration)
+        if accel_factor < 1.0:
+            bus_state.phase = "accelerating"
+        elif decel_factor < accel_factor:
+            bus_state.phase = "decelerating"
+        else:
+            bus_state.phase = "cruising"
+
+        # Play sounds on phase transitions
+        if audio is not None:
+            if prev_phase == "accelerating" and bus_state.phase == "accelerating" and bus_state.elapsed_s < dt * 1.5:
+                # Play acceleration sound once at start
+                audio.play_bus_accelerate()
+            elif prev_phase != "decelerating" and bus_state.phase == "decelerating":
+                # Play brake sound when entering deceleration
+                audio.play_bus_brakes()
 
         speed_factor = min(accel_factor, decel_factor)
         bus_state.velocity_x = -BUS_SPEED_PX_PER_SEC * speed_factor
@@ -108,6 +128,7 @@ def update_bus_ai(bus_state: BusState, dt: float) -> BusState:
             bus_state.x = bus_state.stop_x
             bus_state.velocity_x = 0.0
             bus_state.is_moving = False
+            bus_state.phase = "stopped"
     
     return bus_state
 
