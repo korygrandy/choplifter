@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 import random
 
 import pygame
@@ -15,6 +16,10 @@ class AirportSpawnEnemy:
 	vx: float
 	kind: str  # "uav" or "raider"
 	ttl_s: float
+	vy: float = 0.0
+	base_y: float = 0.0
+	phase: str = "approach"  # approach -> dive
+	weave_phase: float = 0.0
 
 
 @dataclass
@@ -55,15 +60,33 @@ def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_sta
 		kind = "uav" if random.random() < 0.5 else "raider"
 
 		if kind == "uav":
-			y = max(90.0, ground_y - random.uniform(150.0, 220.0))
+			y = max(90.0, ground_y - random.uniform(165.0, 235.0))
 			vx = -random.uniform(95.0, 135.0)
 			ttl_s = 14.0
+			vy = random.uniform(-4.0, 4.0)
+			phase = "approach"
+			weave_phase = random.uniform(0.0, math.pi * 2.0)
 		else:
 			y = ground_y - random.uniform(22.0, 36.0)
 			vx = -random.uniform(55.0, 80.0)
 			ttl_s = 24.0
+			vy = 0.0
+			phase = "approach"
+			weave_phase = 0.0
 
-		enemy_state.enemies.append(AirportSpawnEnemy(x=spawn_x, y=y, vx=vx, kind=kind, ttl_s=ttl_s))
+		enemy_state.enemies.append(
+			AirportSpawnEnemy(
+				x=spawn_x,
+				y=y,
+				vx=vx,
+				kind=kind,
+				ttl_s=ttl_s,
+				vy=vy,
+				base_y=y,
+				phase=phase,
+				weave_phase=weave_phase,
+			)
+		)
 		enemy_state.total_spawned += 1
 		enemy_state.spawn_cooldown_s = _next_spawn_delay(enemy_state.elapsed_s)
 
@@ -71,21 +94,36 @@ def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_sta
 	target_ref_x = float(target_x) if target_x is not None else bus_x
 	remaining: list[AirportSpawnEnemy] = []
 	for e in enemy_state.enemies:
-		e.x += e.vx * max(0.0, float(dt))
-		e.ttl_s -= max(0.0, float(dt))
+		dt_s = max(0.0, float(dt))
+		e.ttl_s -= dt_s
 
-		if e.kind == "uav" and e.x < target_ref_x + 130.0:
-			# Nose-dive hint: accelerate and descend near bus line.
-			e.vx *= 1.015
-			e.y += 46.0 * max(0.0, float(dt))
+		if e.kind == "uav":
+			if e.phase == "approach":
+				e.weave_phase += dt_s * 4.2
+				# Distinct UAV movement: stable forward speed + sinusoidal weave.
+				e.vx = min(e.vx, -92.0)
+				e.y = float(e.base_y) + math.sin(float(e.weave_phase)) * 16.0
+				if e.x <= target_ref_x + 250.0:
+					e.phase = "dive"
+					e.vy = 28.0
+					e.vx = min(e.vx, -118.0)
+			else:
+				# Lock and dive with increasing descent rate toward target line.
+				e.vx *= 1.010
+				e.vy = min(165.0, e.vy + 95.0 * dt_s)
+				e.y += e.vy * dt_s
+
+		e.x += e.vx * dt_s
+		if e.kind != "uav":
+			e.y += e.vy * dt_s
 
 		if e.ttl_s <= 0.0:
 			continue
 		if bus_state is not None:
 			dx = abs(e.x - target_ref_x)
 			if dx <= 18.0:
-				# Basic phase-1 damage model: enemy impacts shave bus health.
-				impact_damage = 9.0 if e.kind == "uav" else 5.0
+				# UAV dive impacts are heavier than raider impacts.
+				impact_damage = 12.0 if e.kind == "uav" else 5.0
 				bus_health = float(getattr(bus_state, "health", 100.0))
 				setattr(bus_state, "health", max(0.0, bus_health - impact_damage))
 				continue
@@ -105,11 +143,15 @@ def draw_airport_enemies(target: pygame.Surface, enemy_state, *, camera_x: float
 		x = int(e.x - float(camera_x))
 		y = int(e.y)
 		if e.kind == "uav":
+			nose = (255, 120, 120) if e.phase == "dive" else (230, 230, 230)
+			wing = (205, 205, 205)
 			pygame.draw.polygon(
 				target,
-				(230, 230, 230),
+				nose,
 				[(x, y), (x - 10, y + 4), (x - 14, y + 1), (x - 10, y - 3)],
 			)
+			pygame.draw.line(target, wing, (x - 6, y), (x - 16, y - 5), 2)
+			pygame.draw.line(target, wing, (x - 6, y), (x - 16, y + 5), 2)
 			pygame.draw.polygon(
 				target,
 				(20, 20, 20),

@@ -131,13 +131,14 @@ Escort/Convoy: A ground vehicle (bus) moves across the screen. The player must h
 - [x] Implement Mission Tech deployment/repair in `mission_tech.py`
 - [x] Implement objective tracking in `objective_manager.py`
 - [x] Add real vehicle sprites in `vehicle_assets.py`
-- [ ] Implement cutscene triggers in `cutscene_manager.py`
-- [ ] Add collision detection between bus and player fire
+- [x] Implement cutscene triggers in `cutscene_manager.py`
+- [x] Add collision detection between bus and player fire
 - [x] Add damage model for bus
-- [ ] Add UAV drone enemy type
+- [x] Add UAV drone enemy type
 - [ ] Add Merkava tank enemy type
 - [ ] Add barricade obstacles
 - [ ] Add Mission Tech repair mechanic
+- [x] Add meal-truck extraction/transfer workflow (plane -> meal truck -> bus)
 - [ ] Add Delta Squad cover at LZ
 - [x] Add hostage timer (120s to reach)
 - [ ] Add bonus objectives
