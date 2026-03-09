@@ -95,7 +95,7 @@ Current script behavior (`scripts/build_windows_exe.ps1`):
 - Import smoke test:
   - `./.venv/Scripts/python.exe -c "from src.choplifter.main import run; print('import-ok')"`
 - Run game:
-  - `& "C:\dev\choplifter\choplifter\.venv\Scripts\python.exe" "C:\dev\choplifter\choplifter\run.py"`
+  - `& .\.venv\Scripts\python.exe .\run.py`
 
 ## Current Work: Airport Special Ops Mission (In Progress)
 
