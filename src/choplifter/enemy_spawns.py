@@ -38,7 +38,7 @@ def _next_spawn_delay(elapsed_s: float) -> float:
 	return random.uniform(2.8, 4.2)
 
 
-def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_state=None):
+def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_state=None, target_x: float | None = None):
 	if enemy_state is None:
 		enemy_state = create_airport_enemy_state()
 
@@ -68,12 +68,13 @@ def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_sta
 		enemy_state.spawn_cooldown_s = _next_spawn_delay(enemy_state.elapsed_s)
 
 	bus_x = float(getattr(bus_state, "x", world_width * 0.5)) if bus_state is not None else world_width * 0.5
+	target_ref_x = float(target_x) if target_x is not None else bus_x
 	remaining: list[AirportSpawnEnemy] = []
 	for e in enemy_state.enemies:
 		e.x += e.vx * max(0.0, float(dt))
 		e.ttl_s -= max(0.0, float(dt))
 
-		if e.kind == "uav" and e.x < bus_x + 130.0:
+		if e.kind == "uav" and e.x < target_ref_x + 130.0:
 			# Nose-dive hint: accelerate and descend near bus line.
 			e.vx *= 1.015
 			e.y += 46.0 * max(0.0, float(dt))
@@ -81,7 +82,7 @@ def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_sta
 		if e.ttl_s <= 0.0:
 			continue
 		if bus_state is not None:
-			dx = abs(e.x - float(getattr(bus_state, "x", bus_x)))
+			dx = abs(e.x - target_ref_x)
 			if dx <= 18.0:
 				# Basic phase-1 damage model: enemy impacts shave bus health.
 				impact_damage = 9.0 if e.kind == "uav" else 5.0

@@ -262,6 +262,7 @@ def run() -> None:
     airport_tech_state = None
     airport_objective_state = None
     airport_cutscene_state = None
+    airport_meal_truck_state = None
 
     if selected_mission_id == "airport":
         airport_bus_state = create_bus_state(start_x=2200, ground_y=heli_settings.ground_y)
@@ -269,6 +270,11 @@ def run() -> None:
         airport_enemy_state = create_airport_enemy_state()
         airport_tech_state = create_mission_tech_state()
         airport_objective_state = create_airport_objective_state(hostage_deadline_s=120.0)
+        airport_meal_truck_state = create_airport_meal_truck_state(
+            start_x=1120.0,
+            ground_y=heli_settings.ground_y,
+            plane_lz_x=1232.0,
+        )
 
     def apply_mission_preview_wrapper() -> None:
         nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
@@ -293,7 +299,7 @@ def run() -> None:
         nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_btn_rb_down, prev_btn_lb_down, prev_btn_back_down
-        nonlocal city_objective_overlay_timer, airport_bus_state, airport_hostage_state, airport_enemy_state, airport_tech_state, airport_objective_state
+        nonlocal city_objective_overlay_timer, airport_bus_state, airport_hostage_state, airport_enemy_state, airport_tech_state, airport_objective_state, airport_meal_truck_state
         # Stop chopper warning beeps on game reset
         audio.stop_chopper_warning_beeps()
         mission, helicopter, accumulator, prev_stats = reset_game(
@@ -330,6 +336,11 @@ def run() -> None:
             airport_enemy_state = create_airport_enemy_state()
             airport_tech_state = create_mission_tech_state()
             airport_objective_state = create_airport_objective_state(hostage_deadline_s=120.0)
+            airport_meal_truck_state = create_airport_meal_truck_state(
+                start_x=1120.0,
+                ground_y=heli_settings.ground_y,
+                plane_lz_x=1232.0,
+            )
 
     def toggle_particles_wrapper() -> None:
         nonlocal particles_enabled
@@ -585,7 +596,7 @@ def run() -> None:
 
         # Check if we transitioned from select_chopper to cutscene via keyboard
         # (gamepad path handles this inline)
-        if prev_loop_mode == "select_chopper" and mode == "cutscene":
+        if prev_loop_mode == "select_chopper" and mode == "cutscene" and cutscenes.mission.video is None:
             # Start mission cutscene after chopper selection (keyboard path)
             cutscene_path_after_selection = assets_dir / "city-seige-intro.avi"
             cutscene_started = start_mission_cutscene(
@@ -952,17 +963,30 @@ def run() -> None:
                         mission=mission,
                         audio=audio,
                     )
-                    airport_enemy_state = update_airport_enemy_spawns(
-                        airport_enemy_state,
-                        tick.dt,
-                        mission=mission,
-                        bus_state=airport_bus_state,
-                    )
                     airport_tech_state = update_mission_tech(
                         airport_tech_state,
                         tick.dt,
                         helicopter=helicopter,
                         bus_state=airport_bus_state,
+                    )
+                    airport_meal_truck_state = update_airport_meal_truck(
+                        airport_meal_truck_state,
+                        tick.dt,
+                        helicopter=helicopter,
+                        tech_state=airport_tech_state,
+                        bus_state=airport_bus_state,
+                    )
+                    airport_target_x = get_airport_priority_target_x(
+                        bus_state=airport_bus_state,
+                        meal_truck_state=airport_meal_truck_state,
+                        tech_state=airport_tech_state,
+                    )
+                    airport_enemy_state = update_airport_enemy_spawns(
+                        airport_enemy_state,
+                        tick.dt,
+                        mission=mission,
+                        bus_state=airport_bus_state,
+                        target_x=airport_target_x,
                     )
                     airport_objective_state = update_airport_objectives(
                         airport_objective_state,
@@ -971,6 +995,15 @@ def run() -> None:
                         hostage_state=airport_hostage_state,
                         bus_state=airport_bus_state,
                     )
+
+                    if (
+                        airport_tech_state is not None
+                        and bool(getattr(airport_tech_state, "is_deployed", False))
+                        and bool(getattr(helicopter, "grounded", False))
+                    ):
+                        mission.invuln_seconds = max(float(getattr(mission, "invuln_seconds", 0.0)), float(tick.dt) + 0.06)
+                        helicopter.vel.x = 0.0
+                        helicopter.vel.y = 0.0
                     # TODO: Replace with real update functions as modules are implemented
                     # Example: airport_hostage_state = update_hostage_logic(airport_hostage_state, tick.dt, ...)
                 
@@ -1087,6 +1120,7 @@ def run() -> None:
                 )
                 draw_airport_enemies(target, airport_enemy_state, camera_x=camera_x)
                 draw_airport_mission_tech(target, airport_tech_state, camera_x=camera_x, bus_state=airport_bus_state)
+                draw_airport_meal_truck(target, airport_meal_truck_state, camera_x=camera_x)
                 draw_airport_objectives(
                     target,
                     airport_objective_state,

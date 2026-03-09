@@ -130,7 +130,7 @@ Escort/Convoy: A ground vehicle (bus) moves across the screen. The player must h
 - [x] Implement enemy spawn waves in `enemy_spawns.py`
 - [x] Implement Mission Tech deployment/repair in `mission_tech.py`
 - [x] Implement objective tracking in `objective_manager.py`
-- [ ] Add real vehicle sprites in `vehicle_assets.py`
+- [x] Add real vehicle sprites in `vehicle_assets.py`
 - [ ] Implement cutscene triggers in `cutscene_manager.py`
 - [ ] Add collision detection between bus and player fire
 - [x] Add damage model for bus
