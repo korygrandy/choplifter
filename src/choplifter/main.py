@@ -263,6 +263,13 @@ def run() -> None:
     airport_objective_state = None
     airport_cutscene_state = None
 
+    if selected_mission_id == "airport":
+        airport_bus_state = create_bus_state(start_x=2200, ground_y=heli_settings.ground_y)
+        airport_hostage_state = create_airport_hostage_state(total_hostages=16, pickup_x=1232.0)
+        airport_enemy_state = create_airport_enemy_state()
+        airport_tech_state = create_mission_tech_state()
+        airport_objective_state = create_airport_objective_state(hostage_deadline_s=120.0)
+
     def apply_mission_preview_wrapper() -> None:
         nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
         mission, helicopter, accumulator, prev_stats = apply_mission_preview(
@@ -286,7 +293,7 @@ def run() -> None:
         nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_btn_rb_down, prev_btn_lb_down, prev_btn_back_down
-        nonlocal city_objective_overlay_timer
+        nonlocal city_objective_overlay_timer, airport_bus_state, airport_hostage_state, airport_enemy_state, airport_tech_state, airport_objective_state
         # Stop chopper warning beeps on game reset
         audio.stop_chopper_warning_beeps()
         mission, helicopter, accumulator, prev_stats = reset_game(
@@ -315,6 +322,14 @@ def run() -> None:
         prev_btn_lb_down = False
         prev_btn_back_down = False
         city_objective_overlay_timer = get_mission_objective_overlay_duration(mission_id=selected_mission_id)
+        
+        # Initialize mission-specific state
+        if selected_mission_id == "airport":
+            airport_bus_state = create_bus_state(start_x=2200, ground_y=heli_settings.ground_y)
+            airport_hostage_state = create_airport_hostage_state(total_hostages=16, pickup_x=1232.0)
+            airport_enemy_state = create_airport_enemy_state()
+            airport_tech_state = create_mission_tech_state()
+            airport_objective_state = create_airport_objective_state(hostage_deadline_s=120.0)
 
     def toggle_particles_wrapper() -> None:
         nonlocal particles_enabled
@@ -927,13 +942,37 @@ def run() -> None:
                 
                 # --- Airport Special Ops: update placeholder logic ---
                 if selected_mission_id == "airport":
+                    if airport_bus_state is not None:
+                        airport_bus_state = update_bus_ai(airport_bus_state, tick.dt, audio=audio)
+                    airport_hostage_state = update_airport_hostage_logic(
+                        airport_hostage_state,
+                        tick.dt,
+                        bus_state=airport_bus_state,
+                        helicopter=helicopter,
+                        mission=mission,
+                        audio=audio,
+                    )
+                    airport_enemy_state = update_airport_enemy_spawns(
+                        airport_enemy_state,
+                        tick.dt,
+                        mission=mission,
+                        bus_state=airport_bus_state,
+                    )
+                    airport_tech_state = update_mission_tech(
+                        airport_tech_state,
+                        tick.dt,
+                        helicopter=helicopter,
+                        bus_state=airport_bus_state,
+                    )
+                    airport_objective_state = update_airport_objectives(
+                        airport_objective_state,
+                        tick.dt,
+                        mission=mission,
+                        hostage_state=airport_hostage_state,
+                        bus_state=airport_bus_state,
+                    )
                     # TODO: Replace with real update functions as modules are implemented
-                    # Example: airport_bus_state = update_bus_ai(airport_bus_state, tick.dt, ...)
                     # Example: airport_hostage_state = update_hostage_logic(airport_hostage_state, tick.dt, ...)
-                    # Example: airport_enemy_state = update_enemy_spawns(airport_enemy_state, tick.dt, ...)
-                    # Example: airport_tech_state = update_mission_tech(airport_tech_state, tick.dt, ...)
-                    # Example: airport_objective_state = update_objective_manager(airport_objective_state, tick.dt, ...)
-                    pass  # Placeholder for Airport Special Ops mission-specific logic
                 
                 if playing_step.continue_fixed_loop:
                     continue
@@ -1036,30 +1075,27 @@ def run() -> None:
             
             # --- Airport Special Ops: placeholder rendering (drawn on top of normal mission entities) ---
             if selected_mission_id == "airport":
+                # Render active bus state
+                if airport_bus_state is not None:
+                    draw_airport_bus(target, airport_bus_state, camera_x)
+                draw_airport_hostages(
+                    target,
+                    airport_hostage_state,
+                    camera_x=camera_x,
+                    ground_y=heli_settings.ground_y,
+                    bus_state=airport_bus_state,
+                )
+                draw_airport_enemies(target, airport_enemy_state, camera_x=camera_x)
+                draw_airport_mission_tech(target, airport_tech_state, camera_x=camera_x, bus_state=airport_bus_state)
+                draw_airport_objectives(
+                    target,
+                    airport_objective_state,
+                    camera_x=camera_x,
+                    ground_y=heli_settings.ground_y,
+                    bus_state=airport_bus_state,
+                )
                 # TODO: Replace with real rendering as modules are implemented
-                # Example: draw_airport_bus(target, airport_bus_state, camera_x)
-                # Example: draw_airport_hostages(target, airport_hostage_state, camera_x)
-                # Example: draw_airport_enemies(target, airport_enemy_state, camera_x)
-                # Example: draw_airport_tech(target, airport_tech_state, camera_x)
-                # Example: draw_airport_objectives(target, airport_objective_state, camera_x)
                 # Example: draw_airport_cutscenes(target, airport_cutscene_state, camera_x)
-                # Placeholder: draw a simple rectangle for the bus
-                bus_rect = pygame.Rect(int(1200 - camera_x), int(heli_settings.ground_y - 24), 64, 24)
-                pygame.draw.rect(target, (80, 120, 200), bus_rect, border_radius=6)
-                pygame.draw.rect(target, (30, 40, 60), bus_rect, 2, border_radius=6)
-                # Placeholder: draw a simple circle for a hostage
-                pygame.draw.circle(target, (245, 235, 210), (int(1232 - camera_x), int(heli_settings.ground_y - 28)), 8)
-                pygame.draw.circle(target, (25, 25, 25), (int(1232 - camera_x), int(heli_settings.ground_y - 28)), 8, 1)
-                # Placeholder: draw a simple triangle for an enemy
-                pygame.draw.polygon(target, (200, 40, 40), [
-                    (int(1280 - camera_x), int(heli_settings.ground_y - 24)),
-                    (int(1270 - camera_x), int(heli_settings.ground_y - 44)),
-                    (int(1290 - camera_x), int(heli_settings.ground_y - 44)),
-                ])
-                # Placeholder: draw a tech icon (wrench)
-                pygame.draw.rect(target, (120, 200, 120), pygame.Rect(int(1250 - camera_x), int(heli_settings.ground_y - 40), 12, 12), border_radius=3)
-                # Placeholder: draw an objective marker
-                pygame.draw.circle(target, (255, 215, 0), (int(1300 - camera_x), int(heli_settings.ground_y - 50)), 6)
                 # Placeholder: draw a cutscene trigger (star)
                 pygame.draw.polygon(target, (255, 255, 0), [
                     (int(1320 - camera_x), int(heli_settings.ground_y - 60)),

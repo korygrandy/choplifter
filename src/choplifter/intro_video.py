@@ -29,7 +29,7 @@ class IntroVideoPlayer:
     _reader: Any
     _iter: Any
     _t: float = 0.0
-    _frame_index: int = -1
+    _frame_index: int = 0
     _frame: pygame.Surface | None = None
     _frame_size: tuple[int, int] | None = None
     _scaled: pygame.Surface | None = None
@@ -187,7 +187,11 @@ class IntroVideoPlayer:
         target_index = int(self._t * max(1e-6, self.fps))
 
         # Decode frames sequentially up to target.
-        while self._frame_index < target_index and not self.done:
+        # Start from frame 0 only if we haven't decoded any frames yet.
+        if self._frame is None and self._frame_index == 0:
+            target_index = max(target_index, 0)
+        
+        while self._frame_index <= target_index and not self.done:
             try:
                 frame = next(self._iter)
             except StopIteration:
@@ -213,10 +217,11 @@ class IntroVideoPlayer:
                 self._scaled = None
                 self._scaled_size = None
                 self._scaled_screen = None
-                self._frame_index += 1
             except Exception:
                 self.done = True
                 return
+            
+            self._frame_index += 1
 
     def draw(self, screen: pygame.Surface) -> None:
         screen.fill((0, 0, 0))

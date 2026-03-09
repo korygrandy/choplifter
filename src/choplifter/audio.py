@@ -287,6 +287,9 @@ class AudioBank:
     pause: pygame.mixer.Sound | None
     barak_mrad_deploy: pygame.mixer.Sound | None
     barak_mrad_launch: pygame.mixer.Sound | None
+    bus_accelerate: pygame.mixer.Sound | None
+    bus_brakes: pygame.mixer.Sound | None
+    bus_door: pygame.mixer.Sound | None
 
     def play_barak_mrad_deploy(self) -> None:
         if self.barak_mrad_deploy is None:
@@ -436,7 +439,7 @@ class AudioBank:
         except Exception:
             pass
         pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
-        pygame.mixer.set_num_channels(16)
+        pygame.mixer.set_num_channels(18)  # Must match AudioMixer total_channels (needs channels 16-17 for Barak)
         try:
             mixer = AudioMixer()
             sample_rate = 22050
@@ -547,6 +550,17 @@ class AudioBank:
             barak_mrad_launch = _try_load_asset_sound(asset_dir / "barak-launched.wav")
             if barak_mrad_launch is not None:
                 barak_mrad_launch.set_volume(0.58)
+
+            # Bus sound effects for Airport mission
+            bus_accelerate = _try_load_asset_sound(asset_dir / "bus-accelerate.ogg")
+            if bus_accelerate is not None:
+                bus_accelerate.set_volume(0.50)
+            bus_brakes = _try_load_asset_sound(asset_dir / "bus-brakes.ogg")
+            if bus_brakes is not None:
+                bus_brakes.set_volume(0.50)
+            bus_door = _try_load_asset_sound(asset_dir / "bus-door.ogg")
+            if bus_door is not None:
+                bus_door.set_volume(0.50)
             return AudioBank(
                 mixer=mixer,
                 shoot=shoot,
@@ -573,6 +587,9 @@ class AudioBank:
                 chopper_warning_beeps=chopper_warning_beeps,
                 barak_mrad_deploy=barak_mrad_deploy,
                 barak_mrad_launch=barak_mrad_launch,
+                bus_accelerate=bus_accelerate,
+                bus_brakes=bus_brakes,
+                bus_door=bus_door,
             )
         except Exception as e:
             print(f"[AudioBank] Failed to initialize: {e}")
@@ -602,6 +619,9 @@ class AudioBank:
                 chopper_warning_beeps=None,
                 barak_mrad_deploy=None,
                 barak_mrad_launch=None,
+                bus_accelerate=None,
+                bus_brakes=None,
+                bus_door=None,
             )
             r2 = _sine_pcm16(freq_hz=988.0, duration_s=0.10, volume=0.22, sample_rate=sample_rate)
             rescue = pygame.mixer.Sound(buffer=_mix_pcm16([r1, r2], volume=0.85))
@@ -859,3 +879,12 @@ class AudioBank:
 
     def play_pause_toggle(self) -> None:
         self._play(self.pause, bus="ui")
+
+    def play_bus_accelerate(self) -> None:
+        self._play(self.bus_accelerate, bus="sfx")
+
+    def play_bus_brakes(self) -> None:
+        self._play(self.bus_brakes, bus="sfx")
+
+    def play_bus_door(self) -> None:
+        self._play(self.bus_door, bus="sfx")
