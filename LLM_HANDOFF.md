@@ -101,7 +101,58 @@ Current script behavior (`scripts/build_windows_exe.ps1`):
 
 ### Branch: `feature/airport-special-ops-mission`
 
-**Status:** Phase 1 integration complete - base structure and placeholders working
+**Status:** Phase 1 integration complete - redesigning mission flow
+
+**Mission Flow (Redesigned):**
+
+1. **Mission Start:**
+   - Helicopter starts WITH Mission Tech engineer on board
+   - Visual indicator above chopper (wrench or colored symbol) shows tech is on board
+   - Bus starts on right side, begins driving LEFT
+   - Yellow diamond indicator above bus shows it's the objective
+
+2. **Tech Deployment:**
+   - Player lands chopper near meal truck (parked at start position)
+   - Opens doors (E key / A button)
+   - Tech EXITS chopper, ENTERS meal truck
+   - Indicator disappears from chopper, appears on meal truck
+   - Chopper is now free to move and defend
+
+3. **Meal Truck Extraction Phase:**
+   - Tech drives meal truck to elevated jetway (second-to-last bunker, x=~1232)
+   - Jetway floor is elevated to match bottom of airport-meal-cart-box.png
+   - When truck reaches extraction LZ:
+     - Box extension animation begins:
+       - `airport-meal-cart-box.png` moves UP 53 pixels (animated)
+       - Simultaneously, `airport-meal-cart-extended.png` fades IN
+       - Both complete at same time
+     - Once fully extended, hostages board the meal truck
+     - Passenger indicators render on truck (at position 31, 21 when extended)
+   
+4. **Box Retraction:**
+   - Once all available hostages board:
+     - `airport-meal-cart-extended.png` fades OUT
+     - `airport-meal-cart-box.png` moves DOWN 53 pixels
+     - Returns to base `airport-meal-cart.png` sprite
+     - Passenger indicators persist, move down with box (render at position 31, 74 when retracted)
+
+5. **Transfer to Bus:**
+   - Meal truck drives LEFT to rendezvous with bus
+   - Bus has already driven past rescue operation
+   - When truck reaches bus vicinity:
+     - Bus stops, doors open (new sprite: `city-bus-doors-open.png`)
+     - Passengers transfer from meal truck to bus
+     - Passenger indicators update to show on bus
+
+6. **Escort Phase:**
+   - Once passengers are on bus, it becomes vulnerable to enemy attacks
+   - Player must defend bus from UAV drones, enemy fire, etc.
+   - Bus takes damage from enemy projectiles (and friendly fire from player)
+   - Bus drives to safe LZ on RIGHT side of screen
+
+7. **Mission Success:**
+   - If bus reaches safe LZ with passengers alive: SUCCESS
+   - If bus is destroyed or all passengers KIA: FAILURE
 
 **What's Done:**
 - Mission selection menu includes "Airport Special Ops"
@@ -109,36 +160,40 @@ Current script behavior (`scripts/build_windows_exe.ps1`):
 - Seven new module scaffolds created in `src/choplifter/`:
   - `bus_ai.py`, `hostage_logic.py`, `enemy_spawns.py`, `mission_tech.py`
   - `vehicle_assets.py`, `objective_manager.py`, `cutscene_manager.py`
-- Integration into `main.py`:
-  - Imports for all new modules (using `from .module import *`)
-  - Placeholder state variables initialized after mission creation
-  - Conditional update logic in fixed-step loop (currently just `pass` placeholder)
-  - Conditional rendering: `draw_mission()` always runs, then airport placeholders drawn on top
-- Placeholder shapes render at specific world coordinates (x=1200-1320):
-  - Blue rectangle = bus, white circle = hostage, red triangle = enemy
-  - Green square = tech, gold circle = objective, yellow star = cutscene trigger
-- Base game fully functional: helicopter physics, enemies, projectiles, all working
+- Integration into `main.py` for all airport objects
+- Basic bus AI (drives left, stops for obstacles)
+- Enemy spawns (UAV drones with weaving/dive behavior)
+- Friendly fire detection on bus
+- Objective tracking with timer
+- UAV enemy type implemented
 
-**What's Not Done:**
-- All module logic (bus AI, hostage boarding, enemy spawns, etc.) - just TODOs
-- Actual vehicle sprites/assets
-- Collision detection for bus
-- Damage model for bus
-- New enemy types (UAV, Merkava)
-- Mission Tech repair mechanic
-- Cutscene integration
-- Objective tracking system
+**What Needs Refactoring (New Design):**
+- Mission Tech state machine (currently deploys when grounded near bus, needs to track: on_chopper → deployed_to_truck → driving → extracting → transferring → returned)
+- Meal truck animation system (box extension/retraction with 53px movement + sprite fade)
+- Passenger indicator positioning (must move with box: 31,21 extended / 31,74 retracted)
+- Tech visual indicators (wrench/symbol above chopper when tech on board, above truck when deployed)
+- Bus doors sprite system (add `city-bus-doors-open.png` sprite)
+- Transfer LZ detection (meal truck proximity to bus)
+- Mission phases (tech_deployment → extraction → transfer → escort → success/failure)
 
 **Next Session Should:**
-1. Pick one module to implement first (recommend `bus_ai.py` for visible progress)
-2. Add basic bus movement along a path
-3. Test collision with obstacles
-4. Iterate on one feature at a time
+1. Refactor `mission_tech.py` to track tech state (on_chopper → in_truck → returned)
+2. Update `vehicle_assets.py` for box animation (53px movement + fade)
+3. Add passenger indicator positioning logic (moves with box)
+4. Implement transfer LZ detection and bus door opening
+5. Update objective phases to match new flow
+6. Add tech visual indicators (wrench above chopper/truck)
 
 **Testing:**
 - Select "Airport Special Ops" from mission menu
-- Fly helicopter to x=1200-1320 to see placeholders
-- All base game features working (enemies, shooting, compounds, etc.)
+- Land near meal truck, open doors (E / A button)
+- Verify tech exits chopper, enters truck
+- Watch meal truck drive to jetway
+- Verify box extends 53px with fade animation
+- Verify hostages board and indicators render at 31,21
+- Verify box retracts with indicators moving to 31,74
+- Verify truck drives to bus and transfer occurs
+- Verify escort phase begins and bus can be defended
 
 ## Notes for Future Refactors
 

@@ -103,10 +103,12 @@ class MissionState:
         compound_w = level.compound_width
         compound_h = level.compound_height
         compound_y = heli.ground_y - compound_h
-        for x in level.compound_xs:
+        for i, x in enumerate(level.compound_xs):
+            # Airport mission: float third compound 30px up to match meal truck box height
+            y_offset = -30.0 if mission_id.lower() in ("airport", "airport_special_ops") and i == 2 else 0.0
             compounds.append(
                 Compound(
-                    pos=Vec2(x, compound_y),
+                    pos=Vec2(x, compound_y + y_offset),
                     width=compound_w,
                     height=compound_h,
                     health=level.compound_health,

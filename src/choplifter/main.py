@@ -971,6 +971,7 @@ def run() -> None:
                         airport_tech_state,
                         tick.dt,
                         helicopter=helicopter,
+                        meal_truck_state=airport_meal_truck_state,
                         bus_state=airport_bus_state,
                     )
                     airport_meal_truck_state = update_airport_meal_truck(
@@ -1014,16 +1015,9 @@ def run() -> None:
                         tech_state=airport_tech_state,
                     )
 
-                    if (
-                        airport_tech_state is not None
-                        and bool(getattr(airport_tech_state, "is_deployed", False))
-                        and bool(getattr(helicopter, "grounded", False))
-                    ):
-                        mission.invuln_seconds = max(float(getattr(mission, "invuln_seconds", 0.0)), float(tick.dt) + 0.06)
-                        helicopter.vel.x = 0.0
-                        helicopter.vel.y = 0.0
-                    # TODO: Replace with real update functions as modules are implemented
-                    # Example: airport_hostage_state = update_hostage_logic(airport_hostage_state, tick.dt, ...)
+                    # NOTE: Helicopter parking logic removed in redesign
+                    # Tech deploys from chopper to meal truck, chopper is free to move after deployment
+                    # (Previous logic: kept helicopter parked/invuln while tech was deployed)
                 
                 if playing_step.continue_fixed_loop:
                     continue
@@ -1137,7 +1131,7 @@ def run() -> None:
                     bus_state=airport_bus_state,
                 )
                 draw_airport_enemies(target, airport_enemy_state, camera_x=camera_x)
-                draw_airport_mission_tech(target, airport_tech_state, camera_x=camera_x, bus_state=airport_bus_state)
+                draw_airport_mission_tech(target, airport_tech_state, camera_x=camera_x, helicopter=helicopter)
                 draw_airport_meal_truck(target, airport_meal_truck_state, camera_x=camera_x)
                 draw_airport_objectives(
                     target,

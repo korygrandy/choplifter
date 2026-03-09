@@ -3,14 +3,84 @@
 ## Mission Concept
 Escort/Convoy: A ground vehicle (bus) moves across the screen. The player must hover above it, destroying incoming rockets and MRAPs before they reach the convoy. The mission is set at an airport with a crashed plane and jetway, guarded by militants with hostages inside. The bus is a rectangle placeholder until a sprite is available.
 
-## Mission Flow
-1. Mission starts with a cutscene (assets/cutscene-airport-special-ops.mpg).
-2. Player and bus at right side; bus begins moving left.
-3. Bus must reach the crashed plane/jetway, under fire from militants and new enemy types.
-4. Hostages board the bus (timed event, 120 seconds to reach hostages).
-5. Player protects bus and hostages as bus returns to LZ (airport tower, with Delta Squad cover).
-6. At LZ, bus doors open and hostages deboard.
-7. Mission success/failure based on hostages rescued, bus survival, and other conditions.
+## Mission Flow (REDESIGNED)
+
+1. **Mission Start:**
+   - Intro cutscene: assets/cutscene-airport-special-ops.mpg
+   - Helicopter starts WITH Mission Tech engineer on board
+   - Visual indicator above chopper (wrench or colored symbol) shows tech is present
+   - Bus starts on right side (x=~2200), begins driving LEFT at 80 px/s
+   - Yellow diamond above bus = primary objective indicator
+   - Meal truck parked at initial position (x=~1800)
+
+2. **Tech Deployment Phase:**
+   - Player flies to meal truck location
+   - Lands helicopter near truck (within 120px proximity)
+   - Opens doors (E key / A button on gamepad)
+   - Mission Tech engineer EXITS helicopter, ENTERS meal truck
+   - Tech indicator transfers from chopper to meal truck
+   - Helicopter is now free to move independently and defend
+
+3. **Extraction Phase (Meal Truck → Elevated Jetway):**
+   - AI-controlled meal truck drives RIGHT to elevated jetway at hostage location (x=~1232)
+   - Elevated jetway: floor height matches bottom edge of airport-meal-cart-box.png
+   - When truck reaches extraction LZ (within ~30px of jetway):
+     - **Box Extension Animation** (duration: ~1.8 seconds):
+       - Base sprite: `airport-meal-cart.png` (always visible)
+       - Overlay sprite: `airport-meal-cart-box.png` starts at y_offset=0
+       - Box moves UP 53 pixels over animation duration
+       - Simultaneously, `airport-meal-cart-extended.png` fades IN (alpha 0 → 255)
+       - Animation completes when box at +53px and extended sprite fully opaque
+     - Hostages begin boarding meal truck (one at a time, ~0.5s each)
+     - **Passenger Indicators (Extended Position):**
+       - Render starting at position (31, 21) relative to truck base
+       - Indicators arranged in rows (4 per row, spacing ~8px)
+       - Use hostage sprites/icons to show passenger count and types
+
+4. **Retraction Phase:**
+   - Once all available hostages boarded (or boarding complete):
+     - **Box Retraction Animation** (duration: ~1.8 seconds):
+       - `airport-meal-cart-extended.png` fades OUT (alpha 255 → 0)
+       - `airport-meal-cart-box.png` moves DOWN 53 pixels
+       - Returns to base `airport-meal-cart.png` appearance
+     - **Passenger Indicators (Retracted Position):**
+       - Move down with box animation
+       - Final position: (31, 74) relative to truck base
+       - Indicators persist and render on base truck sprite
+
+5. **Transfer Phase (Meal Truck → Bus):**
+   - Meal truck AI drives LEFT to intercept bus (which has passed extraction zone)
+   - When truck within transfer range of bus (~50px proximity):
+     - Bus AI stops moving
+     - Bus doors open: sprite switches to `city-bus-doors-open.png`
+     - Passengers transfer from meal truck to bus (one at a time, ~0.4s each)
+     - Passenger indicators update to render on bus
+     - Once all transferred:
+       - Bus doors close (return to `city-bus.png`)
+       - Meal truck becomes inactive (or returns to LZ)
+
+6. **Escort Phase (Bus Under Fire):**
+   - Bus resumes driving toward safe LZ on RIGHT side of screen (x=~2400)
+   - Enemy waves spawn and attack bus:
+     - UAV drones with weaving approach → dive attack
+     - Ground enemies (future: Merkava tanks, infantry)
+   - Player must defend bus from:
+     - Enemy projectiles (bullets, missiles, bombs)
+     - Direct collision attacks (UAV kamikaze dives)
+   - Bus health deteriorates under fire
+   - **IMPORTANT:** Player can also damage bus via friendly fire (bullets = 4.0 dmg, bombs = 18.0 dmg)
+
+7. **Mission End:**
+   - **SUCCESS:** Bus reaches safe LZ (right side) with passengers alive
+   - **FAILURE CONDITIONS:**
+     - Bus health reaches 0 (destroyed)
+     - All passengers killed
+     - 120-second deadline expires before extraction complete (optional)
+   - Mission debrief shows:
+     - Passengers rescued
+     - Bus health remaining
+     - Enemies defeated
+     - Mission time
 
 ## Design Answers & Clarifications
 
@@ -38,7 +108,9 @@ Escort/Convoy: A ground vehicle (bus) moves across the screen. The player must h
 
 **Player Role & Abilities**
 - Player has haptics and air support (F35l-arid ally delivers precision strike on immediate threat)
-- Player can land and deploy Mission Tech to repair bus (chopper lands in LZ, tech repairs bus, returns to chopper)
+- Player deploys Mission Tech by landing near meal truck and opening doors
+- Player must defend bus during escort phase (avoid friendly fire!)
+- Player can use flares, bombs, and bullets to clear threats
 
 **Risk/Reward for Leaving Bus**
 - Not in phase 1; consider for phase 2
@@ -61,30 +133,70 @@ Escort/Convoy: A ground vehicle (bus) moves across the screen. The player must h
 - Unique audio/music: planned as follow-on enhancement
 
 **Technical/Implementation**
-- New modules/structures needed (see below)
-- Placeholder assets required (see below)
-- Testing: game test using debug, console, and py tests
 
-## Recommended New Modules & Structures
-- `bus_ai.py`: Bus movement, obstacle logic, health, repair triggers
-- `hostage_logic.py`: Hostage states, boarding/deboarding, KIA logic
+### Animation System Specifications:
+
+**Meal Truck Box Extension/Retraction:**
+- Animation duration: 1.8 seconds (both extend and retract)
+- Box vertical movement: 53 pixels up (extend) / 53 pixels down (retract)
+- Sprite fade timing: synchronized with box movement
+- Rendering layers (bottom to top):
+  1. Base sprite: `airport-meal-cart.png` (always visible, y_offset = 0)
+  2. Box overlay: `airport-meal-cart-box.png` (y_offset animates: 0 → -53 → 0)
+  3. Extended platform: `airport-meal-cart-extended.png` (alpha animates: 0 → 255 → 0)
+
+**Passenger Indicator Positioning:**
+- When box extended: render at (31, 21) relative to truck origin
+- When box retracted: render at (31, 74) relative to truck origin
+- During animation: lerp position smoothly with box movement
+- Layout: 4 indicators per row, 8px horizontal spacing
+- Use hostage sprite icons for visual clarity
+
+**Tech Indicator Positioning:**
+- Above helicopter: (helicopter.x, helicopter.y - 60)
+- Above meal truck: (truck.x, truck.y - 60)
+- Icon: wrench or colored symbol (12x12 or 16x16)
+- Render with slight pulse/glow for visibility
+
+**Bus Door Animation:**
+- Sprite swap: `city-bus.png` ↔ `city-bus-doors-open.png`
+- Door state machine: closed → opening (0.3s) → open → closing (0.3s) → closed
+- Passenger transfer occurs only when state = "open"
+
+### Module Responsibilities:
+
+- `bus_ai.py`: Bus movement, door states, health, transfer LZ stops
+- `hostage_logic.py`: Hostage boarding workflow, indicator rendering with position offsets
 - `enemy_spawns.py`: Enemy wave logic, UAV drone, Merkava tank, jet adversaries
-- `mission_tech.py`: Mission Tech deployment, repair, vehicle interactions
-- `vehicle_assets.py`: Centralizes vehicle asset references and placeholder logic
-- `objective_manager.py`: Tracks win/lose/bonus objectives, timers, mission state
-- `cutscene_manager.py`: Integrates new cutscene triggers and asset references
+- `mission_tech.py`: Tech lifecycle state machine (on_chopper → deployed_to_truck → transferring → complete)
+- `vehicle_assets.py`: Meal truck animation state (box_state, animation_progress, sprite compositing)
+- `objective_manager.py`: Mission phase tracking (tech_deployment → extraction → transfer → escort → complete)
+- `cutscene_manager.py`: Jetway visual markers, extraction window triggers
 
-## Placeholder Asset List
-- Bus (city bus, rectangle placeholder)
-- Airport luggage/meal car (rectangle or simple shape)
+### Testing Strategy:
+- Unit tests for animation lerp calculations (box position, alpha fade)
+- Visual tests for each mission phase (tech deploy, extraction, transfer, escort)
+- Regression tests for friendly fire, passenger transfers, mission end conditions
+- Debug overlay to show: tech state, box animation_progress, passenger counts
+
+## Asset Requirements
+
+### Required Assets (Core Gameplay):
+- `city-bus.png` - Bus sprite (doors closed) ✅ EXISTS
+- `city-bus-doors-open.png` - Bus with hydraulic doors open ❌ NEEDS CREATION
+- `airport-meal-cart.png` - Base meal truck sprite (box retracted) ✅ EXISTS
+- `airport-meal-cart-box.png` - Lift box overlay (animates up/down 53px) ✅ EXISTS
+- `airport-meal-cart-extended.png` - Extended platform sprite (fades in/out) ✅ EXISTS
+
+### Placeholder Assets (Can Use Fallback):
 - Crashed airplane (simple polygon or image)
-- Airport jetway (rectangle or simple shape)
+- Airport jetway elevated platform (rectangle or simple shape)
 - Merkava tank (rectangle or recolored tank)
-- UAV drone (white version of fighter jet)
+- UAV drone (white version of fighter jet) ✅ BASIC IMPLEMENTATION DONE
 - F35 adversary and ally jets (use new assets or placeholders)
 - Barricades (simple blocks)
 - Flame/fire animation (basic sprite or color effect)
-- Mission Tech (simple sprite or recolored hostage)
+- Mission Tech visual indicator (wrench icon or colored symbol above chopper/truck)
 - Airport tower (existing or simple block for LZ)
 - Delta Squad (simple soldier sprites or recolored hostages)
 
@@ -124,25 +236,87 @@ Escort/Convoy: A ground vehicle (bus) moves across the screen. The player must h
 - ✅ Base game logic functional: helicopter physics, enemies, projectiles, compounds, hostages all working
 - ✅ Visual testing confirmed: All entities render correctly, placeholders visible
 
-### Next Steps
-- [x] Implement bus AI movement and pathfinding in `bus_ai.py`
-- [x] Implement hostage boarding/deboarding logic in `hostage_logic.py`
-- [x] Implement enemy spawn waves in `enemy_spawns.py`
-- [x] Implement Mission Tech deployment/repair in `mission_tech.py`
-- [x] Implement objective tracking in `objective_manager.py`
-- [x] Add real vehicle sprites in `vehicle_assets.py`
-- [x] Implement cutscene triggers in `cutscene_manager.py`
-- [x] Add collision detection between bus and player fire
-- [x] Add damage model for bus
-- [x] Add UAV drone enemy type
-- [ ] Add Merkava tank enemy type
-- [ ] Add barricade obstacles
-- [ ] Add Mission Tech repair mechanic
-- [x] Add meal-truck extraction/transfer workflow (plane -> meal truck -> bus)
-- [ ] Add Delta Squad cover at LZ
-- [x] Add hostage timer (120s to reach)
-- [ ] Add bonus objectives
+### Next Steps (Redesigned Implementation)
+
+**Phase 1: Mission Tech State Machine (HIGH PRIORITY)**
+- [ ] Refactor `mission_tech.py` to track tech lifecycle:
+  - State: `on_chopper` (mission start) 
+  - State: `deployed_to_truck` (when doors open near truck)
+  - State: `driving_to_extraction` (truck en route to jetway)
+  - State: `extracting` (box extending + hostages boarding)
+  - State: `transferring` (box retracting + driving to bus)
+  - State: `transfer_complete` (passengers on bus)
+- [ ] Add visual indicator above chopper when tech on board (wrench icon at y-60)
+- [ ] Add visual indicator above meal truck when tech deployed
+- [ ] Update tech deployment trigger: chopper grounded + doors open + near meal truck (not bus)
+
+**Phase 2: Meal Truck Animation System (HIGH PRIORITY)**
+- [ ] Refactor `vehicle_assets.py` for box animation:
+  - Add `box_state` field: `retracted` / `extending` / `extended` / `retracting`
+  - Add `box_animation_progress` (0.0 to 1.0 for 53px movement)
+  - Add `extended_sprite_alpha` (0 to 255 for fade in/out)
+- [ ] Implement box extension animation:
+  - Duration: 1.8 seconds
+  - Box y_offset = lerp(0, -53, progress)
+  - Extended sprite alpha = lerp(0, 255, progress)
+- [ ] Implement box retraction animation:
+  - Duration: 1.8 seconds  
+  - Box y_offset = lerp(-53, 0, progress)
+  - Extended sprite alpha = lerp(255, 0, progress)
+- [ ] Update rendering to composite: base + box_overlay + extended_overlay
+
+**Phase 3: Passenger Indicator Positioning (HIGH PRIORITY)**
+- [ ] Refactor `hostage_logic.py` passenger indicators:
+  - When box extended: render at (31, 21) relative to truck base
+  - When box retracted: render at (31, 74) relative to truck base
+  - During animation: lerp indicator position with box movement
+- [ ] Add passenger row layout (4 per row, 8px spacing)
+- [ ] Use hostage sprites/icons for visual clarity
+
+**Phase 4: Transfer System (MEDIUM PRIORITY)**
+- [ ] Add transfer LZ detection in `vehicle_assets.py`:
+  - Distance check: meal_truck.x ± 50px of bus.x
+- [ ] Create `city-bus-doors-open.png` sprite asset
+- [ ] Add bus door state to `bus_ai.py`: `closed` / `opening` / `open` / `closing`
+- [ ] Implement passenger transfer logic:
+  - Transfer rate: ~0.4s per passenger
+  - Update indicators on both truck and bus
+- [ ] Update bus AI to stop during transfer, resume after complete
+
+**Phase 5: Objective & UI Updates (MEDIUM PRIORITY)**
+- [ ] Update `objective_manager.py` phases:
+  - Phase 1: "Deploy Mission Tech to meal truck"
+  - Phase 2: "Meal truck extracting hostages from jetway"
+  - Phase 3: "Transfer hostages to bus"
+  - Phase 4: "Escort bus to safe LZ"
+  - Phase 5: "Mission success" or "Mission failed"
+- [ ] Add tech deployment tutorial hint on first play
+- [ ] Add passenger count overlay on truck and bus
+
+**Phase 6: Enemy & Combat Balance (LOW PRIORITY)**
+- [x] UAV drone enemy type (weaving + dive attack) ✅ DONE
+- [ ] Merkava tank enemy type
+- [ ] Barricade obstacles
+- [ ] Delta Squad cover at LZ
+- [ ] Enemy retargeting (prioritize bus during escort phase)
+- [ ] Difficulty scaling based on passenger count
+
+**Phase 7: Polish & Assets (LOW PRIORITY)**
+- [ ] Bonus objectives (all passengers, no bus damage, time bonus)
 - [ ] Create/integrate cutscene assets
+- [ ] Sound effects for tech deployment, box extension, transfer
+- [ ] Particle effects for meal truck drive dust
+- [ ] Camera follow logic (track bus during escort phase)
+
+**Completed (Previous Design - May Need Refactor):**
+- [x] Basic bus AI movement ⚠️ (needs door open/close states)
+- [x] Enemy spawn waves ✅ (UAV implemented, works as intended)
+- [x] Collision detection between bus and player fire ✅
+- [x] Damage model for bus ✅
+- [x] Hostage timer (120s deadline) ✅
+- [x] Mission Tech deployment ⚠️ (needs complete refactor for new flow)
+- [x] Meal truck extraction ⚠️ (needs animation system redesign)
+- [x] Objective tracking ⚠️ (needs phase updates)
 
 ## Implementation Notes
 - Bus uses `city-bus.png` sprite (with fallback rectangle if asset load fails)

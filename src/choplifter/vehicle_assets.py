@@ -17,9 +17,10 @@ class AirportMealTruckState:
 	height: int = 28
 	speed_px_per_s: float = 66.0
 	plane_lz_x: float = 1232.0
-	is_active: bool = False
+	is_active: bool = True  # Always visible, controls whether truck is operational
 	at_plane_lz: bool = False
 	extension_progress: float = 0.0
+	tech_has_deployed: bool = False  # Controls whether truck starts driving
 
 
 _meal_cart_sprite: Optional[pygame.Surface] = None
@@ -75,17 +76,15 @@ def update_airport_meal_truck(
 	if bus_state is not None:
 		meal_truck_state.y = float(getattr(bus_state, "y", meal_truck_state.y))
 
-	supports_ops = bool(
-		tech_state is not None
-		and getattr(tech_state, "is_deployed", False)
-		and helicopter is not None
-		and getattr(helicopter, "grounded", False)
-	)
+	# Check if tech has been deployed to truck (activates truck driving)
+	if tech_state is not None:
+		tech_state_name = str(getattr(tech_state, "state", "on_chopper"))
+		# Tech is deployed if state is anything except "on_chopper"
+		if tech_state_name != "on_chopper":
+			meal_truck_state.tech_has_deployed = True
 
-	if supports_ops:
-		meal_truck_state.is_active = True
-
-	if meal_truck_state.is_active and not meal_truck_state.at_plane_lz:
+	# Truck only drives after tech has deployed
+	if meal_truck_state.tech_has_deployed and not meal_truck_state.at_plane_lz:
 		dx = meal_truck_state.plane_lz_x - meal_truck_state.x
 		step = meal_truck_state.speed_px_per_s * dt
 		if abs(dx) <= step:
@@ -94,7 +93,13 @@ def update_airport_meal_truck(
 		else:
 			meal_truck_state.x += step if dx > 0.0 else -step
 
-	target_extension = 1.0 if meal_truck_state.at_plane_lz and supports_ops else 0.0
+	# Box extension: extends when at plane LZ and tech is still operating (not yet transfer_complete)
+	tech_still_operating = False
+	if tech_state is not None:
+		tech_state_name = str(getattr(tech_state, "state", "on_chopper"))
+		tech_still_operating = tech_state_name not in ("on_chopper", "transfer_complete")
+	
+	target_extension = 1.0 if meal_truck_state.at_plane_lz and tech_still_operating else 0.0
 	extend_rate = 1.7
 	if target_extension > meal_truck_state.extension_progress:
 		meal_truck_state.extension_progress = min(target_extension, meal_truck_state.extension_progress + extend_rate * dt)
@@ -105,10 +110,16 @@ def update_airport_meal_truck(
 
 
 def get_airport_priority_target_x(*, bus_state=None, meal_truck_state=None, tech_state=None) -> float:
+	# Enemy retargeting: prioritize meal truck when tech has deployed to it
+	tech_has_deployed = False
+	if tech_state is not None:
+		tech_state_name = str(getattr(tech_state, "state", "on_chopper"))
+		tech_has_deployed = tech_state_name != "on_chopper"
+	
 	if (
 		meal_truck_state is not None
-		and bool(getattr(meal_truck_state, "is_active", False))
-		and bool(getattr(tech_state, "is_deployed", False))
+		and bool(getattr(meal_truck_state, "tech_has_deployed", False))
+		and tech_has_deployed
 	):
 		return float(getattr(meal_truck_state, "x", 0.0))
 	return float(getattr(bus_state, "x", 0.0)) if bus_state is not None else 0.0

@@ -1,4 +1,4 @@
-"""Airport mission Mission Tech deployment and repair helpers."""
+"""Airport mission Mission Tech deployment and state machine."""
 
 from __future__ import annotations
 
@@ -9,78 +9,204 @@ import pygame
 
 @dataclass
 class MissionTechState:
-	is_deployed: bool = False
-	is_repairing: bool = False
-	tech_x: float = 0.0
+	"""Mission Tech lifecycle state for Airport Special Ops mission.
+	
+	Lifecycle states:
+	- on_chopper: Tech is aboard helicopter (mission start)
+	- deployed_to_truck: Tech has deployed from chopper to meal truck
+	- driving_to_extraction: Meal truck driving to elevated jetway
+	- extracting: Box extended, hostages boarding
+	- transferring: Box retracted, driving to bus for passenger transfer
+	- transfer_complete: Passengers on bus, mission tech objective complete
+	"""
+	state: str = "on_chopper"  # Lifecycle state
+	tech_x: float = 0.0  # Current tech position (for rendering)
 	tech_y: float = 0.0
-	deploy_timer_s: float = 0.0
-	repairs_completed: int = 0
+	deploy_timer_s: float = 0.0  # Time since deployment started
+	
+	# Legacy fields (kept for compatibility, may be deprecated later)
+	is_deployed: bool = False  # True when state != "on_chopper"
+	is_repairing: bool = False  # Currently unused in new design
+	repairs_completed: int = 0  # Currently unused in new design
 
 
 def create_mission_tech_state() -> MissionTechState:
-	return MissionTechState()
+	"""Create initial mission tech state (tech starts on chopper)."""
+	return MissionTechState(state="on_chopper")
 
 
-def update_mission_tech(tech_state, dt: float, *, helicopter=None, bus_state=None):
+def update_mission_tech(
+	tech_state: MissionTechState | None,
+	dt: float,
+	*,
+	helicopter=None,
+	meal_truck_state=None,
+	bus_state=None,
+) -> MissionTechState:
+	"""Update mission tech state machine.
+	
+	Args:
+		tech_state: Current tech state
+		dt: Delta time in seconds
+		helicopter: Helicopter object (needed for deployment trigger)
+		meal_truck_state: Meal truck state (needed for tracking tech on truck)
+		bus_state: Bus state (needed for transfer completion check)
+	
+	Returns:
+		Updated tech state
+	"""
 	if tech_state is None:
 		tech_state = create_mission_tech_state()
 
-	if helicopter is None or bus_state is None:
-		return tech_state
-
-	near_bus = abs(float(getattr(helicopter.pos, "x", 0.0)) - float(getattr(bus_state, "x", 0.0))) <= 120.0
-	supports_deploy = bool(getattr(helicopter, "grounded", False) and getattr(helicopter, "doors_open", False) and near_bus)
-
-	if supports_deploy and not tech_state.is_deployed:
-		tech_state.is_deployed = True
-		tech_state.deploy_timer_s = 0.0
-		tech_state.tech_x = float(getattr(bus_state, "x", 0.0)) - 18.0
-		tech_state.tech_y = float(getattr(bus_state, "y", 0.0))
-	elif not supports_deploy and tech_state.is_deployed:
-		tech_state.is_deployed = False
-		tech_state.is_repairing = False
-
-	if not tech_state.is_deployed:
-		return tech_state
-
-	tech_state.deploy_timer_s += max(0.0, float(dt))
-	tech_state.tech_x = float(getattr(bus_state, "x", tech_state.tech_x)) - 18.0
-	tech_state.tech_y = float(getattr(bus_state, "y", tech_state.tech_y))
-
-	# Delay a beat before repairs start, so deployment is visible.
-	repair_window_open = tech_state.deploy_timer_s >= 0.65
-	bus_health = float(getattr(bus_state, "health", 100.0))
-	bus_max_health = float(getattr(bus_state, "max_health", 100.0))
-
-	tech_state.is_repairing = repair_window_open and bus_health < bus_max_health
-	if tech_state.is_repairing:
-		new_health = min(bus_max_health, bus_health + 22.0 * max(0.0, float(dt)))
-		setattr(bus_state, "health", new_health)
-		if int(new_health) != int(bus_health) and int(new_health) >= int(bus_max_health):
-			tech_state.repairs_completed += 1
-
+	dt_s = max(0.0, float(dt))
+	
+	# --- State: on_chopper ---
+	# Tech is aboard helicopter, waiting for deployment
+	if tech_state.state == "on_chopper":
+		# Deployment trigger: grounded + doors open + near meal truck
+		if helicopter is not None and meal_truck_state is not None:
+			heli_x = float(getattr(helicopter.pos, "x", 0.0))
+			truck_x = float(getattr(meal_truck_state, "x", 0.0))
+			near_truck = abs(heli_x - truck_x) <= 120.0
+			supports_deploy = bool(
+				getattr(helicopter, "grounded", False)
+				and getattr(helicopter, "doors_open", False)
+				and near_truck
+			)
+			
+			if supports_deploy:
+				# Transition: deploy tech to meal truck
+				tech_state.state = "deployed_to_truck"
+				tech_state.is_deployed = True
+				tech_state.deploy_timer_s = 0.0
+				tech_state.tech_x = truck_x
+				tech_state.tech_y = float(getattr(meal_truck_state, "y", 0.0))
+		
+		# Tech follows helicopter position while on board
+		if helicopter is not None:
+			tech_state.tech_x = float(getattr(helicopter.pos, "x", tech_state.tech_x))
+			tech_state.tech_y = float(getattr(helicopter.pos, "y", tech_state.tech_y))
+	
+	# --- State: deployed_to_truck ---
+	# Tech has entered meal truck, truck is about to drive to extraction point
+	elif tech_state.state == "deployed_to_truck":
+		tech_state.deploy_timer_s += dt_s
+		
+		# Tech follows meal truck position
+		if meal_truck_state is not None:
+			tech_state.tech_x = float(getattr(meal_truck_state, "x", tech_state.tech_x))
+			tech_state.tech_y = float(getattr(meal_truck_state, "y", tech_state.tech_y))
+			
+			# Transition: truck starts driving to extraction point
+			if bool(getattr(meal_truck_state, "is_active", False)):
+				tech_state.state = "driving_to_extraction"
+	
+	# --- State: driving_to_extraction ---
+	# Meal truck is en route to elevated jetway at hostage location
+	elif tech_state.state == "driving_to_extraction":
+		tech_state.deploy_timer_s += dt_s
+		
+		# Tech follows meal truck position
+		if meal_truck_state is not None:
+			tech_state.tech_x = float(getattr(meal_truck_state, "x", tech_state.tech_x))
+			tech_state.tech_y = float(getattr(meal_truck_state, "y", tech_state.tech_y))
+			
+			# Transition: truck reached extraction point, box extending
+			if bool(getattr(meal_truck_state, "at_plane_lz", False)):
+				extension_progress = float(getattr(meal_truck_state, "extension_progress", 0.0))
+				if extension_progress > 0.01:  # Box extension has started
+					tech_state.state = "extracting"
+	
+	# --- State: extracting ---
+	# Box is extended, hostages are boarding meal truck
+	elif tech_state.state == "extracting":
+		tech_state.deploy_timer_s += dt_s
+		
+		# Tech follows meal truck position
+		if meal_truck_state is not None:
+			tech_state.tech_x = float(getattr(meal_truck_state, "x", tech_state.tech_x))
+			tech_state.tech_y = float(getattr(meal_truck_state, "y", tech_state.tech_y))
+			
+			# Transition: box retracting (hostages loaded, ready for transfer)
+			extension_progress = float(getattr(meal_truck_state, "extension_progress", 0.0))
+			at_plane_lz = bool(getattr(meal_truck_state, "at_plane_lz", False))
+			if at_plane_lz and extension_progress < 0.99:  # Box is retracting
+				tech_state.state = "transferring"
+	
+	# --- State: transferring ---
+	# Box retracted, meal truck driving to bus for passenger transfer
+	elif tech_state.state == "transferring":
+		tech_state.deploy_timer_s += dt_s
+		
+		# Tech follows meal truck position
+		if meal_truck_state is not None:
+			tech_state.tech_x = float(getattr(meal_truck_state, "x", tech_state.tech_x))
+			tech_state.tech_y = float(getattr(meal_truck_state, "y", tech_state.tech_y))
+		
+		# Transition: passengers transferred to bus (handled externally by hostage logic)
+		# For now, tech stays in this state until mission ends
+		# Future: add explicit transfer_complete transition when bus has passengers
+	
+	# --- State: transfer_complete ---
+	# Passengers on bus, tech mission objective complete
+	elif tech_state.state == "transfer_complete":
+		tech_state.deploy_timer_s += dt_s
+		# Tech position frozen at last known location
+		# (Can return to chopper in future enhancement)
+	
 	return tech_state
 
 
-def draw_airport_mission_tech(target: pygame.Surface, tech_state, *, camera_x: float, bus_state=None) -> None:
-	if tech_state is None or not bool(getattr(tech_state, "is_deployed", False)):
+def draw_airport_mission_tech(
+	target: pygame.Surface,
+	tech_state: MissionTechState | None,
+	*,
+	camera_x: float,
+	helicopter=None,
+) -> None:
+	"""Draw mission tech indicator and tech sprite.
+	
+	Args:
+		target: Surface to draw on
+		tech_state: Current tech state
+		camera_x: Camera x position for world-to-screen conversion
+		helicopter: Helicopter object (for indicator above chopper when tech on board)
+	"""
+	if tech_state is None:
 		return
-
-	x = int(float(getattr(tech_state, "tech_x", 0.0)) - float(camera_x))
-	y = int(float(getattr(tech_state, "tech_y", 0.0)) - 16)
-	body = pygame.Rect(x, y, 12, 14)
-	pygame.draw.rect(target, (120, 200, 120), body, border_radius=3)
-	pygame.draw.rect(target, (20, 60, 20), body, 1, border_radius=3)
-
-	if bool(getattr(tech_state, "is_repairing", False)):
-		# Tiny wrench spark indicator.
-		pygame.draw.line(target, (255, 240, 120), (x + 8, y - 2), (x + 13, y - 6), 2)
-
-	if bus_state is not None:
-		health = float(getattr(bus_state, "health", 100.0))
-		max_health = max(1.0, float(getattr(bus_state, "max_health", 100.0)))
-		frac = max(0.0, min(1.0, health / max_health))
-		bx = int(float(getattr(bus_state, "x", 0.0)) - float(camera_x))
-		by = int(float(getattr(bus_state, "y", 0.0)) - float(getattr(bus_state, "height", 24)) - 10)
-		pygame.draw.rect(target, (30, 30, 30), pygame.Rect(bx, by, 44, 6), border_radius=2)
-		pygame.draw.rect(target, (90, 220, 110), pygame.Rect(bx + 1, by + 1, int(42 * frac), 4), border_radius=2)
+	
+	# --- Draw tech indicator above chopper when tech is on board ---
+	if tech_state.state == "on_chopper" and helicopter is not None:
+		heli_x = float(getattr(helicopter.pos, "x", 0.0))
+		heli_y = float(getattr(helicopter.pos, "y", 0.0))
+		screen_x = int(heli_x - camera_x)
+		screen_y = int(heli_y - 60)
+		
+		# Draw wrench icon (simple L-shape)
+		wrench_color = (200, 200, 80)  # Yellow-ish
+		# Wrench handle (vertical)
+		pygame.draw.rect(target, wrench_color, pygame.Rect(screen_x - 2, screen_y, 4, 12))
+		# Wrench head (horizontal)
+		pygame.draw.rect(target, wrench_color, pygame.Rect(screen_x - 6, screen_y, 10, 4))
+		# Add outline for visibility
+		pygame.draw.rect(target, (60, 60, 20), pygame.Rect(screen_x - 2, screen_y, 4, 12), 1)
+		pygame.draw.rect(target, (60, 60, 20), pygame.Rect(screen_x - 6, screen_y, 10, 4), 1)
+		return
+	
+	# --- Draw tech sprite when deployed (on truck or in field) ---
+	if tech_state.state != "on_chopper":
+		x = int(tech_state.tech_x - camera_x)
+		y = int(tech_state.tech_y - 16)
+		
+		# Tech sprite (small green rectangle representing engineer)
+		body = pygame.Rect(x - 6, y, 12, 14)
+		pygame.draw.rect(target, (120, 200, 120), body, border_radius=3)
+		pygame.draw.rect(target, (20, 60, 20), body, 1, border_radius=3)
+		
+		# Draw wrench icon above tech when deployed to truck
+		if tech_state.state in ("deployed_to_truck", "driving_to_extraction", "extracting", "transferring"):
+			wrench_color = (200, 200, 80)
+			pygame.draw.rect(target, wrench_color, pygame.Rect(x - 2, y - 18, 4, 12))
+			pygame.draw.rect(target, wrench_color, pygame.Rect(x - 6, y - 18, 10, 4))
+			pygame.draw.rect(target, (60, 60, 20), pygame.Rect(x - 2, y - 18, 4, 12), 1)
+			pygame.draw.rect(target, (60, 60, 20), pygame.Rect(x - 6, y - 18, 10, 4), 1)
