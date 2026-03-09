@@ -20,7 +20,7 @@ _bus_sprite_cache: Optional[pygame.Surface] = None
 BUS_SPEED_PX_PER_SEC: float = 80.0
 BUS_ACCEL_TIME_S: float = 1.4
 BUS_DECEL_DISTANCE_PX: float = 240.0
-BUS_STOP_X: float = -100.0
+BUS_STOP_X: float = 500.0
 
 
 def _clamp01(value: float) -> float:
@@ -66,6 +66,8 @@ class BusState:
     start_x: float = 0.0
     stop_x: float = BUS_STOP_X
     phase: str = "accelerating"  # "accelerating", "cruising", "decelerating", "stopped"
+    max_health: float = 100.0
+    health: float = 100.0
 
 
 def create_bus_state(start_x: float = 1200, ground_y: float = 400) -> BusState:

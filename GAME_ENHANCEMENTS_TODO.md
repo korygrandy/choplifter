@@ -125,28 +125,31 @@ Escort/Convoy: A ground vehicle (bus) moves across the screen. The player must h
 - ✅ Visual testing confirmed: All entities render correctly, placeholders visible
 
 ### Next Steps
-- [ ] Implement bus AI movement and pathfinding in `bus_ai.py`
-- [ ] Implement hostage boarding/deboarding logic in `hostage_logic.py`
-- [ ] Implement enemy spawn waves in `enemy_spawns.py`
-- [ ] Implement Mission Tech deployment/repair in `mission_tech.py`
-- [ ] Implement objective tracking in `objective_manager.py`
+- [x] Implement bus AI movement and pathfinding in `bus_ai.py`
+- [x] Implement hostage boarding/deboarding logic in `hostage_logic.py`
+- [x] Implement enemy spawn waves in `enemy_spawns.py`
+- [x] Implement Mission Tech deployment/repair in `mission_tech.py`
+- [x] Implement objective tracking in `objective_manager.py`
 - [ ] Add real vehicle sprites in `vehicle_assets.py`
 - [ ] Implement cutscene triggers in `cutscene_manager.py`
 - [ ] Add collision detection between bus and player fire
-- [ ] Add damage model for bus
+- [x] Add damage model for bus
 - [ ] Add UAV drone enemy type
 - [ ] Add Merkava tank enemy type
 - [ ] Add barricade obstacles
 - [ ] Add Mission Tech repair mechanic
 - [ ] Add Delta Squad cover at LZ
-- [ ] Add hostage timer (120s to reach)
+- [x] Add hostage timer (120s to reach)
 - [ ] Add bonus objectives
 - [ ] Create/integrate cutscene assets
 
 ## Implementation Notes
-- Bus uses rectangle placeholder until sprite is ready
+- Bus uses `city-bus.png` sprite (with fallback rectangle if asset load fails)
 - LZ modeled after airport tower
-- All new modules are imported but contain only placeholder TODOs
+- `hostage_logic.py` now contains active Airport boarding/deboarding state and render hooks
+- `mission_tech.py` now contains Mission Tech deploy/retrieve + bus repair logic
+- `enemy_spawns.py` now applies basic bus damage on enemy impacts
+- `objective_manager.py` now tracks objective phase + 120s hostage deadline
 - Current rendering shows both base game entities and new placeholders
 - Helicopter and core gameplay fully functional for testing
 - Hostage, bus, and enemy logic may require new or updated modules
