@@ -333,6 +333,9 @@ def run() -> None:
 
     # Track doors state before cutscene
     doors_open_before_cutscene = False
+    
+    # Track previous mode to detect transitions
+    prev_loop_mode = mode
 
     while running:
         frame_dt = clock.tick(120) / 1000.0
@@ -565,6 +568,25 @@ def run() -> None:
                 elif b_down and not prev_btn_b_down:
                     runtime.quit_confirm = False
 
+        # Check if we transitioned from select_chopper to cutscene via keyboard
+        # (gamepad path handles this inline)
+        if prev_loop_mode == "select_chopper" and mode == "cutscene":
+            # Start mission cutscene after chopper selection (keyboard path)
+            cutscene_path_after_selection = assets_dir / "city-seige-intro.avi"
+            cutscene_started = start_mission_cutscene(
+                cutscenes.mission,
+                cutscene_path=cutscene_path_after_selection,
+                logger=logger,
+                event_id="mission_start",
+                mission_id=selected_mission_id,
+            )
+            if not cutscene_started:
+                # If cutscene can't be loaded, go directly to playing
+                mode = "playing"
+        
+        # Update previous mode for next iteration
+        prev_loop_mode = mode
+
         keys = pygame.key.get_pressed()
         kb_tilt_left = pressed(keys, controls.tilt_left)
         kb_tilt_right = pressed(keys, controls.tilt_right)
@@ -676,6 +698,18 @@ def run() -> None:
                     if selected_mission_id == "city":
                         play_satellite_reallocating()
                     reset_game_wrapper()
+                    # Start mission cutscene after chopper selection
+                    cutscene_path_after_selection = assets_dir / "city-seige-intro.avi"
+                    cutscene_started = start_mission_cutscene(
+                        cutscenes.mission,
+                        cutscene_path=cutscene_path_after_selection,
+                        logger=logger,
+                        event_id="mission_start",
+                        mission_id=selected_mission_id,
+                    )
+                    if not cutscene_started:
+                        # If cutscene can't be loaded, go directly to playing
+                        mode = "playing"
                 elif prev_mode == "select_chopper" and mode == "select_mission":
                     set_toast("Back to Mission Select")
             elif mode == "intro":

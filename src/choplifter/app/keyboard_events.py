@@ -43,7 +43,7 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
             selected_chopper_asset = chopper_choices[selected_chopper_index][0]
             audio.play_menu_select()
         elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
-            mode = "playing"
+            mode = "cutscene"
             set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
             reset_game()
         elif event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
