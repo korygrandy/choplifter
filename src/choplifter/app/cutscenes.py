@@ -17,16 +17,15 @@ def init_intro_cutscene(state: IntroCutsceneState, *, assets_dir: Path, logger: 
     """Initialize the launch intro cutscene.
 
     Behavior matches the legacy inline logic in `main.py`:
-    - Prefer `intro.mpg`, fall back to mp4 candidates.
+    - Prefer `game-intro.avi`, then `city-seige-intro.avi`, then legacy `intro.mpg`.
     - If no video player is available, use an in-engine title card.
     """
 
-    # Prefer the legacy MPG intro for now (simpler asset workflow).
-    # MP4 remains as a fallback if the MPG is missing.
+    # Prefer the game intro AVI, then fall back to prior intro assets.
     intro_candidates = (
+        assets_dir / "game-intro.avi",
+        assets_dir / "city-seige-intro.avi",
         assets_dir / "intro.mpg",
-        assets_dir / "choplifter-intro.mp4",
-        assets_dir / "choplifter-intro,mp4",
     )
     intro_video_path = next((p for p in intro_candidates if p.exists()), intro_candidates[0])
     state.video_path = intro_video_path
