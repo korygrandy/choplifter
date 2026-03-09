@@ -270,6 +270,7 @@ def run() -> None:
         airport_enemy_state = create_airport_enemy_state()
         airport_tech_state = create_mission_tech_state()
         airport_objective_state = create_airport_objective_state(hostage_deadline_s=120.0)
+        airport_cutscene_state = create_airport_cutscene_state()
         airport_meal_truck_state = create_airport_meal_truck_state(
             start_x=1120.0,
             ground_y=heli_settings.ground_y,
@@ -299,7 +300,7 @@ def run() -> None:
         nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_btn_rb_down, prev_btn_lb_down, prev_btn_back_down
-        nonlocal city_objective_overlay_timer, airport_bus_state, airport_hostage_state, airport_enemy_state, airport_tech_state, airport_objective_state, airport_meal_truck_state
+        nonlocal city_objective_overlay_timer, airport_bus_state, airport_hostage_state, airport_enemy_state, airport_tech_state, airport_objective_state, airport_meal_truck_state, airport_cutscene_state
         # Stop chopper warning beeps on game reset
         audio.stop_chopper_warning_beeps()
         mission, helicopter, accumulator, prev_stats = reset_game(
@@ -336,6 +337,7 @@ def run() -> None:
             airport_enemy_state = create_airport_enemy_state()
             airport_tech_state = create_mission_tech_state()
             airport_objective_state = create_airport_objective_state(hostage_deadline_s=120.0)
+            airport_cutscene_state = create_airport_cutscene_state()
             airport_meal_truck_state = create_airport_meal_truck_state(
                 start_x=1120.0,
                 ground_y=heli_settings.ground_y,
@@ -962,6 +964,8 @@ def run() -> None:
                         helicopter=helicopter,
                         mission=mission,
                         audio=audio,
+                        meal_truck_state=airport_meal_truck_state,
+                        tech_state=airport_tech_state,
                     )
                     airport_tech_state = update_mission_tech(
                         airport_tech_state,
@@ -988,12 +992,26 @@ def run() -> None:
                         bus_state=airport_bus_state,
                         target_x=airport_target_x,
                     )
+                    _airport_ff_hits = apply_airport_bus_friendly_fire(
+                        airport_bus_state,
+                        mission,
+                        logger=logger,
+                    )
                     airport_objective_state = update_airport_objectives(
                         airport_objective_state,
                         tick.dt,
                         mission=mission,
                         hostage_state=airport_hostage_state,
                         bus_state=airport_bus_state,
+                        meal_truck_state=airport_meal_truck_state,
+                        tech_state=airport_tech_state,
+                    )
+                    airport_cutscene_state = update_airport_cutscene_state(
+                        airport_cutscene_state,
+                        tick.dt,
+                        meal_truck_state=airport_meal_truck_state,
+                        hostage_state=airport_hostage_state,
+                        tech_state=airport_tech_state,
                     )
 
                     if (
@@ -1128,16 +1146,13 @@ def run() -> None:
                     ground_y=heli_settings.ground_y,
                     bus_state=airport_bus_state,
                 )
-                # TODO: Replace with real rendering as modules are implemented
-                # Example: draw_airport_cutscenes(target, airport_cutscene_state, camera_x)
-                # Placeholder: draw a cutscene trigger (star)
-                pygame.draw.polygon(target, (255, 255, 0), [
-                    (int(1320 - camera_x), int(heli_settings.ground_y - 60)),
-                    (int(1325 - camera_x), int(heli_settings.ground_y - 50)),
-                    (int(1330 - camera_x), int(heli_settings.ground_y - 60)),
-                    (int(1322 - camera_x), int(heli_settings.ground_y - 54)),
-                    (int(1328 - camera_x), int(heli_settings.ground_y - 54)),
-                ])
+                draw_airport_cutscene_markers(
+                    target,
+                    airport_cutscene_state,
+                    camera_x=camera_x,
+                    ground_y=heli_settings.ground_y,
+                    pickup_x=float(getattr(airport_hostage_state, "pickup_x", 1232.0)) if airport_hostage_state is not None else 1232.0,
+                )
             
             draw_flares(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
             draw_helicopter_damage_fx(target, mission, camera_x=camera_x, enable_particles=particles_enabled)

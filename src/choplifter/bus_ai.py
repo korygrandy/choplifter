@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from .game_types import ProjectileKind
+
 
 # Cache for loaded bus sprite
 _bus_sprite_cache: Optional[pygame.Surface] = None
@@ -163,3 +165,51 @@ def draw_airport_bus(target: pygame.Surface, bus_state: BusState, camera_x: floa
         wheel_radius = 3
         pygame.draw.circle(target, (50, 50, 50), (screen_x + 12, wheel_y), wheel_radius)
         pygame.draw.circle(target, (50, 50, 50), (screen_x + 52, wheel_y), wheel_radius)
+
+
+def apply_airport_bus_friendly_fire(bus_state: BusState | None, mission, *, logger=None) -> int:
+    """Apply player projectile hits on the airport bus.
+
+    Returns the number of friendly-fire hits consumed this tick.
+    """
+    if bus_state is None or mission is None:
+        return 0
+
+    projectiles = getattr(mission, "projectiles", None)
+    if not projectiles:
+        return 0
+
+    bus_left = float(getattr(bus_state, "x", 0.0))
+    bus_top = float(getattr(bus_state, "y", 0.0)) - float(getattr(bus_state, "height", 24))
+    bus_right = bus_left + float(getattr(bus_state, "width", 64))
+    bus_bottom = float(getattr(bus_state, "y", 0.0))
+
+    hits = 0
+    for p in projectiles:
+        if not bool(getattr(p, "alive", False)):
+            continue
+        if getattr(p, "kind", None) not in (ProjectileKind.BULLET, ProjectileKind.BOMB):
+            continue
+
+        px = float(getattr(getattr(p, "pos", None), "x", -99999.0))
+        py = float(getattr(getattr(p, "pos", None), "y", -99999.0))
+        if not (bus_left <= px <= bus_right and bus_top <= py <= bus_bottom):
+            continue
+
+        damage = 18.0 if getattr(p, "kind", None) is ProjectileKind.BOMB else 4.0
+        health = float(getattr(bus_state, "health", 100.0))
+        setattr(bus_state, "health", max(0.0, health - damage))
+        p.alive = False
+        hits += 1
+
+        sparks = getattr(mission, "impact_sparks", None)
+        if sparks is not None and hasattr(sparks, "emit_hit"):
+            try:
+                sparks.emit_hit(p.pos, p.vel, strength=0.8)
+            except Exception:
+                pass
+
+    if hits > 0 and logger is not None:
+        logger.info("AIRPORT_BUS_FRIENDLY_FIRE: hits=%d health=%.1f", hits, float(getattr(bus_state, "health", 0.0)))
+
+    return hits
