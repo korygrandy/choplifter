@@ -133,7 +133,7 @@ def handle_select_chopper_gamepad(
         did_change_selection = True
 
     if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
-        next_mode = "playing"
+        next_mode = "cutscene"
         did_confirm = True
     elif (b_down and not prev_btn_b_down) or (back_down and not prev_btn_back_down):
         next_mode = "select_mission"
