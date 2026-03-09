@@ -18,7 +18,7 @@ The current branch includes a major mission/main refactor, weather and FX system
 1. Install dependencies into the project venv:
    - `./.venv/Scripts/python.exe -m pip install -r requirements.txt`
 2. Run the game:
-   - `./.venv/Scripts/python.exe run.py`
+  - `& .\.venv\Scripts\python.exe .\run.py`
 
 Notes:
 - If you activate first (`./.venv/Scripts/Activate.ps1`), then `python run.py` works.
