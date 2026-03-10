@@ -330,7 +330,7 @@ def toggle_thermal_mode():
 
 
 def _draw_engineer_boarding(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
-	"""Draw engineer as green circle during boarding/unboarding animations."""
+	"""Draw engineer walking between chopper and truck during boarding/unboarding animations."""
 	tech_state = getattr(mission, "mission_tech", None)
 	if tech_state is None:
 		return
@@ -339,22 +339,85 @@ def _draw_engineer_boarding(screen: pygame.Surface, mission: MissionState, *, ca
 	if tech_state.boarding_animation_state == "idle":
 		return
 	
-	x = int(tech_state.tech_x - camera_x)
-	y = int(tech_state.tech_y)
-	
-	# Green color for camo representation
-	green_color = (34, 177, 76)  # Bright green
-	
-	# Animate slightly for visual effect
+	# Calculate animation progress (0.0 to 1.0)
 	animation_progress = tech_state.boarding_animation_timer / 0.4  # 0.4s total duration
 	animation_progress = min(1.0, max(0.0, animation_progress))
 	
-	# Draw pulsing circle
-	pulse = math.sin(animation_progress * math.pi * 2.0) * 0.5 + 0.5  # 0.0 to 1.0
-	radius = int(5 + pulse * 2)
+	# Interpolate X position only - engineer walks on the ground like hostages
+	start_x = tech_state.boarding_start_x
+	end_x = tech_state.boarding_end_x
+	ground_y = tech_state.boarding_start_y  # Y is constant at ground level
 	
-	pygame.draw.circle(screen, green_color, (x, y), radius)
-	pygame.draw.circle(screen, (255, 255, 255), (x, y), radius, 1)
+	current_x = start_x + (end_x - start_x) * animation_progress
+	
+	x = int(current_x - camera_x)
+	y = int(ground_y)
+	
+	# Green color for camo representation
+	green_color = (34, 177, 76)  # Bright green
+	white_color = (255, 255, 255)
+	
+	# Calculate walking animation cycle (legs alternate)
+	walk_cycle = math.sin(animation_progress * math.pi * 8.0)  # 4 complete steps during animation
+	leg_frame = 1 if walk_cycle > 0 else 0  # Binary leg position for pixelated look
+	
+	# Determine facing direction
+	dx = end_x - start_x
+	facing_right = dx > 0 if abs(dx) > 0 else True
+	direction = 1 if facing_right else -1
+	
+	# Pixel size for retro look
+	pixel = 2
+	
+	# Draw pixelated stick figure from feet up (so feet are at ground level)
+	# Feet position is at y (ground level)
+	feet_y = y
+	
+	# Legs (pixelated walking poses) - start from feet
+	if leg_frame == 1:
+		# Left leg forward
+		pygame.draw.rect(screen, white_color, (x - pixel * 2 * direction, feet_y - pixel * 2, pixel, pixel))
+		pygame.draw.rect(screen, white_color, (x - pixel * 2 * direction, feet_y - pixel, pixel, pixel))
+		pygame.draw.rect(screen, white_color, (x - pixel * direction, feet_y, pixel, pixel))
+		# Right leg back
+		pygame.draw.rect(screen, white_color, (x + pixel * direction, feet_y, pixel, pixel))
+		pygame.draw.rect(screen, white_color, (x + pixel * direction, feet_y - pixel, pixel, pixel))
+		pygame.draw.rect(screen, white_color, (x + pixel * direction, feet_y - pixel * 2, pixel, pixel))
+	else:
+		# Right leg forward
+		pygame.draw.rect(screen, white_color, (x + pixel * 2 * direction, feet_y - pixel * 2, pixel, pixel))
+		pygame.draw.rect(screen, white_color, (x + pixel * 2 * direction, feet_y - pixel, pixel, pixel))
+		pygame.draw.rect(screen, white_color, (x + pixel * direction, feet_y, pixel, pixel))
+		# Left leg back
+		pygame.draw.rect(screen, white_color, (x - pixel * direction, feet_y, pixel, pixel))
+		pygame.draw.rect(screen, white_color, (x - pixel * direction, feet_y - pixel, pixel, pixel))
+		pygame.draw.rect(screen, white_color, (x - pixel * direction, feet_y - pixel * 2, pixel, pixel))
+	
+	# Body (vertical pixels) - from hips up
+	hip_y = feet_y - pixel * 3
+	for i in range(4):
+		body_y = hip_y - i * pixel
+		pygame.draw.rect(screen, white_color, (x - 1, body_y, pixel, pixel))
+	
+	# Head (2x2 pixel block) at top
+	head_y = hip_y - pixel * 4
+	pygame.draw.rect(screen, green_color, (x - pixel, head_y - pixel, pixel * 2, pixel * 2))
+	pygame.draw.rect(screen, white_color, (x - pixel, head_y - pixel, pixel * 2, pixel * 2), 1)
+	
+	# Arms (2 pixels each, animated) - positioned at shoulder level
+	arm_y = hip_y - pixel * 2
+	if leg_frame == 1:
+		# Left arm forward, right arm back
+		pygame.draw.rect(screen, white_color, (x - pixel * 2 * direction, arm_y, pixel, pixel))
+		pygame.draw.rect(screen, white_color, (x - pixel * 3 * direction, arm_y + pixel, pixel, pixel))
+		pygame.draw.rect(screen, white_color, (x + pixel * direction, arm_y, pixel, pixel))
+		pygame.draw.rect(screen, white_color, (x + pixel * 2 * direction, arm_y - pixel, pixel, pixel))
+	else:
+		# Right arm forward, left arm back
+		pygame.draw.rect(screen, white_color, (x + pixel * 2 * direction, arm_y, pixel, pixel))
+		pygame.draw.rect(screen, white_color, (x + pixel * 3 * direction, arm_y + pixel, pixel, pixel))
+		pygame.draw.rect(screen, white_color, (x - pixel * direction, arm_y, pixel, pixel))
+		pygame.draw.rect(screen, white_color, (x - pixel * 2 * direction, arm_y - pixel, pixel, pixel))
 
 
 def _draw_engineer_wrench_indicator(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
@@ -457,38 +520,29 @@ def _draw_enemies(screen: pygame.Surface, mission: MissionState, *, camera_x: fl
 
     for e in mission.enemies:
         if e.kind is EnemyKind.TANK:
-            # Reskinned tank with richer hull + turret silhouette.
-            w, h = 46, 18
-            r = pygame.Rect(int(e.pos.x - camera_x - w / 2), int(ground_y - h), w, h)
-            pygame.draw.rect(screen, (68, 74, 68), r, border_radius=2)
-            pygame.draw.rect(screen, (24, 24, 24), r, 2, border_radius=2)
-
-            tread_h = 5
-            tread = pygame.Rect(r.x + 2, r.bottom - tread_h, r.width - 4, tread_h)
-            pygame.draw.rect(screen, (42, 42, 42), tread)
-
-            hull = [
-                (r.x + 5, r.y + 3),
-                (r.right - 8, r.y + 3),
-                (r.right - 3, r.y + 8),
-                (r.right - 7, r.y + 12),
-                (r.x + 7, r.y + 12),
-                (r.x + 3, r.y + 8),
-            ]
-            pygame.draw.polygon(screen, (86, 96, 82), hull)
-            pygame.draw.polygon(screen, (25, 25, 25), hull, 1)
-
-            # Turret marker using e.turret_angle
-            turret_length = 24
-            turret_base = (r.centerx - 1, r.top + 6)
-            pygame.draw.circle(screen, (76, 82, 76), turret_base, 5)
-            pygame.draw.circle(screen, (30, 30, 30), turret_base, 5, 1)
+            # Load and draw karrar.png sprite
+            img = get_enemy_image('karrar.png')
+            img_rect = img.get_rect()
+            
+            # Position tank at ground level, centered on e.pos.x
+            x = int(e.pos.x - camera_x)
+            y = int(ground_y - img_rect.height)
+            screen.blit(img, (x - img_rect.width // 2, y))
+            
+            # Turret overlay using e.turret_angle (draw over the sprite)
+            # Airport mission gets tan turret with 2x length
+            is_airport = getattr(mission, "mission_id", "").lower() in ("airport", "airport_special_ops")
+            turret_length = 48 if is_airport else 24
+            turret_color = (180, 150, 110) if is_airport else (28, 30, 28)  # Darker tan for airport, dark for others
+            turret_base = (x, y + img_rect.height // 3)  # Position turret at top third of sprite
+            
+            # Turret barrel indicator
             angle = getattr(e, 'turret_angle', 0.0)
             turret_tip = (
                 int(turret_base[0] + turret_length * math.cos(angle)),
                 int(turret_base[1] + turret_length * math.sin(angle))
             )
-            pygame.draw.line(screen, (28, 30, 28), turret_base, turret_tip, 4)
+            pygame.draw.line(screen, turret_color, turret_base, turret_tip, 3)
 
             # Pre-fire tell: subtle amber pulse at the muzzle before a tank shot.
             if getattr(e, "fire_tell_seconds", 0.0) > 0.0:

@@ -27,6 +27,10 @@ class MissionTechState:
 	# Boarding animation state (for visual representation)
 	boarding_animation_state: str = "idle"  # "idle", "deploying" (from chopper to truck), "returning" (truck to chopper)
 	boarding_animation_timer: float = 0.0  # Time elapsed in current boarding animation
+	boarding_start_x: float = 0.0  # Start X position for boarding animation
+	boarding_start_y: float = 0.0  # Start Y position for boarding animation
+	boarding_end_x: float = 0.0  # End X position for boarding animation
+	boarding_end_y: float = 0.0  # End Y position for boarding animation
 	
 	# Legacy fields (kept for compatibility, may be deprecated later)
 	is_deployed: bool = False  # True when state != "on_chopper"

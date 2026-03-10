@@ -376,15 +376,14 @@ def run() -> None:
     meal_truck_lift_command_extended = False
 
     def can_exit_meal_truck_driver_mode() -> bool:
+        # Engineer can only exit meal truck if within ~100px (one helicopter width) of the helicopter
         if airport_meal_truck_state is None:
             return False
-        if not bool(getattr(helicopter, "grounded", False)):
-            return False
-        if not bool(getattr(helicopter, "doors_open", False)):
-            return False
-        heli_x = float(getattr(helicopter.pos, "x", 0.0))
         truck_x = float(getattr(airport_meal_truck_state, "x", 0.0))
-        return abs(heli_x - truck_x) <= 120.0
+        heli_x = float(getattr(helicopter.pos, "x", 0.0))
+        distance = abs(truck_x - heli_x)
+        max_distance = 100.0  # One helicopter sprite width
+        return distance <= max_distance
     
     # Track previous mode to detect transitions
     prev_loop_mode = mode
@@ -512,13 +511,20 @@ def run() -> None:
                 doors_key_pressed = mode == "playing" and matches_key(event.key, controls.doors) and not getattr(mission, "crash_active", False)
                 if doors_key_pressed and selected_mission_id == "airport":
                     if meal_truck_driver_mode and airport_meal_truck_state is not None:
-                        # While driving truck: E toggles lift; E exits only when linked back up with helicopter.
-                        if can_exit_meal_truck_driver_mode():
-                            meal_truck_driver_mode = False
-                            airport_meal_truck_state.driver_mode_active = False
-                            airport_meal_truck_state.driver_mode_exit_timer = 0.2
-                        else:
-                            meal_truck_lift_command_extended = not meal_truck_lift_command_extended
+                        # E key always exits driver mode immediately
+                        meal_truck_driver_mode = False
+                        airport_meal_truck_state.driver_mode_active = False
+                        airport_meal_truck_state.driver_mode_exit_timer = 0.2
+                        # Trigger engineer returning animation (truck to chopper)
+                        if airport_tech_state is not None:
+                            airport_tech_state.boarding_animation_state = "returning"
+                            airport_tech_state.boarding_animation_timer = 0.0
+                            # Set animation positions (truck to chopper) - walk on ground level
+                            ground_y = heli_settings.ground_y - 18.0  # Engineer standing on ground
+                            airport_tech_state.boarding_start_x = float(getattr(airport_meal_truck_state, "x", 0.0))
+                            airport_tech_state.boarding_start_y = ground_y
+                            airport_tech_state.boarding_end_x = float(getattr(helicopter.pos, "x", 0.0))
+                            airport_tech_state.boarding_end_y = ground_y
                         continue
                     elif should_activate_truck_driver_mode(
                         meal_truck_state=airport_meal_truck_state,
@@ -530,7 +536,24 @@ def run() -> None:
                         meal_truck_lift_command_extended = bool(
                             float(getattr(airport_meal_truck_state, "extension_progress", 0.0)) >= 0.5
                         )
+                        # Trigger engineer deploying animation (chopper to truck)
+                        if airport_tech_state is not None:
+                            airport_tech_state.boarding_animation_state = "deploying"
+                            airport_tech_state.boarding_animation_timer = 0.0
+                            # Set animation positions (chopper to truck) - walk on ground level
+                            ground_y = heli_settings.ground_y - 18.0  # Engineer standing on ground
+                            airport_tech_state.boarding_start_x = float(getattr(helicopter.pos, "x", 0.0))
+                            airport_tech_state.boarding_start_y = ground_y
+                            airport_tech_state.boarding_end_x = float(getattr(airport_meal_truck_state, "x", 0.0))
+                            airport_tech_state.boarding_end_y = ground_y
                         continue
+                
+                # Handle fire key for lift toggle in meal truck driver mode
+                fire_key_pressed = mode == "playing" and matches_key(event.key, controls.fire) and not getattr(mission, "crash_active", False)
+                if fire_key_pressed and selected_mission_id == "airport" and meal_truck_driver_mode:
+                    # While in driver mode, fire key toggles lift extension
+                    meal_truck_lift_command_extended = not meal_truck_lift_command_extended
+                    continue
                 
                 (
                     mode,
@@ -590,12 +613,14 @@ def run() -> None:
                 if handled_mission_end:
                     mode = next_mode
                 elif mode == "playing":
-                    if event.button == 2:  # X button: fire
+                    if event.button == 2:  # X button: fire (or lift toggle in driver mode)
                         if logger:
                             logger.debug("Fire button pressed (button=2) in playing mode")
-                        if (
+                        if meal_truck_driver_mode and selected_mission_id == "airport":
+                            # While in driver mode, X toggles lift extension
+                            meal_truck_lift_command_extended = not meal_truck_lift_command_extended
+                        elif (
                             not getattr(mission, "crash_active", False)
-                            and not bool(meal_truck_driver_mode)
                             and not bool(getattr(mission, "engineer_remote_control_active", False))
                         ):
                             spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
@@ -612,13 +637,20 @@ def run() -> None:
                             # Check for meal truck driver mode activation/deactivation (Airport mission only)
                             if selected_mission_id == "airport":
                                 if meal_truck_driver_mode and airport_meal_truck_state is not None:
-                                    # While driving truck: A toggles lift; A exits only when linked back up with helicopter.
-                                    if can_exit_meal_truck_driver_mode():
-                                        meal_truck_driver_mode = False
-                                        airport_meal_truck_state.driver_mode_active = False
-                                        airport_meal_truck_state.driver_mode_exit_timer = 0.2
-                                    else:
-                                        meal_truck_lift_command_extended = not meal_truck_lift_command_extended
+                                    # A button always exits driver mode immediately
+                                    meal_truck_driver_mode = False
+                                    airport_meal_truck_state.driver_mode_active = False
+                                    airport_meal_truck_state.driver_mode_exit_timer = 0.2
+                                    # Trigger engineer returning animation (truck to chopper)
+                                    if airport_tech_state is not None:
+                                        airport_tech_state.boarding_animation_state = "returning"
+                                        airport_tech_state.boarding_animation_timer = 0.0
+                                        # Set animation positions (truck to chopper) - walk on ground level
+                                        ground_y = heli_settings.ground_y - 18.0  # Engineer standing on ground
+                                        airport_tech_state.boarding_start_x = float(getattr(airport_meal_truck_state, "x", 0.0))
+                                        airport_tech_state.boarding_start_y = ground_y
+                                        airport_tech_state.boarding_end_x = float(getattr(helicopter.pos, "x", 0.0))
+                                        airport_tech_state.boarding_end_y = ground_y
                                 elif should_activate_truck_driver_mode(
                                     meal_truck_state=airport_meal_truck_state,
                                     doors_button_pressed=True,
@@ -629,6 +661,16 @@ def run() -> None:
                                     meal_truck_lift_command_extended = bool(
                                         float(getattr(airport_meal_truck_state, "extension_progress", 0.0)) >= 0.5
                                     )
+                                    # Trigger engineer deploying animation (chopper to truck)
+                                    if airport_tech_state is not None:
+                                        airport_tech_state.boarding_animation_state = "deploying"
+                                        airport_tech_state.boarding_animation_timer = 0.0
+                                        # Set animation positions (chopper to truck) - walk on ground level
+                                        ground_y = heli_settings.ground_y - 18.0  # Engineer standing on ground
+                                        airport_tech_state.boarding_start_x = float(getattr(helicopter.pos, "x", 0.0))
+                                        airport_tech_state.boarding_start_y = ground_y
+                                        airport_tech_state.boarding_end_x = float(getattr(airport_meal_truck_state, "x", 0.0))
+                                        airport_tech_state.boarding_end_y = ground_y
                                 else:
                                     # Normal doors toggle
                                     toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count, set_toast)
