@@ -202,7 +202,7 @@ def are_bus_doors_open(bus_state: BusState) -> bool:
     return getattr(bus_state, "door_state", "closed") == "open"
 
 
-def draw_airport_bus(target: pygame.Surface, bus_state: BusState, camera_x: float, *, boarded_count: int = 0) -> None:
+def draw_airport_bus(target: pygame.Surface, bus_state: BusState, camera_x: float, *, boarded_count: int = 0, tech_on_bus: bool = False) -> None:
     """
     Draw the bus on screen.
     
@@ -211,6 +211,7 @@ def draw_airport_bus(target: pygame.Surface, bus_state: BusState, camera_x: floa
         bus_state: Current bus state
         camera_x: Camera x position for world-to-screen conversion
         boarded_count: Number of passengers currently boarded on bus
+        tech_on_bus: Whether mission tech has transferred onto bus
     """
     screen_x = int(bus_state.x - camera_x)
     screen_y = int(bus_state.y - bus_state.height)
@@ -250,6 +251,15 @@ def draw_airport_bus(target: pygame.Surface, bus_state: BusState, camera_x: floa
         pygame.draw.rect(target, (20, 24, 30, 190), bg_rect, border_radius=4)
         pygame.draw.rect(target, (90, 100, 120), bg_rect, 1, border_radius=4)
         target.blit(text, text_rect)
+
+    # Mission Tech badge above bus once engineer has boarded.
+    if bool(tech_on_bus):
+        badge_center = (screen_x + bus_state.width // 2 + 28, screen_y - 18)
+        pygame.draw.circle(target, (24, 30, 26), badge_center, 8)
+        pygame.draw.circle(target, (140, 225, 140), badge_center, 8, 2)
+        # Tiny wrench-like icon.
+        pygame.draw.rect(target, (170, 235, 170), pygame.Rect(badge_center[0] - 1, badge_center[1] - 4, 2, 6))
+        pygame.draw.rect(target, (170, 235, 170), pygame.Rect(badge_center[0] - 4, badge_center[1] - 5, 6, 2))
 
 
 def apply_airport_bus_friendly_fire(bus_state: BusState | None, mission, *, logger=None) -> int:

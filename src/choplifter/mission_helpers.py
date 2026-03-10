@@ -55,6 +55,12 @@ def _projectile_hits_enemy(
         top = heli.ground_y - h
         return left <= p.pos.x <= left + w and top <= p.pos.y <= top + h
 
+    if e.kind is EnemyKind.BARAK_MRAD:
+        w, h = 44.0, 18.0
+        left = e.pos.x - w * 0.5
+        top = heli.ground_y - h
+        return left <= p.pos.x <= left + w and top <= p.pos.y <= top + h
+
     if e.kind is EnemyKind.JET:
         return _hits_circle(p.pos, e.pos, radius=20.0)
 

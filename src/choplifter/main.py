@@ -1327,7 +1327,8 @@ def run() -> None:
                 # Render active bus state
                 if airport_bus_state is not None:
                     boarded_on_bus = int(getattr(airport_hostage_state, "boarded_hostages", 0)) if airport_hostage_state is not None else 0
-                    draw_airport_bus(target, airport_bus_state, camera_x, boarded_count=boarded_on_bus)
+                    tech_on_bus = bool(getattr(airport_tech_state, "on_bus", False)) if airport_tech_state is not None else False
+                    draw_airport_bus(target, airport_bus_state, camera_x, boarded_count=boarded_on_bus, tech_on_bus=tech_on_bus)
                 draw_airport_hostages(
                     target,
                     airport_hostage_state,

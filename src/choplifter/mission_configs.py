@@ -23,6 +23,7 @@ class MissionTuning:
     tank_fire_max_cooldown_s: float = 1.5
 
     tank_health: float = 110.0
+    barak_health: float = 143.0  # ~30% tougher than tank_health (110 * 1.3)
     tank_initial_cooldown_s: float = 1.5
     tank_ground_offset_y: float = 8.0
     tank_fire_range_x: float = 360.0

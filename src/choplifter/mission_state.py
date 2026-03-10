@@ -155,7 +155,7 @@ class MissionState:
                 kind=EnemyKind.BARAK_MRAD,
                 pos=Vec2(-120.0, heli.ground_y - 12.0),
                 vel=Vec2(32.0, 0.0),
-                health=100.0,
+                health=level.tuning.barak_health,
             )
         )
         pending_mine_pos: Vec2 | None = None

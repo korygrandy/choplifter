@@ -34,6 +34,7 @@ class MissionTechState:
 	
 	# Legacy fields (kept for compatibility, may be deprecated later)
 	is_deployed: bool = False  # True when state != "on_chopper"
+	on_bus: bool = False  # True after tech transfers onto the bus
 	is_repairing: bool = False  # Currently unused in new design
 	repairs_completed: int = 0  # Currently unused in new design
 
@@ -105,6 +106,7 @@ def update_mission_tech(
 	# --- State: on_chopper ---
 	# Tech is aboard helicopter, waiting for deployment
 	if tech_state.state == "on_chopper":
+		tech_state.on_bus = False
 		# Deployment trigger: grounded + doors open + near meal truck
 		if helicopter is not None and meal_truck_state is not None:
 			heli_x = float(getattr(helicopter.pos, "x", 0.0))
@@ -134,6 +136,7 @@ def update_mission_tech(
 	# --- State: deployed_to_truck ---
 	# Tech has entered meal truck, truck is about to drive to extraction point
 	elif tech_state.state == "deployed_to_truck":
+		tech_state.on_bus = False
 		tech_state.deploy_timer_s += dt_s
 		
 		# Tech follows meal truck position
@@ -148,6 +151,7 @@ def update_mission_tech(
 	# --- State: driving_to_extraction ---
 	# Meal truck is en route to elevated jetway at hostage location
 	elif tech_state.state == "driving_to_extraction":
+		tech_state.on_bus = False
 		tech_state.deploy_timer_s += dt_s
 		
 		# Tech follows meal truck position
@@ -164,6 +168,7 @@ def update_mission_tech(
 	# --- State: extracting ---
 	# Box is extended, hostages are boarding meal truck
 	elif tech_state.state == "extracting":
+		tech_state.on_bus = False
 		tech_state.deploy_timer_s += dt_s
 		
 		# Tech follows meal truck position
@@ -180,6 +185,7 @@ def update_mission_tech(
 	# --- State: transferring ---
 	# Box retracted, meal truck driving to bus for passenger transfer
 	elif tech_state.state == "transferring":
+		tech_state.on_bus = False
 		tech_state.deploy_timer_s += dt_s
 		
 		# Tech follows meal truck position
@@ -198,9 +204,11 @@ def update_mission_tech(
 	# --- State: transfer_complete ---
 	# Passengers on bus, tech mission objective complete
 	elif tech_state.state == "transfer_complete":
+		tech_state.on_bus = True
 		tech_state.deploy_timer_s += dt_s
-		# Tech position frozen at last known location
-		# (Can return to chopper in future enhancement)
+		if bus_state is not None:
+			tech_state.tech_x = float(getattr(bus_state, "x", tech_state.tech_x))
+			tech_state.tech_y = float(getattr(bus_state, "y", tech_state.tech_y))
 	
 	return tech_state
 
