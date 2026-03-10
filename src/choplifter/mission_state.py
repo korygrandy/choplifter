@@ -107,9 +107,8 @@ class MissionState:
         compound_h = level.compound_height
         compound_y = heli.ground_y - compound_h
         for i, x in enumerate(level.compound_xs):
-            # Airport mission: float second-from-left compound 115px up total
-            # (was 30px; raised by additional 85px per design request).
-            y_offset = -115.0 if mission_id.lower() in ("airport", "airport_special_ops") and i == 1 else 0.0
+            # Airport mission: float second-from-left compound 90px up total.
+            y_offset = -60.0 if mission_id.lower() in ("airport", "airport_special_ops") and i == 1 else 0.0
             compounds.append(
                 Compound(
                     pos=Vec2(x, compound_y + y_offset),

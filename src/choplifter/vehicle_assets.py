@@ -27,6 +27,7 @@ class AirportMealTruckState:
 	driver_mode_exit_timer: float = 0.0  # Prevents rapid mode switching
 	heli_proximity: float = 999999.0  # Distance to helicopter in pixels
 	use_extended_visual: bool = False  # Hysteresis latch to avoid render flicker at threshold
+	facing_right: bool = True  # Sprite orientation based on driving direction
 
 
 @dataclass
@@ -119,8 +120,10 @@ def update_airport_meal_truck(
 		driver_speed = meal_truck_state.speed_px_per_s * 0.8  # Slower than auto-drive
 		if driver_input.move_left:
 			meal_truck_state.x -= driver_speed * dt
+			meal_truck_state.facing_right = False
 		elif driver_input.move_right:
 			meal_truck_state.x += driver_speed * dt
+			meal_truck_state.facing_right = True
 		
 		# Driver control of lift extension (using doors/open trigger)
 		lift_extend_rate = 2.0  # Slightly faster than auto-extend
@@ -139,14 +142,11 @@ def update_airport_meal_truck(
 				meal_truck_state.at_plane_lz = True
 			else:
 				meal_truck_state.x += step if dx > 0.0 else -step
+				meal_truck_state.facing_right = dx > 0.0
 
-		# Box extension: extends when at plane LZ and tech is still operating (not yet transfer_complete)
-		tech_still_operating = False
-		if tech_state is not None:
-			tech_state_name = str(getattr(tech_state, "state", "on_chopper"))
-			tech_still_operating = tech_state_name not in ("on_chopper", "transfer_complete")
-		
-		target_extension = 1.0 if meal_truck_state.at_plane_lz and tech_still_operating else 0.0
+		# Box extension is manual-only in driver mode.
+		# In non-driver mode, keep retracting toward closed so boarding the truck does not auto-extend.
+		target_extension = 0.0
 		extend_rate = 1.7
 		if target_extension > meal_truck_state.extension_progress:
 			meal_truck_state.extension_progress = min(target_extension, meal_truck_state.extension_progress + extend_rate * dt)
@@ -245,22 +245,26 @@ def draw_airport_meal_truck(target: pygame.Surface, meal_truck_state, *, camera_
 	x = int(float(getattr(meal_truck_state, "x", 0.0)) - float(camera_x))
 	y = int(float(getattr(meal_truck_state, "y", 0.0)) - int(getattr(meal_truck_state, "height", 28)))
 	progress = max(0.0, min(1.0, float(getattr(meal_truck_state, "extension_progress", 0.0))))
+	facing_right = bool(getattr(meal_truck_state, "facing_right", True))
 
-	if _meal_cart_extended_sprite is not None and bool(getattr(meal_truck_state, "use_extended_visual", False)):
-		target.blit(_meal_cart_extended_sprite, (x, y))
-		return
-
-	if _meal_cart_sprite is not None:
-		target.blit(_meal_cart_sprite, (x, y))
-	else:
-		pygame.draw.rect(target, (220, 220, 230), pygame.Rect(x, y, 72, 24), border_radius=3)
-		pygame.draw.rect(target, (20, 20, 25), pygame.Rect(x, y, 72, 24), 1, border_radius=3)
-
-	# Animate the lift section when approaching/operating at the plane LZ.
-	lift_px = int(100.0 * progress)
-	if lift_px > 0:
-		if _meal_cart_box_sprite is not None:
-			target.blit(_meal_cart_box_sprite, (x + 8, y - lift_px))
+	# Two-state rendering: retracted vs extended with fade transition
+	if progress <= 0.0:
+		# Retracted state: draw base truck sprite
+		if _meal_cart_sprite is not None:
+			sprite = pygame.transform.flip(_meal_cart_sprite, True, False) if facing_right else _meal_cart_sprite
+			target.blit(sprite, (x, y))
 		else:
-			pygame.draw.rect(target, (240, 245, 250), pygame.Rect(x + 10, y - lift_px, 40, 28), border_radius=2)
-			pygame.draw.rect(target, (35, 35, 40), pygame.Rect(x + 10, y - lift_px, 40, 28), 1, border_radius=2)
+			pygame.draw.rect(target, (220, 220, 230), pygame.Rect(x, y, 72, 24), border_radius=3)
+			pygame.draw.rect(target, (20, 20, 25), pygame.Rect(x, y, 72, 24), 1, border_radius=3)
+	else:
+		# Extended state: draw extended sprite with fade based on progress
+		if _meal_cart_extended_sprite is not None:
+			sprite = pygame.transform.flip(_meal_cart_extended_sprite, True, False) if facing_right else _meal_cart_extended_sprite
+			alpha = max(0, min(255, int(255 * progress)))
+			sprite_with_alpha = sprite.copy()
+			sprite_with_alpha.set_alpha(alpha)
+			target.blit(sprite_with_alpha, (x, y))
+		else:
+			# Fallback: draw base sprite if extended sprite missing
+			pygame.draw.rect(target, (220, 220, 230), pygame.Rect(x, y, 72, 24), border_radius=3)
+			pygame.draw.rect(target, (20, 20, 25), pygame.Rect(x, y, 72, 24), 1, border_radius=3)

@@ -263,7 +263,7 @@ def run() -> None:
     airport_objective_state = None
     airport_cutscene_state = None
     airport_meal_truck_state = None
-    airport_raised_bunker_x = 1500.0
+    airport_raised_bunker_x = 1050.0
 
     if selected_mission_id == "airport":
         airport_bus_state = create_bus_state(start_x=2200, ground_y=heli_settings.ground_y)
@@ -303,6 +303,7 @@ def run() -> None:
         nonlocal prev_btn_a_down, prev_btn_b_down, prev_btn_x_down, prev_btn_y_down, prev_btn_start_down
         nonlocal prev_btn_rb_down, prev_btn_lb_down, prev_btn_back_down
         nonlocal city_objective_overlay_timer, airport_bus_state, airport_hostage_state, airport_enemy_state, airport_tech_state, airport_objective_state, airport_meal_truck_state, airport_cutscene_state
+        nonlocal meal_truck_driver_mode, meal_truck_lift_command_extended
         # Stop chopper warning beeps on game reset
         audio.stop_chopper_warning_beeps()
         mission, helicopter, accumulator, prev_stats = reset_game(
@@ -330,6 +331,8 @@ def run() -> None:
         prev_btn_rb_down = False
         prev_btn_lb_down = False
         prev_btn_back_down = False
+        meal_truck_driver_mode = False
+        meal_truck_lift_command_extended = False
         city_objective_overlay_timer = get_mission_objective_overlay_duration(mission_id=selected_mission_id)
         
         # Initialize mission-specific state
@@ -1078,6 +1081,7 @@ def run() -> None:
                         meal_truck_state=airport_meal_truck_state,
                         tech_state=airport_tech_state,
                     )
+                    prev_tech_state_name = str(getattr(airport_tech_state, "state", "on_chopper"))
                     airport_tech_state = update_mission_tech(
                         airport_tech_state,
                         tick.dt,
@@ -1085,6 +1089,16 @@ def run() -> None:
                         meal_truck_state=airport_meal_truck_state,
                         bus_state=airport_bus_state,
                     )
+                    tech_state_name = str(getattr(airport_tech_state, "state", "on_chopper"))
+                    engineer_just_boarded_truck = (
+                        prev_tech_state_name == "on_chopper" and tech_state_name != "on_chopper"
+                    )
+                    if engineer_just_boarded_truck and airport_meal_truck_state is not None:
+                        meal_truck_driver_mode = True
+                        airport_meal_truck_state.driver_mode_active = True
+                        meal_truck_lift_command_extended = bool(
+                            float(getattr(airport_meal_truck_state, "extension_progress", 0.0)) >= 0.5
+                        )
                     mission.mission_tech = airport_tech_state  # Store for rendering
                     airport_meal_truck_state = update_airport_meal_truck(
                         airport_meal_truck_state,
