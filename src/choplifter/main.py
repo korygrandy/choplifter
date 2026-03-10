@@ -13,7 +13,7 @@ from .accessibility import load_accessibility
 from .controls import load_controls, matches_key, pressed
 from .debug_overlay import DebugOverlay
 from .game_logging import create_session_logger
-from .helicopter import Facing, Helicopter, update_helicopter
+from .helicopter import Facing, Helicopter, HelicopterInput, update_helicopter
 from . import haptics
 from .mission import update_mission
 from .mission_configs import get_mission_config_by_id
@@ -263,18 +263,20 @@ def run() -> None:
     airport_objective_state = None
     airport_cutscene_state = None
     airport_meal_truck_state = None
+    airport_raised_bunker_x = 1500.0
 
     if selected_mission_id == "airport":
         airport_bus_state = create_bus_state(start_x=2200, ground_y=heli_settings.ground_y)
-        airport_hostage_state = create_airport_hostage_state(total_hostages=16, pickup_x=1232.0)
+        airport_hostage_state = create_airport_hostage_state(total_hostages=16, pickup_x=airport_raised_bunker_x)
         airport_enemy_state = create_airport_enemy_state()
         airport_tech_state = create_mission_tech_state()
+        mission.mission_tech = airport_tech_state  # Store for rendering
         airport_objective_state = create_airport_objective_state(hostage_deadline_s=120.0)
         airport_cutscene_state = create_airport_cutscene_state()
         airport_meal_truck_state = create_airport_meal_truck_state(
-            start_x=1120.0,
+            start_x=airport_raised_bunker_x,
             ground_y=heli_settings.ground_y,
-            plane_lz_x=1232.0,
+            plane_lz_x=airport_raised_bunker_x,
         )
 
     def apply_mission_preview_wrapper() -> None:
@@ -333,15 +335,16 @@ def run() -> None:
         # Initialize mission-specific state
         if selected_mission_id == "airport":
             airport_bus_state = create_bus_state(start_x=2200, ground_y=heli_settings.ground_y)
-            airport_hostage_state = create_airport_hostage_state(total_hostages=16, pickup_x=1232.0)
+            airport_hostage_state = create_airport_hostage_state(total_hostages=16, pickup_x=airport_raised_bunker_x)
             airport_enemy_state = create_airport_enemy_state()
             airport_tech_state = create_mission_tech_state()
+            mission.mission_tech = airport_tech_state  # Store for rendering
             airport_objective_state = create_airport_objective_state(hostage_deadline_s=120.0)
             airport_cutscene_state = create_airport_cutscene_state()
             airport_meal_truck_state = create_airport_meal_truck_state(
-                start_x=1120.0,
+                start_x=airport_raised_bunker_x,
                 ground_y=heli_settings.ground_y,
-                plane_lz_x=1232.0,
+                plane_lz_x=airport_raised_bunker_x,
             )
 
     def toggle_particles_wrapper() -> None:
@@ -361,6 +364,24 @@ def run() -> None:
 
     # Track doors state before cutscene
     doors_open_before_cutscene = False
+    
+    # Track previous frame's door button state to detect new presses
+    doors_button_pressed_last_frame = False
+    
+    # Track meal truck driver mode (overrides helicopter controls)
+    meal_truck_driver_mode = False
+    meal_truck_lift_command_extended = False
+
+    def can_exit_meal_truck_driver_mode() -> bool:
+        if airport_meal_truck_state is None:
+            return False
+        if not bool(getattr(helicopter, "grounded", False)):
+            return False
+        if not bool(getattr(helicopter, "doors_open", False)):
+            return False
+        heli_x = float(getattr(helicopter.pos, "x", 0.0))
+        truck_x = float(getattr(airport_meal_truck_state, "x", 0.0))
+        return abs(heli_x - truck_x) <= 120.0
     
     # Track previous mode to detect transitions
     prev_loop_mode = mode
@@ -483,6 +504,31 @@ def run() -> None:
                         set_debug_weather_mode(selected_weather_mode)
                     if debug_toast:
                         set_toast(debug_toast)
+                
+                # Handle doors key for meal truck driver mode (before normal doors handling)
+                doors_key_pressed = mode == "playing" and matches_key(event.key, controls.doors) and not getattr(mission, "crash_active", False)
+                if doors_key_pressed and selected_mission_id == "airport":
+                    if meal_truck_driver_mode and airport_meal_truck_state is not None:
+                        # While driving truck: E toggles lift; E exits only when linked back up with helicopter.
+                        if can_exit_meal_truck_driver_mode():
+                            meal_truck_driver_mode = False
+                            airport_meal_truck_state.driver_mode_active = False
+                            airport_meal_truck_state.driver_mode_exit_timer = 0.2
+                        else:
+                            meal_truck_lift_command_extended = not meal_truck_lift_command_extended
+                        continue
+                    elif should_activate_truck_driver_mode(
+                        meal_truck_state=airport_meal_truck_state,
+                        doors_button_pressed=True,
+                    ):
+                        # Enter driver mode.
+                        meal_truck_driver_mode = True
+                        airport_meal_truck_state.driver_mode_active = True
+                        meal_truck_lift_command_extended = bool(
+                            float(getattr(airport_meal_truck_state, "extension_progress", 0.0)) >= 0.5
+                        )
+                        continue
+                
                 (
                     mode,
                     runtime.pause_focus,
@@ -525,7 +571,8 @@ def run() -> None:
                     selected_chopper_index=selected_chopper_index,
                     selected_chopper_asset=selected_chopper_asset,
                     debug=debug,
-                    quit_confirm=runtime.quit_confirm
+                    quit_confirm=runtime.quit_confirm,
+                    helicopter_weapon_locked=bool(meal_truck_driver_mode),
                 )
             elif event.type == pygame.JOYBUTTONDOWN:
                 if logger:
@@ -543,7 +590,11 @@ def run() -> None:
                     if event.button == 2:  # X button: fire
                         if logger:
                             logger.debug("Fire button pressed (button=2) in playing mode")
-                        if not getattr(mission, "crash_active", False):
+                        if (
+                            not getattr(mission, "crash_active", False)
+                            and not bool(meal_truck_driver_mode)
+                            and not bool(getattr(mission, "engineer_remote_control_active", False))
+                        ):
                             spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
                             if helicopter.facing is Facing.FORWARD:
                                 audio.play_bomb()
@@ -555,7 +606,31 @@ def run() -> None:
                         try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
                     elif event.button == 0:  # A button: doors
                         if not getattr(mission, "crash_active", False):
-                            toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count, set_toast)
+                            # Check for meal truck driver mode activation/deactivation (Airport mission only)
+                            if selected_mission_id == "airport":
+                                if meal_truck_driver_mode and airport_meal_truck_state is not None:
+                                    # While driving truck: A toggles lift; A exits only when linked back up with helicopter.
+                                    if can_exit_meal_truck_driver_mode():
+                                        meal_truck_driver_mode = False
+                                        airport_meal_truck_state.driver_mode_active = False
+                                        airport_meal_truck_state.driver_mode_exit_timer = 0.2
+                                    else:
+                                        meal_truck_lift_command_extended = not meal_truck_lift_command_extended
+                                elif should_activate_truck_driver_mode(
+                                    meal_truck_state=airport_meal_truck_state,
+                                    doors_button_pressed=True,
+                                ):
+                                    # Enter driver mode
+                                    meal_truck_driver_mode = True
+                                    airport_meal_truck_state.driver_mode_active = True
+                                    meal_truck_lift_command_extended = bool(
+                                        float(getattr(airport_meal_truck_state, "extension_progress", 0.0)) >= 0.5
+                                    )
+                                else:
+                                    # Normal doors toggle
+                                    toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count, set_toast)
+                            else:
+                                toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count, set_toast)
                     elif event.button == 3:  # Y button: reverse
                         if not getattr(mission, "crash_active", False):
                             helicopter.reverse_flip()
@@ -881,11 +956,16 @@ def run() -> None:
                 if paused.cycle_facing:
                     helicopter.cycle_facing()
                 if paused.fire_weapon:
-                    spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
-                    if helicopter.facing is Facing.FORWARD:
-                        audio.play_bomb()
-                    else:
-                        audio.play_shoot()
+                    if (
+                        not bool(meal_truck_driver_mode)
+                        and not bool(getattr(mission, "engineer_remote_control_active", False))
+                        and not bool(getattr(mission, "crash_active", False))
+                    ):
+                        spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
+                        if helicopter.facing is Facing.FORWARD:
+                            audio.play_bomb()
+                        else:
+                            audio.play_shoot()
 
             prev_btn_a_down = a_down
             prev_btn_b_down = b_down
@@ -910,6 +990,37 @@ def run() -> None:
             gp_lift_up=gp_lift_up,
             gp_lift_down=gp_lift_down,
         )
+
+        # Keep mission-level engineer state in sync for combat/AI gating.
+        if selected_mission_id == "airport":
+            engineer_off_chopper = bool(
+                airport_tech_state is not None
+                and str(getattr(airport_tech_state, "state", "on_chopper")) != "on_chopper"
+            )
+            mission.engineer_remote_control_active = bool(meal_truck_driver_mode)
+            mission.engineer_off_chopper = engineer_off_chopper
+            mission.barak_suppressed = engineer_off_chopper
+        else:
+            mission.engineer_remote_control_active = False
+            mission.engineer_off_chopper = False
+            mission.barak_suppressed = False
+        
+        # Build truck driver input (reuses tilt/lift controls: left=move left, right=move right, up=extend lift)
+        truck_driver_input = TruckDriverInput(
+            move_left=(kb_tilt_left or gp_tilt_left) if mode == "playing" and meal_truck_driver_mode else False,
+            move_right=(kb_tilt_right or gp_tilt_right) if mode == "playing" and meal_truck_driver_mode else False,
+            extend_lift=meal_truck_lift_command_extended if mode == "playing" and meal_truck_driver_mode else False,
+        )
+        
+        # When in driver mode, disable helicopter controls
+        if meal_truck_driver_mode:
+            helicopter_input = HelicopterInput(
+                tilt_left=False,
+                tilt_right=False,
+                lift_up=False,
+                lift_down=False,
+                brake=False,
+            )
 
         # Fixed-timestep update.
         # Clamp accumulator to avoid spiral of death if the window stalls.
@@ -974,12 +1085,14 @@ def run() -> None:
                         meal_truck_state=airport_meal_truck_state,
                         bus_state=airport_bus_state,
                     )
+                    mission.mission_tech = airport_tech_state  # Store for rendering
                     airport_meal_truck_state = update_airport_meal_truck(
                         airport_meal_truck_state,
                         tick.dt,
                         helicopter=helicopter,
                         tech_state=airport_tech_state,
                         bus_state=airport_bus_state,
+                        driver_input=truck_driver_input if meal_truck_driver_mode else None,
                     )
                     airport_target_x = get_airport_priority_target_x(
                         bus_state=airport_bus_state,
@@ -1167,6 +1280,7 @@ def run() -> None:
                     city_objective_overlay_timer=city_objective_overlay_timer,
                     frame_dt=frame_dt,
                     draw_hud_fn=draw_hud,
+                    driver_mode_active=meal_truck_driver_mode,
                 )
             else:
                 draw_mode_overlays(

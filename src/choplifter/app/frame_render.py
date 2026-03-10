@@ -99,6 +99,7 @@ def draw_playing_hud_and_overlays(
     city_objective_overlay_timer: float,
     frame_dt: float,
     draw_hud_fn: object,
+    driver_mode_active: bool = False,
 ) -> tuple[float, float]:
     """Draw playing HUD effects and return updated (vip_timer, objective_timer)."""
     if hud_disabled_timer > 0.0:
@@ -107,7 +108,7 @@ def draw_playing_hud_and_overlays(
         overlay_surf.fill((40, 40, 40, 180))
         target.blit(overlay_surf, (0, 0))
     else:
-        draw_hud_fn(target, mission, helicopter)
+        draw_hud_fn(target, mission, helicopter, driver_mode_active=driver_mode_active)
 
     next_vip_timer = float(vip_kia_overlay_timer)
     next_city_objective_timer = float(city_objective_overlay_timer)

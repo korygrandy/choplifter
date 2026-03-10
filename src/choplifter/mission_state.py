@@ -44,6 +44,9 @@ class MissionState:
     crashes: int = 0
     invuln_seconds: float = 0.0
     flare_invuln_seconds: float = 0.0
+    engineer_remote_control_active: bool = False
+    engineer_off_chopper: bool = False
+    barak_suppressed: bool = False
     feedback_shake_impulse: float = 0.0
     feedback_duck_strength: float = 0.0
     doors_open_maxvel_timer: float = 0.0
@@ -104,8 +107,9 @@ class MissionState:
         compound_h = level.compound_height
         compound_y = heli.ground_y - compound_h
         for i, x in enumerate(level.compound_xs):
-            # Airport mission: float third compound 30px up to match meal truck box height
-            y_offset = -30.0 if mission_id.lower() in ("airport", "airport_special_ops") and i == 2 else 0.0
+            # Airport mission: float second-from-left compound 115px up total
+            # (was 30px; raised by additional 85px per design request).
+            y_offset = -115.0 if mission_id.lower() in ("airport", "airport_special_ops") and i == 1 else 0.0
             compounds.append(
                 Compound(
                     pos=Vec2(x, compound_y + y_offset),
@@ -191,3 +195,4 @@ class MissionState:
         state.pending_air_mine_pos = pending_mine_pos
         state.pending_air_mine_seconds = pending_mine_seconds
         return state
+

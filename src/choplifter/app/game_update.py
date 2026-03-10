@@ -167,7 +167,11 @@ def step_playing_helicopter(
         physics,
         heli_settings,
         world_width=float(getattr(mission, "world_width", 0.0)),
-        invulnerable=(float(getattr(mission, "invuln_seconds", 0.0)) > 0.0 or bool(getattr(mission, "ended", False))),
+        invulnerable=(
+            float(getattr(mission, "invuln_seconds", 0.0)) > 0.0
+            or bool(getattr(mission, "ended", False))
+            or bool(getattr(mission, "engineer_remote_control_active", False))
+        ),
     )
 
     is_grounded = bool(getattr(helicopter, "grounded", False))

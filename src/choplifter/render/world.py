@@ -15,6 +15,9 @@ import math
 from typing import TYPE_CHECKING
 import pygame
 
+# Thermal overlay toggle state (runtime mutable via toggle_thermal_mode).
+thermal_mode = False
+
 from ..game_types import EnemyKind, HostageState, ProjectileKind
 from ..barak_mrad import BARAK_LAUNCHER_VISIBLE_STATES
 from ..mission_helpers import sentiment_band_label, sentiment_contributions
@@ -27,6 +30,8 @@ def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: flo
     _draw_base(screen, mission, camera_x=camera_x)
     _draw_compounds(screen, mission, camera_x=camera_x)
     _draw_hostages(screen, mission, camera_x=camera_x)
+    _draw_engineer_boarding(screen, mission, camera_x=camera_x)
+    _draw_engineer_wrench_indicator(screen, mission, camera_x=camera_x)
     if enable_particles:
         from .particles import draw_jet_trail_particles
 
@@ -322,6 +327,71 @@ def toggle_thermal_mode():
     global thermal_mode
     thermal_mode = not thermal_mode
     setattr(_draw_hostages, "thermal_mode", thermal_mode)
+
+
+def _draw_engineer_boarding(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+	"""Draw engineer as green circle during boarding/unboarding animations."""
+	tech_state = getattr(mission, "mission_tech", None)
+	if tech_state is None:
+		return
+	
+	# Only draw during active boarding animations
+	if tech_state.boarding_animation_state == "idle":
+		return
+	
+	x = int(tech_state.tech_x - camera_x)
+	y = int(tech_state.tech_y)
+	
+	# Green color for camo representation
+	green_color = (34, 177, 76)  # Bright green
+	
+	# Animate slightly for visual effect
+	animation_progress = tech_state.boarding_animation_timer / 0.4  # 0.4s total duration
+	animation_progress = min(1.0, max(0.0, animation_progress))
+	
+	# Draw pulsing circle
+	pulse = math.sin(animation_progress * math.pi * 2.0) * 0.5 + 0.5  # 0.0 to 1.0
+	radius = int(5 + pulse * 2)
+	
+	pygame.draw.circle(screen, green_color, (x, y), radius)
+	pygame.draw.circle(screen, (255, 255, 255), (x, y), radius, 1)
+
+
+def _draw_engineer_wrench_indicator(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+	"""Draw wrench indicator when engineer is deployed in the meal truck.
+	
+	Positioned above the engineer's location (above the green boarding circle),
+	similar to how VIP crown is positioned above VIP hostage.
+	"""
+	tech_state = getattr(mission, "mission_tech", None)
+	meal_truck_state = getattr(mission, "meal_truck", None)
+	
+	if tech_state is None or meal_truck_state is None:
+		return
+	
+	# Only show wrench when engineer is in truck (not on chopper)
+	if tech_state.state == "on_chopper":
+		return
+	
+	# Position wrench directly above the engineer's location (12px above, like VIP crown)
+	engineer_x = int(meal_truck_state.x - camera_x)
+	engineer_y = int(meal_truck_state.y)
+	wrench_y = engineer_y - 14
+	
+	# Draw wrench on a surface for proper centering (similar to VIP crown)
+	wrench_surf = pygame.Surface((16, 14), pygame.SRCALPHA)
+	wx, wy = 8, 7  # Center of surface
+	
+	# Draw wrench symbol using simple shapes centered on surface
+	# Wrench handle (diagonal line)
+	pygame.draw.line(wrench_surf, (200, 100, 50), (wx - 6, wy + 4), (wx + 6, wy - 4), 2)
+	# Wrench head (circle)
+	pygame.draw.circle(wrench_surf, (200, 100, 50), (wx - 7, wy + 5), 3)
+	# Wrench mouth (small arc)
+	pygame.draw.arc(wrench_surf, (200, 100, 50), pygame.Rect(wx + 2, wy - 3, 7, 7), 0, math.pi/2, 2)
+	
+	# Blit centered above engineer position (like VIP crown)
+	screen.blit(wrench_surf, (engineer_x - wrench_surf.get_width() // 2, wrench_y - wrench_surf.get_height() // 2))
 
 
 def _draw_projectiles(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:

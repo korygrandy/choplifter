@@ -207,6 +207,14 @@ Escort/Convoy: A ground vehicle (bus) moves across the screen. The player must h
 - Add unique audio cues/music for this mission
 - Add bonus objectives to City Siege mission
 
+### Thermal Mode (Hostage Reveal) TODO
+- [ ] Define thermal mode behavior: when enabled, reveal hostages only in the nearest unopened bunker to the player helicopter
+- [ ] Add nearest-bunker selection logic (distance from helicopter x to compound center x)
+- [ ] Render hidden hostages in selected bunker with thermal silhouettes/highlight markers while keeping other unopened bunkers hidden
+- [ ] Add UI indicator in HUD/debug overlay when thermal mode is active and which bunker index is currently selected
+- [ ] Add gameplay constraints (optional tuning): energy drain/cooldown or no penalty in prototype mode
+- [ ] Add tests for nearest-bunker selection and reveal gating (opened bunker should not require thermal reveal)
+
 ## Implementation Status (Phase 1)
 
 ### Completed

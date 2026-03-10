@@ -182,6 +182,10 @@ def _update_enemies(
 
         # --- BARAK MRAD MOVEMENT, DEPLOYMENT, AND AIMING LOGIC ---
         if e.kind is EnemyKind.BARAK_MRAD:
+            if bool(getattr(mission, "barak_suppressed", False)):
+                # Hold BARAK state while engineer is off-chopper.
+                continue
+
             e.mrad_state_seconds = float(getattr(e, "mrad_state_seconds", 0.0)) + dt
             
             # Determine target position: use leftmost compound if available, otherwise fallback to world center

@@ -33,8 +33,14 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 	if bus_state is None or helicopter is None:
 		return hostage_state
 
+	# Meal-truck LZ is dynamic: the pickup marker follows truck position.
+	if meal_truck_state is not None:
+		hostage_state.pickup_x = float(getattr(meal_truck_state, "x", hostage_state.pickup_x))
+
 	tech_operating = bool(tech_state is not None and getattr(tech_state, "is_deployed", False))
 	truck_at_plane = bool(meal_truck_state is not None and getattr(meal_truck_state, "at_plane_lz", False))
+	truck_extended = bool(meal_truck_state is not None and float(getattr(meal_truck_state, "extension_progress", 0.0)) >= 0.98)
+	truck_retracted = bool(meal_truck_state is not None and float(getattr(meal_truck_state, "extension_progress", 0.0)) <= 0.05)
 
 	# Recalling mission tech during truck extraction interrupts the transfer flow.
 	if not tech_operating and hostage_state.state in ("truck_loading", "truck_loaded"):
@@ -45,10 +51,8 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 
 	# Phase 1: player deploys tech and gets meal truck in place at the damaged plane.
 	if hostage_state.state == "waiting":
-		player_supporting = bool(getattr(helicopter, "grounded", False) and getattr(helicopter, "doors_open", False))
-		near_plane_lz = abs(float(getattr(helicopter.pos, "x", 0.0)) - float(hostage_state.pickup_x)) <= float(hostage_state.pickup_radius_px + 36.0)
-
-		if tech_operating and truck_at_plane and player_supporting and near_plane_lz:
+		# Boarding is allowed only while the meal-truck box is extended.
+		if tech_operating and truck_extended:
 			hostage_state.state = "truck_loading"
 			hostage_state.boarding_started_s = float(getattr(mission, "elapsed_seconds", 0.0))
 			if audio is not None and hasattr(audio, "play_bus_door"):
@@ -64,8 +68,9 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 	# Phase 2: transfer from meal truck to bus near the bus lane while tech is still active.
 	elif hostage_state.state == "truck_loaded":
 		if meal_truck_state is not None:
+			# Unboard requires retracted box and being inside rescue LZ (bus transfer zone).
 			near_bus = abs(float(getattr(meal_truck_state, "x", 0.0)) - float(bus_state.x)) <= float(hostage_state.helicopter_bus_radius_px)
-			if near_bus and tech_operating:
+			if near_bus and tech_operating and truck_retracted:
 				hostage_state.boarded_hostages = int(hostage_state.meal_truck_loaded_hostages)
 				hostage_state.meal_truck_loaded_hostages = 0
 				hostage_state.state = "boarded"

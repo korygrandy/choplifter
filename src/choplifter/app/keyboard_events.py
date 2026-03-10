@@ -6,7 +6,7 @@ from src.choplifter.controls import matches_key, pressed
 from src.choplifter.app.menu_helpers import cycle_index, move_pause_focus
 
 
-def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any, mission: Any, helicopter: Any, audio: Any, logger: Any, chopper_choices: list, mission_choices: list, pause_focus: str, muted: bool, set_toast: Callable, reset_game: Callable, apply_mission_preview: Callable, skip_intro: Callable, skip_mission_cutscene: Callable, toggle_particles_wrapper: Callable, toggle_flashes_wrapper: Callable, toggle_screenshake_wrapper: Callable, spawn_projectile_from_helicopter_logged: Callable, try_start_flare_salvo: Callable, toggle_doors_with_logging: Callable, Facing: Any, DebugSettings: Any, boarded_count: Any, flares: Any, selected_mission_index: int, selected_mission_id: str, selected_chopper_index: int, selected_chopper_asset: str, debug: Any, quit_confirm: bool) -> tuple[str, str, bool, int, str, int, str, Any, bool]:
+def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any, mission: Any, helicopter: Any, audio: Any, logger: Any, chopper_choices: list, mission_choices: list, pause_focus: str, muted: bool, set_toast: Callable, reset_game: Callable, apply_mission_preview: Callable, skip_intro: Callable, skip_mission_cutscene: Callable, toggle_particles_wrapper: Callable, toggle_flashes_wrapper: Callable, toggle_screenshake_wrapper: Callable, spawn_projectile_from_helicopter_logged: Callable, try_start_flare_salvo: Callable, toggle_doors_with_logging: Callable, Facing: Any, DebugSettings: Any, boarded_count: Any, flares: Any, selected_mission_index: int, selected_mission_id: str, selected_chopper_index: int, selected_chopper_asset: str, debug: Any, quit_confirm: bool, helicopter_weapon_locked: bool = False) -> tuple[str, str, bool, int, str, int, str, Any, bool]:
     """
     Handles keyboard events and returns updated (mode, pause_focus, muted).
     """
@@ -136,7 +136,7 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
     elif mode == "playing" and matches_key(event.key, controls.fire):
         if logger:
             logger.debug("Fire key pressed (key=%s) in playing mode", event.key)
-        if not getattr(mission, "crash_active", False):
+        if not getattr(mission, "crash_active", False) and not helicopter_weapon_locked:
             spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
             if helicopter.facing is Facing.FORWARD:
                 audio.play_bomb()

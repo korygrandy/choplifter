@@ -21,6 +21,20 @@ class AirportMealTruckState:
 	at_plane_lz: bool = False
 	extension_progress: float = 0.0
 	tech_has_deployed: bool = False  # Controls whether truck starts driving
+	
+	# Driver mode state (player can control truck when in driver mode)
+	driver_mode_active: bool = False
+	driver_mode_exit_timer: float = 0.0  # Prevents rapid mode switching
+	heli_proximity: float = 999999.0  # Distance to helicopter in pixels
+	use_extended_visual: bool = False  # Hysteresis latch to avoid render flicker at threshold
+
+
+@dataclass
+class TruckDriverInput:
+	"""Input for controlling the meal truck instead of helicopter."""
+	move_left: bool = False
+	move_right: bool = False
+	extend_lift: bool = False
 
 
 _meal_cart_sprite: Optional[pygame.Surface] = None
@@ -66,6 +80,7 @@ def update_airport_meal_truck(
 	helicopter=None,
 	tech_state=None,
 	bus_state=None,
+	driver_input: TruckDriverInput | None = None,
 ) -> AirportMealTruckState:
 	if meal_truck_state is None:
 		start_x = float(getattr(bus_state, "x", 1180.0)) - 90.0
@@ -76,6 +91,21 @@ def update_airport_meal_truck(
 	if bus_state is not None:
 		meal_truck_state.y = float(getattr(bus_state, "y", meal_truck_state.y))
 
+	# Update helicopter proximity for driver mode detection
+	if helicopter is not None:
+		heli_x = float(getattr(helicopter, "x", 0.0) if hasattr(helicopter, "x") else getattr(helicopter, "pos", {}).x if hasattr(getattr(helicopter, "pos", None), "x") else 0.0)
+		heli_y = float(getattr(helicopter, "y", 0.0) if hasattr(helicopter, "y") else getattr(helicopter, "pos", {}).y if hasattr(getattr(helicopter, "pos", None), "y") else 0.0)
+		truck_x = meal_truck_state.x
+		truck_y = meal_truck_state.y
+		dx = heli_x - truck_x
+		dy = heli_y - truck_y
+		proximity = (dx * dx + dy * dy) ** 0.5
+		meal_truck_state.heli_proximity = proximity
+	
+	# Driver mode exit timer countdown
+	if meal_truck_state.driver_mode_active:
+		meal_truck_state.driver_mode_exit_timer = max(0.0, meal_truck_state.driver_mode_exit_timer - dt)
+
 	# Check if tech has been deployed to truck (activates truck driving)
 	if tech_state is not None:
 		tech_state_name = str(getattr(tech_state, "state", "on_chopper"))
@@ -83,28 +113,55 @@ def update_airport_meal_truck(
 		if tech_state_name != "on_chopper":
 			meal_truck_state.tech_has_deployed = True
 
-	# Truck only drives after tech has deployed
-	if meal_truck_state.tech_has_deployed and not meal_truck_state.at_plane_lz:
-		dx = meal_truck_state.plane_lz_x - meal_truck_state.x
-		step = meal_truck_state.speed_px_per_s * dt
-		if abs(dx) <= step:
-			meal_truck_state.x = meal_truck_state.plane_lz_x
-			meal_truck_state.at_plane_lz = True
+	# In driver mode, use driver input to control truck movement and lift
+	if meal_truck_state.driver_mode_active and driver_input is not None:
+		# Driver mode movement (left/right arrows move truck)
+		driver_speed = meal_truck_state.speed_px_per_s * 0.8  # Slower than auto-drive
+		if driver_input.move_left:
+			meal_truck_state.x -= driver_speed * dt
+		elif driver_input.move_right:
+			meal_truck_state.x += driver_speed * dt
+		
+		# Driver control of lift extension (using doors/open trigger)
+		lift_extend_rate = 2.0  # Slightly faster than auto-extend
+		if driver_input.extend_lift:
+			meal_truck_state.extension_progress = min(1.0, meal_truck_state.extension_progress + lift_extend_rate * dt)
 		else:
-			meal_truck_state.x += step if dx > 0.0 else -step
-
-	# Box extension: extends when at plane LZ and tech is still operating (not yet transfer_complete)
-	tech_still_operating = False
-	if tech_state is not None:
-		tech_state_name = str(getattr(tech_state, "state", "on_chopper"))
-		tech_still_operating = tech_state_name not in ("on_chopper", "transfer_complete")
-	
-	target_extension = 1.0 if meal_truck_state.at_plane_lz and tech_still_operating else 0.0
-	extend_rate = 1.7
-	if target_extension > meal_truck_state.extension_progress:
-		meal_truck_state.extension_progress = min(target_extension, meal_truck_state.extension_progress + extend_rate * dt)
+			meal_truck_state.extension_progress = max(0.0, meal_truck_state.extension_progress - lift_extend_rate * dt)
 	else:
-		meal_truck_state.extension_progress = max(target_extension, meal_truck_state.extension_progress - extend_rate * dt)
+		# Normal (non-driver) mode: truck auto-drives and extends automatically
+		# Truck only drives after tech has deployed
+		if meal_truck_state.tech_has_deployed and not meal_truck_state.at_plane_lz:
+			dx = meal_truck_state.plane_lz_x - meal_truck_state.x
+			step = meal_truck_state.speed_px_per_s * dt
+			if abs(dx) <= step:
+				meal_truck_state.x = meal_truck_state.plane_lz_x
+				meal_truck_state.at_plane_lz = True
+			else:
+				meal_truck_state.x += step if dx > 0.0 else -step
+
+		# Box extension: extends when at plane LZ and tech is still operating (not yet transfer_complete)
+		tech_still_operating = False
+		if tech_state is not None:
+			tech_state_name = str(getattr(tech_state, "state", "on_chopper"))
+			tech_still_operating = tech_state_name not in ("on_chopper", "transfer_complete")
+		
+		target_extension = 1.0 if meal_truck_state.at_plane_lz and tech_still_operating else 0.0
+		extend_rate = 1.7
+		if target_extension > meal_truck_state.extension_progress:
+			meal_truck_state.extension_progress = min(target_extension, meal_truck_state.extension_progress + extend_rate * dt)
+		else:
+			meal_truck_state.extension_progress = max(target_extension, meal_truck_state.extension_progress - extend_rate * dt)
+
+	# Visual hysteresis: once extended sprite is shown, keep it until mostly retracted.
+	# This prevents rapid flicker when progress hovers around the switch threshold.
+	progress = float(meal_truck_state.extension_progress)
+	if bool(getattr(meal_truck_state, "use_extended_visual", False)):
+		if progress <= 0.90:
+			meal_truck_state.use_extended_visual = False
+	else:
+		if progress >= 0.985:
+			meal_truck_state.use_extended_visual = True
 
 	return meal_truck_state
 
@@ -125,6 +182,61 @@ def get_airport_priority_target_x(*, bus_state=None, meal_truck_state=None, tech
 	return float(getattr(bus_state, "x", 0.0)) if bus_state is not None else 0.0
 
 
+def should_activate_truck_driver_mode(
+	*,
+	meal_truck_state: AirportMealTruckState | None = None,
+	doors_button_pressed: bool = False,
+) -> bool:
+	"""Check if player should enter truck driver mode.
+	
+	Conditions:
+	- Doors button is being pressed (doors trigger as entry point)
+	- Helicopter is within ~150px of truck
+	- Tech has already deployed to truck
+	- Not already in driver mode
+	"""
+	if meal_truck_state is None or not doors_button_pressed:
+		return False
+	
+	# Need tech deployed and within reasonable proximity
+	if not bool(getattr(meal_truck_state, "tech_has_deployed", False)):
+		return False
+	
+	# Must be close enough to interact (within 150px)
+	proximity = float(getattr(meal_truck_state, "heli_proximity", 999999.0))
+	if proximity > 150.0:
+		return False
+	
+	# Not already in driver mode
+	if bool(getattr(meal_truck_state, "driver_mode_active", False)):
+		return False
+	
+	# Don't activate if exit timer is active (prevents rapid switching)
+	if float(getattr(meal_truck_state, "driver_mode_exit_timer", 0.0)) > 0.0:
+		return False
+	
+	return True
+
+
+def should_deactivate_truck_driver_mode(
+	*,
+	meal_truck_state: AirportMealTruckState | None = None,
+	doors_button_pressed: bool = False,
+) -> bool:
+	"""Check if player should exit truck driver mode.
+	
+	Exit when doors button is pressed again while already in driver mode.
+	"""
+	if meal_truck_state is None:
+		return False
+	
+	if not bool(getattr(meal_truck_state, "driver_mode_active", False)):
+		return False
+	
+	# Exit on doors button press (press again to exit)
+	return doors_button_pressed
+
+
 def draw_airport_meal_truck(target: pygame.Surface, meal_truck_state, *, camera_x: float) -> None:
 	if meal_truck_state is None or not bool(getattr(meal_truck_state, "is_active", False)):
 		return
@@ -134,7 +246,7 @@ def draw_airport_meal_truck(target: pygame.Surface, meal_truck_state, *, camera_
 	y = int(float(getattr(meal_truck_state, "y", 0.0)) - int(getattr(meal_truck_state, "height", 28)))
 	progress = max(0.0, min(1.0, float(getattr(meal_truck_state, "extension_progress", 0.0))))
 
-	if _meal_cart_extended_sprite is not None and progress >= 0.98:
+	if _meal_cart_extended_sprite is not None and bool(getattr(meal_truck_state, "use_extended_visual", False)):
 		target.blit(_meal_cart_extended_sprite, (x, y))
 		return
 

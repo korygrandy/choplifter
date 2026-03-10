@@ -259,6 +259,10 @@ def _update_projectiles(
             p.alive = False
             continue
 
+        # Airport engineer safety window: keep BARAK missiles frozen while suppressed.
+        if getattr(p, "is_barak_missile", False) and bool(getattr(mission, "barak_suppressed", False)):
+            continue
+
         if p.kind is ProjectileKind.BOMB:
             p.vel.y += gravity * dt
 

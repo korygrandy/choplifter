@@ -328,7 +328,7 @@ def _draw_lives_strip(screen: pygame.Surface, mission: MissionState, helicopter:
     screen.blit(panel, (x, y))
 
 
-def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopter) -> None:
+def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopter, *, driver_mode_active: bool = False) -> None:
     global _HUD_FONT, _HUD_SMALL_FONT
     if _HUD_FONT is None:
         pygame.font.init()
@@ -444,6 +444,10 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
 
     if mission.invuln_seconds > 0.0:
         lines.append(f"INVULN: {mission.invuln_seconds:0.1f}s")
+    
+    if driver_mode_active:
+        lines.append(">>> TRUCK DRIVER MODE ACTIVE <<< (E/A toggles lift)")
+        lines.append("To return engineer: land near truck, open heli doors, press E/A")
 
     if float(getattr(mission, "tank_warning_seconds", 0.0)) > 0.0:
         tank_dir = "->" if bool(getattr(mission, "tank_warning_from_right", False)) else "<-"

@@ -24,6 +24,10 @@ class MissionTechState:
 	tech_y: float = 0.0
 	deploy_timer_s: float = 0.0  # Time since deployment started
 	
+	# Boarding animation state (for visual representation)
+	boarding_animation_state: str = "idle"  # "idle", "deploying" (from chopper to truck), "returning" (truck to chopper)
+	boarding_animation_timer: float = 0.0  # Time elapsed in current boarding animation
+	
 	# Legacy fields (kept for compatibility, may be deprecated later)
 	is_deployed: bool = False  # True when state != "on_chopper"
 	is_repairing: bool = False  # Currently unused in new design
@@ -59,6 +63,38 @@ def update_mission_tech(
 		tech_state = create_mission_tech_state()
 
 	dt_s = max(0.0, float(dt))
+
+	# Update boarding animation timer
+	BOARDING_ANIMATION_DURATION = 0.4  # seconds
+	if tech_state.boarding_animation_state != "idle":
+		tech_state.boarding_animation_timer += dt_s
+		if tech_state.boarding_animation_timer >= BOARDING_ANIMATION_DURATION:
+			tech_state.boarding_animation_state = "idle"
+			tech_state.boarding_animation_timer = 0.0
+
+	# Re-board behavior: engineer can return to helicopter when linked up near truck.
+	if (
+		tech_state.state != "on_chopper"
+		and helicopter is not None
+		and meal_truck_state is not None
+		and not bool(getattr(meal_truck_state, "driver_mode_active", False))
+	):
+		heli_x = float(getattr(helicopter.pos, "x", 0.0))
+		truck_x = float(getattr(meal_truck_state, "x", 0.0))
+		can_reboard = bool(
+			getattr(helicopter, "grounded", False)
+			and getattr(helicopter, "doors_open", False)
+			and abs(heli_x - truck_x) <= 120.0
+		)
+		if can_reboard:
+			# Trigger returning animation before re-boarding
+			tech_state.boarding_animation_state = "returning"
+			tech_state.boarding_animation_timer = 0.0
+			tech_state.state = "on_chopper"
+			tech_state.is_deployed = False
+			tech_state.tech_x = heli_x
+			tech_state.tech_y = float(getattr(helicopter.pos, "y", tech_state.tech_y))
+			return tech_state
 	
 	# --- State: on_chopper ---
 	# Tech is aboard helicopter, waiting for deployment
@@ -76,6 +112,8 @@ def update_mission_tech(
 			
 			if supports_deploy:
 				# Transition: deploy tech to meal truck
+				tech_state.boarding_animation_state = "deploying"
+				tech_state.boarding_animation_timer = 0.0
 				tech_state.state = "deployed_to_truck"
 				tech_state.is_deployed = True
 				tech_state.deploy_timer_s = 0.0
