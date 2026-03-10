@@ -16,11 +16,16 @@ class AirportMealTruckState:
 	width: int = 78
 	height: int = 28
 	speed_px_per_s: float = 66.0
-	plane_lz_x: float = 1232.0
+	plane_lz_x: float = 1500.0  # Elevated bunker (compound index 1)
 	is_active: bool = True  # Always visible, controls whether truck is operational
 	at_plane_lz: bool = False
 	extension_progress: float = 0.0
 	tech_has_deployed: bool = False  # Controls whether truck starts driving
+	
+	# Box animation state machine (three-layer rendering system)
+	box_state: str = "idle"  # idle/extending/extended/retracting
+	box_animation_progress: float = 0.0  # 0.0 to 1.0 over 1.8 seconds
+	box_animation_duration: float = 1.8  # Animation duration in seconds
 	
 	# Driver mode state (player can control truck when in driver mode)
 	driver_mode_active: bool = False
@@ -61,7 +66,7 @@ def _ensure_meal_truck_sprites() -> None:
 		_meal_cart_extended_sprite = _load_sprite("airport-meal-cart-extended.png")
 
 
-def create_airport_meal_truck_state(*, start_x: float, ground_y: float, plane_lz_x: float = 1232.0) -> AirportMealTruckState:
+def create_airport_meal_truck_state(*, start_x: float, ground_y: float, plane_lz_x: float = 1500.0) -> AirportMealTruckState:
 	_ensure_meal_truck_sprites()
 	width = _meal_cart_sprite.get_width() if _meal_cart_sprite is not None else 78
 	height = _meal_cart_sprite.get_height() if _meal_cart_sprite is not None else 28
@@ -125,12 +130,18 @@ def update_airport_meal_truck(
 			meal_truck_state.x += driver_speed * dt
 			meal_truck_state.facing_right = True
 		
-		# Driver control of lift extension (using doors/open trigger)
-		lift_extend_rate = 2.0  # Slightly faster than auto-extend
+		# Driver control of lift extension (using doors/open trigger) - triggers box state machine
+		current_box_state = getattr(meal_truck_state, "box_state", "idle")
 		if driver_input.extend_lift:
-			meal_truck_state.extension_progress = min(1.0, meal_truck_state.extension_progress + lift_extend_rate * dt)
+			# Request extension if not already extending/extended
+			if current_box_state in ("idle", "retracting"):
+				meal_truck_state.box_state = "extending"
+				meal_truck_state.box_animation_progress = 0.0
 		else:
-			meal_truck_state.extension_progress = max(0.0, meal_truck_state.extension_progress - lift_extend_rate * dt)
+			# Request retraction if currently extended/extending
+			if current_box_state in ("extended", "extending"):
+				meal_truck_state.box_state = "retracting"
+				meal_truck_state.box_animation_progress = 0.0
 	else:
 		# Normal (non-driver) mode: truck auto-drives and extends automatically
 		# Truck only drives after tech has deployed
@@ -152,6 +163,35 @@ def update_airport_meal_truck(
 			meal_truck_state.extension_progress = min(target_extension, meal_truck_state.extension_progress + extend_rate * dt)
 		else:
 			meal_truck_state.extension_progress = max(target_extension, meal_truck_state.extension_progress - extend_rate * dt)
+	
+	# Box animation state machine (1.8 second animation for 53 pixel vertical movement)
+	# This runs regardless of driver mode - handles the actual animation timing
+	# Keep plane-LZ detection position-based so manual driver mode can still trigger LZ systems.
+	plane_lz_snap_radius = 34.0
+	meal_truck_state.at_plane_lz = abs(float(meal_truck_state.x) - float(meal_truck_state.plane_lz_x)) <= plane_lz_snap_radius
+
+	box_state = getattr(meal_truck_state, "box_state", "idle")
+	box_progress = getattr(meal_truck_state, "box_animation_progress", 0.0)
+	box_duration = getattr(meal_truck_state, "box_animation_duration", 1.8)
+	
+	if box_state == "extending":
+		box_progress += dt / box_duration
+		if box_progress >= 1.0:
+			box_progress = 1.0
+			meal_truck_state.box_state = "extended"
+		meal_truck_state.box_animation_progress = box_progress
+		meal_truck_state.extension_progress = box_progress  # Legacy field sync
+	elif box_state == "retracting":
+		box_progress += dt / box_duration
+		if box_progress >= 1.0:
+			box_progress = 1.0
+			meal_truck_state.box_state = "idle"
+		meal_truck_state.box_animation_progress = box_progress
+		meal_truck_state.extension_progress = 1.0 - box_progress  # Legacy field sync
+	elif box_state == "extended":
+		meal_truck_state.extension_progress = 1.0  # Legacy field sync
+	else:  # idle
+		meal_truck_state.extension_progress = 0.0  # Legacy field sync
 
 	# Visual hysteresis: once extended sprite is shown, keep it until mostly retracted.
 	# This prevents rapid flicker when progress hovers around the switch threshold.
@@ -244,27 +284,37 @@ def draw_airport_meal_truck(target: pygame.Surface, meal_truck_state, *, camera_
 	_ensure_meal_truck_sprites()
 	x = int(float(getattr(meal_truck_state, "x", 0.0)) - float(camera_x))
 	y = int(float(getattr(meal_truck_state, "y", 0.0)) - int(getattr(meal_truck_state, "height", 28)))
-	progress = max(0.0, min(1.0, float(getattr(meal_truck_state, "extension_progress", 0.0))))
 	facing_right = bool(getattr(meal_truck_state, "facing_right", True))
-
-	# Two-state rendering: retracted vs extended with fade transition
-	if progress <= 0.0:
-		# Retracted state: draw base truck sprite
-		if _meal_cart_sprite is not None:
-			sprite = pygame.transform.flip(_meal_cart_sprite, True, False) if facing_right else _meal_cart_sprite
-			target.blit(sprite, (x, y))
-		else:
-			pygame.draw.rect(target, (220, 220, 230), pygame.Rect(x, y, 72, 24), border_radius=3)
-			pygame.draw.rect(target, (20, 20, 25), pygame.Rect(x, y, 72, 24), 1, border_radius=3)
+	
+	# Get box animation state for three-layer rendering
+	box_state = getattr(meal_truck_state, "box_state", "idle")
+	box_progress = max(0.0, min(1.0, float(getattr(meal_truck_state, "box_animation_progress", 0.0))))
+	
+	# Calculate box position while the box is actively moving.
+	if box_state == "extending":
+		box_y_offset = int(-53.0 * box_progress)
+	elif box_state == "retracting":
+		box_y_offset = int(-53.0 * (1.0 - box_progress))
+	elif box_state == "extended":
+		box_y_offset = -53
+	else:  # idle
+		box_y_offset = 0
+	
+	# Body sprite swap behavior:
+	# - `extended`: use airport-meal-cart-extended.png
+	# - all other states: use airport-meal-cart.png
+	if box_state == "extended" and _meal_cart_extended_sprite is not None:
+		body_sprite = pygame.transform.flip(_meal_cart_extended_sprite, True, False) if facing_right else _meal_cart_extended_sprite
+		target.blit(body_sprite, (x, y))
+	elif _meal_cart_sprite is not None:
+		body_sprite = pygame.transform.flip(_meal_cart_sprite, True, False) if facing_right else _meal_cart_sprite
+		target.blit(body_sprite, (x, y))
 	else:
-		# Extended state: draw extended sprite with fade based on progress
-		if _meal_cart_extended_sprite is not None:
-			sprite = pygame.transform.flip(_meal_cart_extended_sprite, True, False) if facing_right else _meal_cart_extended_sprite
-			alpha = max(0, min(255, int(255 * progress)))
-			sprite_with_alpha = sprite.copy()
-			sprite_with_alpha.set_alpha(alpha)
-			target.blit(sprite_with_alpha, (x, y))
-		else:
-			# Fallback: draw base sprite if extended sprite missing
-			pygame.draw.rect(target, (220, 220, 230), pygame.Rect(x, y, 72, 24), border_radius=3)
-			pygame.draw.rect(target, (20, 20, 25), pygame.Rect(x, y, 72, 24), 1, border_radius=3)
+		# Fallback body rectangle
+		pygame.draw.rect(target, (220, 220, 230), pygame.Rect(x, y, 72, 24), border_radius=3)
+		pygame.draw.rect(target, (20, 20, 25), pygame.Rect(x, y, 72, 24), 1, border_radius=3)
+	
+	# Moving box overlay must stay top-most during slide up/down animation.
+	if _meal_cart_box_sprite is not None and box_state in ("extending", "retracting"):
+		box_sprite = pygame.transform.flip(_meal_cart_box_sprite, True, False) if facing_right else _meal_cart_box_sprite
+		target.blit(box_sprite, (x, y + box_y_offset))

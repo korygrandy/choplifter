@@ -41,7 +41,7 @@ def update_airport_cutscene_state(cutscene_state, dt: float, *, meal_truck_state
 	return cutscene_state
 
 
-def draw_airport_cutscene_markers(target: pygame.Surface, cutscene_state, *, camera_x: float, ground_y: float, pickup_x: float = 1232.0) -> None:
+def draw_airport_cutscene_markers(target: pygame.Surface, cutscene_state, *, camera_x: float, ground_y: float, pickup_x: float = 1500.0) -> None:
 	if cutscene_state is None:
 		return
 

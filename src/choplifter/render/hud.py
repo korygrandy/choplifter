@@ -347,8 +347,41 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
     doors_state = "OPEN" if helicopter.doors_open else "CLOSED"
     grounded_state = "YES" if helicopter.grounded else "NO"
     rescue_ready = "READY" if helicopter.grounded and helicopter.doors_open else "NOT READY"
-    boarding_status = f"{boarding_ux.state.upper()}: {boarding_ux.detail}"
-    boarding_line = f"Boarding: {boarding_visual.symbol} {boarding_status}"
+
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    is_airport = mission_id in ("airport", "airport_special_ops", "airportspecialops", "mission2", "m2")
+    if is_airport:
+        airport_hostage_state = getattr(mission, "airport_hostage_state", None)
+        airport_meal_truck_state = getattr(mission, "airport_meal_truck_state", None)
+        if airport_hostage_state is not None and airport_meal_truck_state is not None:
+            truck_x = float(getattr(airport_meal_truck_state, "x", 0.0))
+            pickup_x = float(getattr(airport_hostage_state, "pickup_x", 1500.0))
+            pickup_radius = float(getattr(airport_hostage_state, "pickup_radius_px", 28.0))
+            pickup_offset = float(getattr(airport_hostage_state, "pickup_passed_offset_px", 6.0))
+            boarding_center_x = pickup_x + pickup_offset
+            in_lz = abs(truck_x - boarding_center_x) <= pickup_radius
+            truck_extended = bool(
+                float(getattr(airport_meal_truck_state, "extension_progress", 0.0)) >= 0.92
+                or str(getattr(airport_meal_truck_state, "box_state", "idle")) == "extended"
+            )
+            host_state = str(getattr(airport_hostage_state, "state", "waiting"))
+            dist_px = int(abs(truck_x - boarding_center_x))
+
+            if host_state == "truck_loading":
+                boarding_line = "Boarding: + AIRPORT LOADING"
+            elif host_state == "truck_loaded":
+                boarding_line = "Boarding: [] PASSENGERS LOADED"
+            elif in_lz and truck_extended:
+                boarding_line = "Boarding: + JETWAY LZ READY"
+            elif in_lz and not truck_extended:
+                boarding_line = "Boarding: ! IN LZ - EXTEND LIFT"
+            else:
+                boarding_line = f"Boarding: >> DRIVE TO JETWAY ({dist_px}px)"
+        else:
+            boarding_line = "Boarding: >> DRIVE TO JETWAY"
+    else:
+        boarding_status = f"{boarding_ux.state.upper()}: {boarding_ux.detail}"
+        boarding_line = f"Boarding: {boarding_visual.symbol} {boarding_status}"
 
     hud_x = 12
     lives_y = 8

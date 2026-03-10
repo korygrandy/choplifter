@@ -263,7 +263,8 @@ def run() -> None:
     airport_objective_state = None
     airport_cutscene_state = None
     airport_meal_truck_state = None
-    airport_raised_bunker_x = 1050.0
+    airport_raised_bunker_x = 1500.0  # Second compound (index 1) is the elevated bunker
+    airport_meal_truck_spawn_x = 1060.0  # Left of leftmost compound, tech drives it to elevated bunker
 
     if selected_mission_id == "airport":
         airport_bus_state = create_bus_state(start_x=2200, ground_y=heli_settings.ground_y)
@@ -274,10 +275,12 @@ def run() -> None:
         airport_objective_state = create_airport_objective_state(hostage_deadline_s=120.0)
         airport_cutscene_state = create_airport_cutscene_state()
         airport_meal_truck_state = create_airport_meal_truck_state(
-            start_x=airport_raised_bunker_x,
+            start_x=airport_meal_truck_spawn_x,
             ground_y=heli_settings.ground_y,
             plane_lz_x=airport_raised_bunker_x,
         )
+        mission.airport_hostage_state = airport_hostage_state
+        mission.airport_meal_truck_state = airport_meal_truck_state
 
     def apply_mission_preview_wrapper() -> None:
         nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
@@ -345,10 +348,12 @@ def run() -> None:
             airport_objective_state = create_airport_objective_state(hostage_deadline_s=120.0)
             airport_cutscene_state = create_airport_cutscene_state()
             airport_meal_truck_state = create_airport_meal_truck_state(
-                start_x=airport_raised_bunker_x,
+                start_x=airport_meal_truck_spawn_x,
                 ground_y=heli_settings.ground_y,
                 plane_lz_x=airport_raised_bunker_x,
             )
+            mission.airport_hostage_state = airport_hostage_state
+            mission.airport_meal_truck_state = airport_meal_truck_state
 
     def toggle_particles_wrapper() -> None:
         nonlocal particles_enabled
@@ -374,6 +379,7 @@ def run() -> None:
     # Track meal truck driver mode (overrides helicopter controls)
     meal_truck_driver_mode = False
     meal_truck_lift_command_extended = False
+    camera_x_smoothed = None
 
     def can_exit_meal_truck_driver_mode() -> bool:
         # Engineer can only exit meal truck if within ~100px (one helicopter width) of the helicopter
@@ -1130,6 +1136,7 @@ def run() -> None:
                         helicopter=helicopter,
                         meal_truck_state=airport_meal_truck_state,
                         bus_state=airport_bus_state,
+                        hostage_state=airport_hostage_state,
                     )
                     tech_state_name = str(getattr(airport_tech_state, "state", "on_chopper"))
                     engineer_just_boarded_truck = (
@@ -1183,6 +1190,8 @@ def run() -> None:
                         hostage_state=airport_hostage_state,
                         tech_state=airport_tech_state,
                     )
+                    mission.airport_hostage_state = airport_hostage_state
+                    mission.airport_meal_truck_state = airport_meal_truck_state
 
                     # NOTE: Helicopter parking logic removed in redesign
                     # Tech deploys from chopper to meal truck, chopper is free to move after deployment
@@ -1236,11 +1245,37 @@ def run() -> None:
         )
 
         # Side-scrolling camera (world x -> screen x).
-        camera_x = compute_camera_x(
+        # In Airport driver mode, follow the meal truck instead of the helicopter.
+        camera_track_x = float(helicopter.pos.x)
+        if (
+            selected_mission_id == "airport"
+            and bool(meal_truck_driver_mode)
+            and airport_meal_truck_state is not None
+            and bool(getattr(airport_meal_truck_state, "is_active", False))
+        ):
+            camera_track_x = float(getattr(airport_meal_truck_state, "x", camera_track_x))
+
+        camera_x_target = compute_camera_x(
             world_width=float(mission.world_width),
             view_width=float(screen.get_width()),
-            helicopter_x=float(helicopter.pos.x),
+            helicopter_x=camera_track_x,
         )
+
+        # Smooth pan only while driving the meal truck to reduce abrupt camera shifts.
+        if (
+            selected_mission_id == "airport"
+            and bool(meal_truck_driver_mode)
+            and airport_meal_truck_state is not None
+        ):
+            if camera_x_smoothed is None:
+                camera_x_smoothed = camera_x_target
+            else:
+                follow_alpha = min(1.0, frame_dt * 7.0)
+                camera_x_smoothed = camera_x_smoothed + (camera_x_target - camera_x_smoothed) * follow_alpha
+            camera_x = float(camera_x_smoothed)
+        else:
+            camera_x_smoothed = None
+            camera_x = camera_x_target
 
         # Update audio (ducking is applied via bus volumes).
         audio.set_cinematic_ducked(mode == "cutscene", factor=0.5)
@@ -1291,13 +1326,16 @@ def run() -> None:
             if selected_mission_id == "airport":
                 # Render active bus state
                 if airport_bus_state is not None:
-                    draw_airport_bus(target, airport_bus_state, camera_x)
+                    boarded_on_bus = int(getattr(airport_hostage_state, "boarded_hostages", 0)) if airport_hostage_state is not None else 0
+                    draw_airport_bus(target, airport_bus_state, camera_x, boarded_count=boarded_on_bus)
                 draw_airport_hostages(
                     target,
                     airport_hostage_state,
                     camera_x=camera_x,
+                    meal_truck_state=airport_meal_truck_state,
                     ground_y=heli_settings.ground_y,
                     bus_state=airport_bus_state,
+                    mission_time=float(getattr(mission, "elapsed_seconds", 0.0)),
                 )
                 draw_airport_enemies(target, airport_enemy_state, camera_x=camera_x)
                 draw_airport_mission_tech(target, airport_tech_state, camera_x=camera_x, helicopter=helicopter)
@@ -1314,7 +1352,7 @@ def run() -> None:
                     airport_cutscene_state,
                     camera_x=camera_x,
                     ground_y=heli_settings.ground_y,
-                    pickup_x=float(getattr(airport_hostage_state, "pickup_x", 1232.0)) if airport_hostage_state is not None else 1232.0,
+                    pickup_x=float(getattr(airport_hostage_state, "pickup_x", 1500.0)) if airport_hostage_state is not None else 1500.0,
                 )
             
             draw_flares(target, mission, camera_x=camera_x, enable_particles=particles_enabled)

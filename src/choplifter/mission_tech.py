@@ -50,6 +50,7 @@ def update_mission_tech(
 	helicopter=None,
 	meal_truck_state=None,
 	bus_state=None,
+	hostage_state=None,
 ) -> MissionTechState:
 	"""Update mission tech state machine.
 	
@@ -59,6 +60,7 @@ def update_mission_tech(
 		helicopter: Helicopter object (needed for deployment trigger)
 		meal_truck_state: Meal truck state (needed for tracking tech on truck)
 		bus_state: Bus state (needed for transfer completion check)
+		hostage_state: Hostage state (used to detect transfer completion)
 	
 	Returns:
 		Updated tech state
@@ -185,9 +187,13 @@ def update_mission_tech(
 			tech_state.tech_x = float(getattr(meal_truck_state, "x", tech_state.tech_x))
 			tech_state.tech_y = float(getattr(meal_truck_state, "y", tech_state.tech_y))
 		
-		# Transition: passengers transferred to bus (handled externally by hostage logic)
-		# For now, tech stays in this state until mission ends
-		# Future: add explicit transfer_complete transition when bus has passengers
+		# Transition: passengers transferred to bus
+		if hostage_state is not None:
+			hostage_state_name = str(getattr(hostage_state, "state", ""))
+			boarded = int(getattr(hostage_state, "boarded_hostages", 0))
+			rescued = int(getattr(hostage_state, "rescued_hostages", 0))
+			if hostage_state_name in ("boarded", "rescued") or boarded > 0 or rescued > 0:
+				tech_state.state = "transfer_complete"
 	
 	# --- State: transfer_complete ---
 	# Passengers on bus, tech mission objective complete
@@ -223,9 +229,14 @@ def draw_airport_mission_tech(
 		heli_y = float(getattr(helicopter.pos, "y", 0.0))
 		screen_x = int(heli_x - camera_x)
 		screen_y = int(heli_y - 60)
+		pulse = 0.75 + 0.25 * (0.5 + 0.5 * pygame.math.Vector2(1.0, 0.0).rotate(tech_state.deploy_timer_s * 300.0).x)
 		
 		# Draw wrench icon (simple L-shape)
-		wrench_color = (200, 200, 80)  # Yellow-ish
+		wrench_color = (
+			int(160 + 55 * pulse),
+			int(160 + 55 * pulse),
+			80,
+		)
 		# Wrench handle (vertical)
 		pygame.draw.rect(target, wrench_color, pygame.Rect(screen_x - 2, screen_y, 4, 12))
 		# Wrench head (horizontal)
@@ -245,10 +256,17 @@ def draw_airport_mission_tech(
 		pygame.draw.rect(target, (120, 200, 120), body, border_radius=3)
 		pygame.draw.rect(target, (20, 60, 20), body, 1, border_radius=3)
 		
-		# Draw wrench icon above tech when deployed to truck
+		# Draw wrench indicator above truck/tech at y-60 while deployed.
 		if tech_state.state in ("deployed_to_truck", "driving_to_extraction", "extracting", "transferring"):
-			wrench_color = (200, 200, 80)
-			pygame.draw.rect(target, wrench_color, pygame.Rect(x - 2, y - 18, 4, 12))
-			pygame.draw.rect(target, wrench_color, pygame.Rect(x - 6, y - 18, 10, 4))
-			pygame.draw.rect(target, (60, 60, 20), pygame.Rect(x - 2, y - 18, 4, 12), 1)
-			pygame.draw.rect(target, (60, 60, 20), pygame.Rect(x - 6, y - 18, 10, 4), 1)
+			indicator_x = int(tech_state.tech_x - camera_x)
+			indicator_y = int(tech_state.tech_y - 60)
+			pulse = 0.75 + 0.25 * (0.5 + 0.5 * pygame.math.Vector2(1.0, 0.0).rotate(tech_state.deploy_timer_s * 300.0).x)
+			wrench_color = (
+				int(160 + 55 * pulse),
+				int(160 + 55 * pulse),
+				80,
+			)
+			pygame.draw.rect(target, wrench_color, pygame.Rect(indicator_x - 2, indicator_y, 4, 12))
+			pygame.draw.rect(target, wrench_color, pygame.Rect(indicator_x - 6, indicator_y, 10, 4))
+			pygame.draw.rect(target, (60, 60, 20), pygame.Rect(indicator_x - 2, indicator_y, 4, 12), 1)
+			pygame.draw.rect(target, (60, 60, 20), pygame.Rect(indicator_x - 6, indicator_y, 10, 4), 1)
