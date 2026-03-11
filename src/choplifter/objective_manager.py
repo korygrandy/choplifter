@@ -67,7 +67,11 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 		objective_state.status_text = "All civilians rescued"
 	elif rescued and tech_state_name == "waiting_at_lz":
 		objective_state.mission_phase = "awaiting_tech_reboard"
-		objective_state.status_text = "Pick up mission tech at tower LZ"
+		objective_state.status_text = "Land at tower LZ and pick up mission tech"
+	elif rescued and not tech_on_bus:
+		# Elevated rescue flow is complete; continue lower-level rescues after tech rejoins chopper.
+		objective_state.mission_phase = "resume_lower_rescue"
+		objective_state.status_text = "Resume lower-terminal rescues"
 	elif waiting and interrupted_transfers > 0 and not tech_operating and not tech_on_bus:
 		objective_state.mission_phase = "auto_reset"
 		objective_state.status_text = "Bus resetting to standby"

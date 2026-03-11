@@ -12,6 +12,7 @@ from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
 from .mission_state import MissionState
 from .settings import HelicopterSettings
+from .app.escort_risk import activate_post_respawn_escort_risk
 
 
 def _handle_crash_and_respawn(
@@ -163,6 +164,7 @@ def _update_crash_sequence(
     helicopter.pos = Vec2(mission.base.pos.x + mission.base.width * 0.5, heli.ground_y - 120.0)
     mission.invuln_seconds = 2.0
     mission.flare_invuln_seconds = 0.0
+    activate_post_respawn_escort_risk(mission)
 
     if logger is not None:
         logger.info("RESPAWN: invuln=%.1fs fuel=%.0f", mission.invuln_seconds, helicopter.fuel)

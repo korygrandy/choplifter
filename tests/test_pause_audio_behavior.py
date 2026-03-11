@@ -387,6 +387,62 @@ class PauseAudioBehaviorTests(unittest.TestCase):
 
         spawn_fire.assert_not_called()
 
+    def test_keyboard_flare_blocked_when_weapon_locked(self) -> None:
+        controls = SimpleNamespace(
+            quit=[],
+            restart=[],
+            toggle_debug=[],
+            cycle_facing=[],
+            reverse_flip=[],
+            doors=[],
+            flare=[pygame.K_f],
+            fire=[],
+            tilt_left=[],
+            tilt_right=[],
+        )
+        audio = _RecordingAudio()
+        mission = SimpleNamespace(ended=False, crash_active=False)
+        helicopter = SimpleNamespace(skin_asset="chopper-one.png", facing="forward")
+        start_flare = Mock()
+
+        handle_keyboard_event(
+            pygame.event.Event(pygame.KEYDOWN, key=pygame.K_f),
+            mode="playing",
+            controls=controls,
+            mission=mission,
+            helicopter=helicopter,
+            audio=audio,
+            logger=None,
+            chopper_choices=[("chopper-one.png", "Classic")],
+            mission_choices=[("city", "City")],
+            pause_focus="choppers",
+            muted=False,
+            set_toast=lambda _msg: None,
+            reset_game=lambda: None,
+            apply_mission_preview=lambda: None,
+            skip_intro=lambda: None,
+            skip_mission_cutscene=lambda: None,
+            toggle_particles_wrapper=lambda: None,
+            toggle_flashes_wrapper=lambda: None,
+            toggle_screenshake_wrapper=lambda: None,
+            spawn_projectile_from_helicopter_logged=lambda *_args, **_kwargs: None,
+            try_start_flare_salvo=start_flare,
+            toggle_doors_with_logging=lambda *_args, **_kwargs: None,
+            Facing=SimpleNamespace(FORWARD="forward"),
+            DebugSettings=lambda **kwargs: SimpleNamespace(**kwargs),
+            boarded_count=lambda *_args, **_kwargs: 0,
+            flares=SimpleNamespace(),
+            selected_mission_index=0,
+            selected_mission_id="airport",
+            selected_chopper_index=0,
+            selected_chopper_asset="chopper-one.png",
+            debug=SimpleNamespace(show_overlay=False),
+            quit_confirm=False,
+            helicopter_weapon_locked=True,
+        )
+
+        start_flare.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

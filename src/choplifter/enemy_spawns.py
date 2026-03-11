@@ -7,6 +7,7 @@ import math
 import random
 
 import pygame
+from .app.escort_risk import airport_escort_damage_multiplier
 
 
 @dataclass
@@ -123,7 +124,7 @@ def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_sta
 			dx = abs(e.x - target_ref_x)
 			if dx <= 18.0:
 				# UAV dive impacts are heavier than raider impacts.
-				impact_damage = 12.0 if e.kind == "uav" else 5.0
+				impact_damage = (12.0 if e.kind == "uav" else 5.0) * airport_escort_damage_multiplier(mission)
 				bus_health = float(getattr(bus_state, "health", 100.0))
 				setattr(bus_state, "health", max(0.0, bus_health - impact_damage))
 				continue

@@ -60,7 +60,7 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 
 - [x] Normalize wording/typos for airport mission cues and objective statuses.
 
-- [ ] Keep airport objective phase text aligned with current flow (including mission tech reboard gate).
+- [x] Keep airport objective phase text aligned with current flow (including mission tech reboard gate).
 
 ### Test Coverage
 

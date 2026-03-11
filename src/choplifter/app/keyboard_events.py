@@ -132,7 +132,8 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
     elif mode == "playing" and matches_key(event.key, controls.flare):
         if logger:
             logger.debug("Flare key pressed (key=%s) in playing mode", event.key)
-        try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
+        if not helicopter_weapon_locked:
+            try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
     elif mode == "playing" and matches_key(event.key, controls.fire):
         if logger:
             logger.debug("Fire key pressed (key=%s) in playing mode", event.key)

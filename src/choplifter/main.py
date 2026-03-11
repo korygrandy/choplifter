@@ -80,6 +80,7 @@ from .app.doors import toggle_doors_with_logging
 from .app.runtime_state import GameRuntimeState
 from .app.airport_runtime_flags import sync_airport_runtime_flags
 from .app.bus_door_flow import apply_airport_bus_door_transitions
+from .app.weapon_lock import chopper_weapons_locked
 from .app.objective_overlay import get_mission_objective_overlay_duration
 from .app.game_update import (
     build_helicopter_input,
@@ -689,7 +690,11 @@ def run() -> None:
                     selected_chopper_asset=selected_chopper_asset,
                     debug=debug,
                     quit_confirm=runtime.quit_confirm,
-                    helicopter_weapon_locked=bool(meal_truck_driver_mode or bus_driver_mode),
+                    helicopter_weapon_locked=chopper_weapons_locked(
+                        meal_truck_driver_mode=bool(meal_truck_driver_mode),
+                        bus_driver_mode=bool(bus_driver_mode),
+                        engineer_remote_control_active=bool(getattr(mission, "engineer_remote_control_active", False)),
+                    ),
                 )
             elif event.type == pygame.JOYBUTTONDOWN:
                 if logger:
@@ -717,8 +722,11 @@ def run() -> None:
                             meal_truck_lift_command_extended = not meal_truck_lift_command_extended
                         elif (
                             not getattr(mission, "crash_active", False)
-                            and not bool(bus_driver_mode)
-                            and not bool(getattr(mission, "engineer_remote_control_active", False))
+                            and not chopper_weapons_locked(
+                                meal_truck_driver_mode=bool(meal_truck_driver_mode),
+                                bus_driver_mode=bool(bus_driver_mode),
+                                engineer_remote_control_active=bool(getattr(mission, "engineer_remote_control_active", False)),
+                            )
                         ):
                             spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
                             if helicopter.facing is Facing.FORWARD:
@@ -728,7 +736,12 @@ def run() -> None:
                     elif event.button == 1:  # B button: flare
                         if logger:
                             logger.debug("Flare button pressed (button=1) in playing mode")
-                        try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
+                        if not chopper_weapons_locked(
+                            meal_truck_driver_mode=bool(meal_truck_driver_mode),
+                            bus_driver_mode=bool(bus_driver_mode),
+                            engineer_remote_control_active=bool(getattr(mission, "engineer_remote_control_active", False)),
+                        ):
+                            try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
                     elif event.button == 0:  # A button: doors
                         if not getattr(mission, "crash_active", False):
                             # Check for meal truck driver mode activation/deactivation (Airport mission only)
@@ -1097,7 +1110,12 @@ def run() -> None:
                     runtime.quit_confirm = False
 
                 if paused.trigger_flare:
-                    try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
+                    if not chopper_weapons_locked(
+                        meal_truck_driver_mode=bool(meal_truck_driver_mode),
+                        bus_driver_mode=bool(bus_driver_mode),
+                        engineer_remote_control_active=bool(getattr(mission, "engineer_remote_control_active", False)),
+                    ):
+                        try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
 
                 if paused.toggle_doors:
                     toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count, set_toast)
@@ -1107,9 +1125,11 @@ def run() -> None:
                     helicopter.cycle_facing()
                 if paused.fire_weapon:
                     if (
-                        not bool(meal_truck_driver_mode)
-                        and not bool(bus_driver_mode)
-                        and not bool(getattr(mission, "engineer_remote_control_active", False))
+                        not chopper_weapons_locked(
+                            meal_truck_driver_mode=bool(meal_truck_driver_mode),
+                            bus_driver_mode=bool(bus_driver_mode),
+                            engineer_remote_control_active=bool(getattr(mission, "engineer_remote_control_active", False)),
+                        )
                         and not bool(getattr(mission, "crash_active", False))
                     ):
                         spawn_projectile_from_helicopter_logged(mission, helicopter, logger)

@@ -46,6 +46,7 @@ class MissionState:
     flare_invuln_seconds: float = 0.0
     engineer_remote_control_active: bool = False
     player_driving_vehicle: bool = False
+    post_respawn_escort_risk_seconds: float = 0.0
     engineer_off_chopper: bool = False
     barak_suppressed: bool = False
     feedback_shake_impulse: float = 0.0

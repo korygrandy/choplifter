@@ -17,6 +17,7 @@ from .mission_helpers import (
 )
 from .mission_state import MissionState
 from .settings import HelicopterSettings
+from .app.escort_risk import airport_escort_damage_multiplier
 
 
 def _barak_should_apply_damage(*, grounded: bool, in_lz: bool) -> bool:
@@ -501,7 +502,8 @@ def _update_projectiles(
                             bus_state = getattr(mission, "airport_bus_state", None)
                             if bus_state is not None:
                                 health = float(getattr(bus_state, "health", 100.0))
-                                setattr(bus_state, "health", max(0.0, health - 18.0))
+                                damage = 18.0 * airport_escort_damage_multiplier(mission)
+                                setattr(bus_state, "health", max(0.0, health - damage))
                         else:
                             damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
                 elif p.kind is ProjectileKind.ENEMY_ARTILLERY:
@@ -574,7 +576,8 @@ def _update_projectiles(
                         bus_state = getattr(mission, "airport_bus_state", None)
                         if bus_state is not None:
                             health = float(getattr(bus_state, "health", 100.0))
-                            setattr(bus_state, "health", max(0.0, health - 18.0))
+                            damage = 18.0 * airport_escort_damage_multiplier(mission)
+                            setattr(bus_state, "health", max(0.0, health - damage))
                     else:
                         damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
             elif p.kind is ProjectileKind.BOMB:
