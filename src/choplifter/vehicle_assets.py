@@ -145,12 +145,17 @@ def update_airport_meal_truck(
 	else:
 		# Normal (non-driver) mode: truck auto-drives and extends automatically
 		# Truck only drives after tech has deployed
-		if meal_truck_state.tech_has_deployed and not meal_truck_state.at_plane_lz:
-			dx = meal_truck_state.plane_lz_x - meal_truck_state.x
+		auto_target_x = float(meal_truck_state.plane_lz_x)
+		tech_state_name = str(getattr(tech_state, "state", "")) if tech_state is not None else ""
+		if tech_state_name in ("transferring", "boarding_bus") and bus_state is not None:
+			# After elevated loading is complete, return to bus transfer lane autonomously.
+			auto_target_x = float(getattr(bus_state, "x", meal_truck_state.x)) + 20.0
+
+		if meal_truck_state.tech_has_deployed and abs(float(meal_truck_state.x) - auto_target_x) > 2.0:
+			dx = auto_target_x - meal_truck_state.x
 			step = meal_truck_state.speed_px_per_s * dt
 			if abs(dx) <= step:
-				meal_truck_state.x = meal_truck_state.plane_lz_x
-				meal_truck_state.at_plane_lz = True
+				meal_truck_state.x = auto_target_x
 			else:
 				meal_truck_state.x += step if dx > 0.0 else -step
 				meal_truck_state.facing_right = dx > 0.0

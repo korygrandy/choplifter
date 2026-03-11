@@ -20,6 +20,18 @@ class BoardingThresholdTuningTests(unittest.TestCase):
         self.assertGreater(tuning.hostage_chaotic_start_radius, 0.0)
         self.assertGreater(tuning.hostage_boarding_radius, 0.0)
 
+    def test_airborne_fall_delay_defaults(self) -> None:
+        tuning = MissionTuning()
+
+        self.assertEqual(tuning.airborne_fall_delay_min_s, 2.0)
+        self.assertEqual(tuning.airborne_fall_delay_max_s, 3.0)
+
+    def test_airborne_fall_delay_override(self) -> None:
+        tuning = MissionTuning(airborne_fall_delay_min_s=2.4, airborne_fall_delay_max_s=2.9)
+
+        self.assertEqual(tuning.airborne_fall_delay_min_s, 2.4)
+        self.assertEqual(tuning.airborne_fall_delay_max_s, 2.9)
+
 
 if __name__ == "__main__":
     unittest.main()

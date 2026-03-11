@@ -77,6 +77,33 @@ def toggle_doors_with_logging(
             logger.info("UNLOAD: no boarded passengers")
 
 
+def check_tech_lz_door_toast(
+    mission,
+    tech_state,
+    helicopter,
+    set_toast: Callable[[str], None] | None,
+) -> None:
+    """Toast when tech is waiting at the tower LZ, chopper is grounded and nearby, but doors are closed."""
+    if set_toast is None or tech_state is None or helicopter is None:
+        return
+    if str(getattr(tech_state, "state", "")) != "waiting_at_lz":
+        return
+    if not bool(getattr(helicopter, "grounded", False)):
+        return
+    if bool(getattr(helicopter, "doors_open", False)):
+        return
+    heli_x = float(getattr(helicopter.pos, "x", 0.0))
+    tech_x = float(getattr(tech_state, "tech_x", 0.0))
+    if abs(heli_x - tech_x) > 120.0:
+        return
+    _set_toast_debounced(
+        mission,
+        set_toast,
+        "Open chopper door to board mission tech",
+        cooldown_s=3.0,
+    )
+
+
 def check_airport_truck_retract_toast(
     mission,
     meal_truck_state,

@@ -164,6 +164,26 @@ def _draw_stat_chip(
     screen.blit(panel, (x, y))
 
 
+def _airport_vehicle_onboard_count(mission: MissionState) -> int:
+    """Count passengers currently onboard airport ground vehicles (truck or bus)."""
+    airport_hostage_state = getattr(mission, "airport_hostage_state", None)
+    if airport_hostage_state is None:
+        return 0
+
+    state_name = str(getattr(airport_hostage_state, "state", "waiting"))
+    meal_truck_loaded = max(0, int(getattr(airport_hostage_state, "meal_truck_loaded_hostages", 0)))
+    boarded_on_bus = max(0, int(getattr(airport_hostage_state, "boarded_hostages", 0)))
+
+    # During transfer, one batch is split between truck and bus; use the batch total
+    # so the HUD remains stable and avoids double-counting mid-animation fields.
+    if state_name == "transferring_to_bus":
+        transfer_base = max(0, int(getattr(airport_hostage_state, "truck_load_base", 0)))
+        transfer_total = max(0, int(getattr(airport_hostage_state, "transferring_hostages", 0)))
+        return transfer_base + transfer_total
+
+    return meal_truck_loaded + boarded_on_bus
+
+
 def _draw_fuel_gauge_chip(
     screen: pygame.Surface,
     *,
@@ -382,11 +402,13 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
     airport_target_total = 16
     airport_elevated_rescued = 0
     airport_combined_rescued = saved
+    airport_vehicle_onboard = 0
     if is_airport:
         airport_hostage_state = getattr(mission, "airport_hostage_state", None)
         airport_meal_truck_state = getattr(mission, "airport_meal_truck_state", None)
         airport_elevated_rescued = int(getattr(airport_hostage_state, "rescued_hostages", 0)) if airport_hostage_state is not None else 0
         airport_combined_rescued = int(saved) + int(airport_elevated_rescued)
+        airport_vehicle_onboard = _airport_vehicle_onboard_count(mission)
         if airport_hostage_state is not None and airport_meal_truck_state is not None:
             truck_x = float(getattr(airport_meal_truck_state, "x", 0.0))
             pickup_x = float(getattr(airport_hostage_state, "pickup_x", 1500.0))
@@ -461,6 +483,19 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
         label_font=small,
         value_font=font,
     )
+    chopper_onboard = max(0, int(boarded))
+    onboard_now = chopper_onboard + (airport_vehicle_onboard if is_airport else 0)
+    _draw_stat_chip(
+        screen,
+        x=hud_x,
+        y=hud_y + 152,
+        label="ONBOARD NOW",
+        value=str(onboard_now),
+        icon_name="hud_saved",
+        icon_kind="saved",
+        label_font=small,
+        value_font=font,
+    )
 
     vip_hostage = next((h for h in mission.hostages if getattr(h, "is_vip", False)), None)
     vip_status = "UNKNOWN"
@@ -481,7 +516,7 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
         _draw_stat_chip(
             screen,
             x=hud_x,
-            y=hud_y + 152,
+            y=hud_y + 190,
             label="VIP",
             value=vip_status,
             icon_name="hud_vip",
@@ -498,6 +533,11 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
             f"Rescue flow: Open compound -> land -> doors (E) -> load {boarded}/16",
             "Unload flow: land at base flag -> doors (E)",
             f"LZ status: {rescue_ready} | Grounded: {grounded_state} | Doors: {doors_state}",
+            (
+                f"Onboard now: {onboard_now} (chopper {chopper_onboard} + vehicle {airport_vehicle_onboard})"
+                if is_airport
+                else f"Onboard now: {onboard_now}"
+            ),
             boarding_line,
         ]
     else:

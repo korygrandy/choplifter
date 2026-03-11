@@ -21,6 +21,15 @@ def _hostage(*, x: float, y: float) -> SimpleNamespace:
     )
 
 
+def _boarded_hostage(*, x: float, y: float) -> SimpleNamespace:
+    return SimpleNamespace(
+        state=HostageState.BOARDED,
+        pos=SimpleNamespace(x=x, y=y),
+        move_speed=0.0,
+        saved_slot=-1,
+    )
+
+
 def _mission(*, mission_id: str, tech_state_name: str) -> SimpleNamespace:
     return SimpleNamespace(
         mission_id=mission_id,
@@ -101,6 +110,48 @@ class AirportTechBoardingGateTests(unittest.TestCase):
 
         counters = getattr(mission, "boarding_failure_counts", {})
         self.assertGreaterEqual(int(counters.get("tech_not_on_chopper", 0)), 1)
+
+    def test_hostages_do_not_fall_before_two_to_three_second_grace(self) -> None:
+        mission = _mission(mission_id="city", tech_state_name="on_chopper")
+        mission.hostages = [_boarded_hostage(x=10.0, y=200.0)]
+        mission._prev_fall_eligible = True
+        mission._hostage_fall_delay_s = 2.8
+        mission.doors_open_maxvel_timer = 2.4
+        mission.next_fall_time = 0.0
+        helicopter = SimpleNamespace(pos=SimpleNamespace(x=0.0, y=120.0), grounded=False, doors_open=True)
+
+        mission.elapsed_seconds = 2.5
+        _update_hostages(
+            mission,
+            helicopter,
+            0.1,
+            HelicopterSettings(),
+            boarded_count_fn=lambda m: 1,
+        )
+
+        self.assertEqual(mission.hostages[0].state, HostageState.BOARDED)
+        self.assertEqual(mission.stats.lost_in_transit, 0)
+
+    def test_hostages_fall_after_grace_window_expires(self) -> None:
+        mission = _mission(mission_id="city", tech_state_name="on_chopper")
+        mission.hostages = [_boarded_hostage(x=10.0, y=200.0)]
+        mission._prev_fall_eligible = True
+        mission._hostage_fall_delay_s = 2.1
+        mission.doors_open_maxvel_timer = 2.1
+        mission.next_fall_time = 0.0
+        helicopter = SimpleNamespace(pos=SimpleNamespace(x=0.0, y=120.0), grounded=False, doors_open=True)
+
+        mission.elapsed_seconds = 2.2
+        _update_hostages(
+            mission,
+            helicopter,
+            0.05,
+            HelicopterSettings(),
+            boarded_count_fn=lambda m: 1,
+        )
+
+        self.assertEqual(mission.hostages[0].state, HostageState.FALLING)
+        self.assertEqual(mission.stats.lost_in_transit, 1)
 
 
 if __name__ == "__main__":

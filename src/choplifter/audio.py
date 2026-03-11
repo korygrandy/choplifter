@@ -290,6 +290,8 @@ class AudioBank:
     bus_accelerate: pygame.mixer.Sound | None
     bus_brakes: pygame.mixer.Sound | None
     bus_door: pygame.mixer.Sound | None
+    hang_on_yall: pygame.mixer.Sound | None
+    carjacked_mealtruck: pygame.mixer.Sound | None
 
     def play_barak_mrad_deploy(self) -> None:
         if self.barak_mrad_deploy is None:
@@ -561,6 +563,12 @@ class AudioBank:
             bus_door = _try_load_asset_sound(asset_dir / "bus-door.ogg")
             if bus_door is not None:
                 bus_door.set_volume(0.50)
+            hang_on_yall = _try_load_asset_sound(asset_dir / "hang-on-yall.ogg")
+            if hang_on_yall is not None:
+                hang_on_yall.set_volume(0.58)
+            carjacked_mealtruck = _try_load_asset_sound(asset_dir / "carjacked-mealtruck.ogg")
+            if carjacked_mealtruck is not None:
+                carjacked_mealtruck.set_volume(0.62)
             return AudioBank(
                 mixer=mixer,
                 shoot=shoot,
@@ -590,6 +598,8 @@ class AudioBank:
                 bus_accelerate=bus_accelerate,
                 bus_brakes=bus_brakes,
                 bus_door=bus_door,
+                hang_on_yall=hang_on_yall,
+                carjacked_mealtruck=carjacked_mealtruck,
             )
         except Exception as e:
             print(f"[AudioBank] Failed to initialize: {e}")
@@ -622,6 +632,8 @@ class AudioBank:
                 bus_accelerate=None,
                 bus_brakes=None,
                 bus_door=None,
+                hang_on_yall=None,
+                carjacked_mealtruck=None,
             )
             r2 = _sine_pcm16(freq_hz=988.0, duration_s=0.10, volume=0.22, sample_rate=sample_rate)
             rescue = pygame.mixer.Sound(buffer=_mix_pcm16([r1, r2], volume=0.85))
@@ -888,3 +900,9 @@ class AudioBank:
 
     def play_bus_door(self) -> None:
         self._play(self.bus_door, bus="sfx")
+
+    def play_hang_on_yall(self) -> None:
+        self._play(self.hang_on_yall, bus="sfx")
+
+    def play_carjacked_mealtruck(self) -> None:
+        self._play(self.carjacked_mealtruck, bus="sfx")

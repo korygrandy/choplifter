@@ -20,7 +20,7 @@ thermal_mode = False
 
 from ..game_types import EnemyKind, HostageState, ProjectileKind
 from ..barak_mrad import BARAK_LAUNCHER_VISIBLE_STATES
-from ..hostage_logic import _draw_stick_figure_passenger
+from ..hostage_logic import _draw_stick_figure_passenger, _draw_stick_figure_passenger_rotated
 from ..mission_helpers import sentiment_band_label, sentiment_contributions
 
 if TYPE_CHECKING:
@@ -658,12 +658,26 @@ def _draw_airport_lz_tower(screen: pygame.Surface, mission: MissionState, *, cam
     pygame.draw.polygon(screen, (30, 34, 42), cab_points, 2)
 
     # Cabin glazing band.
+    # Cabin glazing band.
+    # Flicker the centre window amber when mission tech is waiting at the LZ for pickup.
+    tech_state_obj = getattr(mission, "mission_tech", None)
+    tech_waiting_at_lz = (
+        tech_state_obj is not None
+        and str(getattr(tech_state_obj, "state", "")) == "waiting_at_lz"
+    )
+    flicker_intensity = (math.sin(t * 8.0) + 1.0) * 0.5  # 0..1 at 4 Hz
     window_color = (102, 146, 186)
     win_y = cab_top_y + 10
     for i in range(7):
         wx = x - 32 + i * 10
         win = pygame.Rect(wx, win_y, 8, 9)
-        pygame.draw.rect(screen, window_color, win, border_radius=1)
+        if tech_waiting_at_lz and i == 3:
+            r_c = int(200 + 55 * flicker_intensity)
+            g_c = int(140 + 60 * flicker_intensity)
+            win_fill = (r_c, g_c, 40)
+        else:
+            win_fill = window_color
+        pygame.draw.rect(screen, win_fill, win, border_radius=1)
         pygame.draw.rect(screen, (26, 30, 36), win, 1, border_radius=1)
 
     # Roof cap plus a small radar deck.
@@ -705,14 +719,20 @@ def _draw_hostages(screen: pygame.Surface, mission: MissionState, *, camera_x: f
             continue
 
         # All active passengers use the same animated stick-figure language.
-        _draw_stick_figure_passenger(screen, x, y + 4, passenger_index=i, mission_time=mission_time)
+        if h.state is HostageState.FALLING:
+            # Tumble animation: rotate the figure around its centre via accumulated fall_angle.
+            _draw_stick_figure_passenger_rotated(
+                screen, x, y + 4,
+                passenger_index=i,
+                mission_time=mission_time,
+                angle_degrees=float(getattr(h, "fall_angle", 0.0)),
+            )
+        else:
+            _draw_stick_figure_passenger(screen, x, y + 4, passenger_index=i, mission_time=mission_time)
 
         # Tiny accent for EXITING so it's visually distinct.
         if h.state is HostageState.EXITING:
             pygame.draw.circle(screen, (255, 255, 255), (x, y - 1), 1)
-        # Falling: draw with a blue trail
-        if h.state is HostageState.FALLING:
-            pygame.draw.line(screen, (80, 180, 255), (x, y-8), (x, y), 2)
 
         if getattr(h, "is_vip", False):
             vip_positions.append((x, y))

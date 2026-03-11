@@ -213,6 +213,7 @@ def update_bus_ai(bus_state: BusState, dt: float, audio=None, *, mission_phase: 
     else:
         target_drive_mode = "parked"
 
+    prev_is_moving = bool(getattr(bus_state, "is_moving", False))
     if target_drive_mode != bus_state.drive_mode:
         if target_drive_mode == "forward":
             # Tech just boarded — start escort drive from rest.
@@ -220,16 +221,22 @@ def update_bus_ai(bus_state: BusState, dt: float, audio=None, *, mission_phase: 
             bus_state.is_moving = True
             bus_state.elapsed_s = 0.0   # reset accel ramp
             bus_state.phase = "accelerating"
+            if audio is not None and hasattr(audio, "play_bus_accelerate"):
+                audio.play_bus_accelerate()
         elif target_drive_mode == "reset":
             bus_state.drive_mode = "reset"
             bus_state.is_moving = True
             bus_state.phase = "cruising"
+            if audio is not None and hasattr(audio, "play_bus_accelerate"):
+                audio.play_bus_accelerate()
         else:
             # Escort cancelled or mission over — stop the bus.
             bus_state.drive_mode = "parked"
             bus_state.is_moving = False
             bus_state.velocity_x = 0.0
             bus_state.phase = "stopped"
+            if prev_is_moving and audio is not None and hasattr(audio, "play_bus_brakes"):
+                audio.play_bus_brakes()
 
     if bus_state.is_moving and bus_state.drive_mode == "reset":
         bus_state.phase = "cruising"
@@ -290,6 +297,9 @@ def update_bus_ai(bus_state: BusState, dt: float, audio=None, *, mission_phase: 
             bus_state.drive_mode = "parked"  # arrived at LZ
 
     _run_bus_door_animation(bus_state, dt)
+    if prev_is_moving and not bool(getattr(bus_state, "is_moving", False)):
+        if audio is not None and hasattr(audio, "play_bus_brakes"):
+            audio.play_bus_brakes()
     return bus_state
 
 

@@ -359,6 +359,34 @@ def _draw_stick_figure_passenger(target: pygame.Surface, x: int, y: int, passeng
 	pygame.draw.rect(target, head_color, (x - pixel, head_y - pixel, pixel * 2, pixel * 2))
 	pygame.draw.rect(target, outline_color, (x - pixel, head_y - pixel, pixel * 2, pixel * 2), 1)
 
+def _draw_stick_figure_passenger_rotated(
+	target: pygame.Surface,
+	cx: int,
+	feet_y: int,
+	passenger_index: int,
+	mission_time: float,
+	angle_degrees: float,
+) -> None:
+	"""Draw stick-figure passenger rotated for tumble effect during FALLING state.
+
+	Args:
+		target: Surface to draw on
+		cx: Horizontal centre of the figure (screen-space)
+		feet_y: Y position of the figure's feet (screen-space)
+		passenger_index: Unique index for animation variety
+		mission_time: Current mission elapsed time
+		angle_degrees: Cumulative fall rotation in degrees
+	"""
+	surf_size = 48  # Enough headroom for the ~14 px figure after arbitrary rotation
+	temp = pygame.Surface((surf_size, surf_size), pygame.SRCALPHA)
+	half = surf_size // 2
+	# Figure centre is ~7 px above feet; place feet at (half + 7) so centre → half.
+	_draw_stick_figure_passenger(temp, half, half + 7, passenger_index=passenger_index, mission_time=mission_time)
+	rotated = pygame.transform.rotate(temp, -angle_degrees)  # negative → visually clockwise
+	# Blit centred at the figure’s visual centre (7 px above feet).
+	rect = rotated.get_rect(center=(cx, feet_y - 7))
+	target.blit(rotated, rect)
+
 
 def _draw_meal_truck_passengers(target: pygame.Surface, hostage_state, meal_truck_state, *, camera_x: float, mission_time: float = 0.0) -> None:
 	"""Draw animated stick-figure passenger markers above meal truck with count label."""

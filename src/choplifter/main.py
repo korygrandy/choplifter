@@ -76,7 +76,7 @@ from .app.session import create_mission_and_helicopter
 from .app.flow import apply_mission_preview, reset_game
 from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapshot
 from .app.accessibility_toggles import toggle_particles, toggle_flashes, toggle_screenshake
-from .app.doors import check_airport_truck_retract_toast, toggle_doors_with_logging
+from .app.doors import check_airport_truck_retract_toast, check_tech_lz_door_toast, toggle_doors_with_logging
 from .app.runtime_state import GameRuntimeState
 from .app.airport_runtime_flags import sync_airport_runtime_flags
 from .app.bus_door_flow import apply_airport_bus_door_transitions
@@ -1231,12 +1231,20 @@ def run() -> None:
                         meal_truck_state=airport_meal_truck_state,
                         bus_state=airport_bus_state,
                         hostage_state=airport_hostage_state,
+                        audio=audio,
+                        ground_y=heli_settings.ground_y,
+                        tuning=mission.tuning,
                     )
                     tech_state_name = str(getattr(airport_tech_state, "state", "on_chopper"))
+                    check_tech_lz_door_toast(mission, airport_tech_state, helicopter, set_toast)
                     engineer_just_boarded_truck = (
                         prev_tech_state_name == "on_chopper" and tech_state_name != "on_chopper"
                     )
                     if engineer_just_boarded_truck and airport_meal_truck_state is not None:
+                        if not bool(getattr(mission, "_carjacked_mealtruck_played", False)):
+                            if hasattr(audio, "play_carjacked_mealtruck"):
+                                audio.play_carjacked_mealtruck()
+                            mission._carjacked_mealtruck_played = True
                         meal_truck_driver_mode = True
                         airport_meal_truck_state.driver_mode_active = True
                         meal_truck_lift_command_extended = bool(
