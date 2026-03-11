@@ -38,6 +38,21 @@ def _emit_barak_transition_fx(mission: MissionState, e: Enemy, *, strength: floa
         pass
 
 
+def _enter_barak_deploy(
+    mission: MissionState,
+    e: Enemy,
+    *,
+    logger: logging.Logger | None,
+    reason: str,
+    fx_strength: float,
+) -> None:
+    _transition_barak_state(e, BARAK_STATE_DEPLOY, logger=logger, reason=reason)
+    _emit_barak_transition_fx(mission, e, strength=fx_strength)
+    if hasattr(mission, "audio") and mission.audio is not None:
+        if hasattr(mission.audio, "play_barak_mrad_deploy"):
+            mission.audio.play_barak_mrad_deploy()
+
+
 def _barak_next_reload_seconds(tuning: object) -> float:
     lo = float(getattr(tuning, "barak_reload_min_seconds", getattr(tuning, "barak_reload_seconds", 4.0)))
     hi = float(getattr(tuning, "barak_reload_max_seconds", getattr(tuning, "barak_reload_seconds", 4.0)))
@@ -218,7 +233,13 @@ def _update_enemies(
                 elif e.mrad_state == BARAK_STATE_RELOAD:
                     _transition_barak_state(e, BARAK_STATE_MOVE, logger=logger, reason="fail_safe")
                 else:
-                    _transition_barak_state(e, BARAK_STATE_DEPLOY, logger=logger, reason="fail_safe")
+                    _enter_barak_deploy(
+                        mission,
+                        e,
+                        logger=logger,
+                        reason="fail_safe",
+                        fx_strength=0.35,
+                    )
 
             if e.mrad_state == BARAK_STATE_MOVE:
                 if e.pos.x < target_x:
@@ -227,19 +248,23 @@ def _update_enemies(
                         e.pos.x = target_x
                         e.vel.x = 0.0
                         e.entered_screen = True
-                        _transition_barak_state(e, BARAK_STATE_DEPLOY, logger=logger, reason="arrived")
-                        _emit_barak_transition_fx(mission, e, strength=0.45)
-                        if hasattr(mission, "audio") and mission.audio is not None:
-                            if hasattr(mission.audio, "play_barak_mrad_deploy"):
-                                mission.audio.play_barak_mrad_deploy()
+                        _enter_barak_deploy(
+                            mission,
+                            e,
+                            logger=logger,
+                            reason="arrived",
+                            fx_strength=0.45,
+                        )
                 else:
                     e.vel.x = 0.0
                     e.entered_screen = True
-                    _transition_barak_state(e, BARAK_STATE_DEPLOY, logger=logger, reason="already_in_position")
-                    _emit_barak_transition_fx(mission, e, strength=0.45)
-                    if hasattr(mission, "audio") and mission.audio is not None:
-                        if hasattr(mission.audio, "play_barak_mrad_deploy"):
-                            mission.audio.play_barak_mrad_deploy()
+                    _enter_barak_deploy(
+                        mission,
+                        e,
+                        logger=logger,
+                        reason="already_in_position",
+                        fx_strength=0.45,
+                    )
             elif e.mrad_state == BARAK_STATE_DEPLOY:
                 # Synchronize rotation and extension to full launch posture.
                 deploy_speed = float(getattr(tuning, "barak_deploy_angle_speed_rad_s", 1.5))

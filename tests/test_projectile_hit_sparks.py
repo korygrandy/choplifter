@@ -115,6 +115,28 @@ class ProjectileHitSparkTests(unittest.TestCase):
 
         self.assertEqual(sparks.calls, 0)
 
+    def test_hover_bullet_hit_on_moving_barak_emits_sparks_and_damage_fx(self) -> None:
+        p = Projectile(kind=ProjectileKind.BULLET, pos=Vec2(168.0, 274.0), vel=Vec2(95.0, 0.0), ttl=1.0)
+        e = Enemy(kind=EnemyKind.BARAK_MRAD, pos=Vec2(180.0, 288.0), vel=Vec2(0.0, 0.0), health=100.0)
+        sparks = _DummySparks()
+        mission = self._base_mission(projectile=p, enemy=e, sparks=sparks)
+
+        heli = SimpleNamespace(ground_y=300.0)
+        helicopter = SimpleNamespace(pos=Vec2(0.0, 0.0), vel=Vec2(0.0, 0.0), facing=None, grounded=False)
+
+        _update_projectiles(
+            mission,
+            0.0,
+            heli,
+            logger=None,
+            helicopter=helicopter,
+            damage_helicopter=lambda *_a, **_k: None,
+        )
+
+        self.assertEqual(sparks.calls, 1)
+        self.assertEqual(mission.enemy_damage_fx.hit_puff_calls, 1)
+        self.assertEqual(e.health, 90.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -104,7 +104,8 @@ def _projectile_hits_enemy(
         return left <= p.pos.x <= left + w and top <= p.pos.y <= top + h
 
     if e.kind is EnemyKind.BARAK_MRAD:
-        w, h = 44.0, 18.0
+        # MRAP body is taller/wider than the legacy tank box, especially readable while moving.
+        w, h = 56.0, 32.0
         left = e.pos.x - w * 0.5
         top = heli.ground_y - h
         body_hit = left <= p.pos.x <= left + w and top <= p.pos.y <= top + h

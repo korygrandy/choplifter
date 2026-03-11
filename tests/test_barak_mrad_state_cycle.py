@@ -147,6 +147,39 @@ class BarakMradStateCycleTests(unittest.TestCase):
 
         self.assertIn(enemy.mrad_state, {BARAK_STATE_RETRACT, BARAK_STATE_RELOAD, BARAK_STATE_MOVE})
 
+    def test_fail_safe_invalid_state_enters_deploy_and_plays_deploy_sfx(self) -> None:
+        tuning = MissionTuning(
+            barak_state_fail_safe_s=0.15,
+            barak_deploy_angle_speed_rad_s=0.0,
+            barak_deploy_extension_speed_s=0.0,
+        )
+        enemy = Enemy(
+            kind=EnemyKind.BARAK_MRAD,
+            pos=Vec2(404.0, 260.0),
+            vel=Vec2(0.0, 0.0),
+            health=100.0,
+            mrad_state="unknown_state",
+        )
+        mission = self._build_mission(tuning, enemy)
+        heli = SimpleNamespace(ground_y=300.0)
+        helicopter = SimpleNamespace(pos=Vec2(700.0, 190.0), facing=Facing.RIGHT, grounded=False)
+
+        for _ in range(12):
+            mission.elapsed_seconds += 0.05
+            _update_enemies(
+                mission,
+                helicopter,
+                0.05,
+                heli,
+                logger=None,
+                mine_explode=lambda *_a, **_k: None,
+                spawn_enemy_bullet_toward=lambda *_a, **_k: None,
+                damage_helicopter=lambda *_a, **_k: None,
+            )
+
+        self.assertEqual(enemy.mrad_state, BARAK_STATE_DEPLOY)
+        self.assertGreaterEqual(mission.audio.deploy_calls, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

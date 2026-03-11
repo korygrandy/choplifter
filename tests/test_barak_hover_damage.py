@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import unittest
 
-from src.choplifter.barak_mrad import BARAK_STATE_DEPLOY
+from src.choplifter.barak_mrad import BARAK_STATE_DEPLOY, BARAK_STATE_MOVE
 from src.choplifter.entities import Enemy, Projectile
 from src.choplifter.game_types import EnemyKind, ProjectileKind
 from src.choplifter.math2d import Vec2
@@ -74,6 +74,27 @@ class BarakHoverDamageTests(unittest.TestCase):
         projectile.pos = Vec2(140.0 + 95.0, 220.0)
 
         self.assertTrue(_projectile_hits_enemy(projectile, enemy, heli, tuning, previous_pos=previous_pos))
+
+    def test_hover_bullet_can_hit_moving_barak_vehicle_body(self) -> None:
+        heli = HelicopterSettings(ground_y=300.0)
+        tuning = MissionTuning()
+        enemy = Enemy(
+            kind=EnemyKind.BARAK_MRAD,
+            pos=Vec2(180.0, 288.0),
+            vel=Vec2(0.0, 0.0),
+            health=100.0,
+            mrad_state=BARAK_STATE_MOVE,
+            launcher_angle=0.0,
+            launcher_ext_progress=0.0,
+        )
+        projectile = Projectile(
+            kind=ProjectileKind.BULLET,
+            pos=Vec2(168.0, 274.0),
+            vel=Vec2(95.0, 0.0),
+            ttl=1.0,
+        )
+
+        self.assertTrue(_projectile_hits_enemy(projectile, enemy, heli, tuning))
 
 
 if __name__ == "__main__":
