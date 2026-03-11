@@ -81,6 +81,7 @@ from .app.runtime_state import GameRuntimeState
 from .app.airport_runtime_flags import sync_airport_runtime_flags
 from .app.bus_door_flow import apply_airport_bus_door_transitions
 from .app.weapon_lock import chopper_weapons_locked
+from .app.airport_session import initialize_airport_runtime
 from .app.objective_overlay import get_mission_objective_overlay_duration
 from .app.game_update import (
     build_helicopter_input,
@@ -112,7 +113,7 @@ def run() -> None:
     vip_kia_overlay_timer = 0.0
     vip_kia_overlay_shown = False
     city_objective_overlay_timer = 0.0
-    from .render.world import toggle_thermal_mode
+    from .render.world import draw_mission_end_overlay, toggle_thermal_mode
 
     def set_debug_weather_mode(mode):
         nonlocal weather_mode, weather_timer, weather_duration
@@ -267,74 +268,26 @@ def run() -> None:
     airport_objective_state = None
     airport_cutscene_state = None
     airport_meal_truck_state = None
-    airport_raised_bunker_x = 1500.0  # Elevated airport jetway pickup point.
+    airport_raised_bunker_x = 1500.0  # Primary elevated pickup fallback.
     airport_meal_truck_spawn_x = 1060.0  # Left of leftmost compound, tech drives it to elevated bunker
     airport_total_rescue_target = 16
 
-    def airport_terminal_pickups() -> list[float]:
-        pickups: list[float] = []
-        for c in getattr(mission, "compounds", []):
-            pickups.append(float(c.pos.x) + float(c.width) * 0.5)
-        return pickups
-
-    def configure_airport_passenger_distribution(total_passengers: int = 16) -> tuple[list[float], int]:
-        """Split airport civilians: lower compounds for chopper, elevated jetway for truck/bus."""
-        nonlocal airport_raised_bunker_x
-        compounds = list(getattr(mission, "compounds", []))
-        if not compounds:
-            airport_raised_bunker_x = 1500.0
-            return [airport_raised_bunker_x], int(total_passengers)
-
-        elevated_index = min(range(len(compounds)), key=lambda i: float(compounds[i].pos.y))
-        elevated_center_x = float(compounds[elevated_index].pos.x) + float(compounds[elevated_index].width) * 0.5
-        airport_raised_bunker_x = elevated_center_x
-
-        lower_indices = [i for i in range(len(compounds)) if i != elevated_index]
-        total = max(1, int(total_passengers))
-        if lower_indices:
-            elevated_total = random.randint(4, max(4, total - 2)) if total >= 6 else max(1, total // 2)
-        else:
-            elevated_total = total
-        lower_total = max(0, total - elevated_total)
-
-        # Reset all compound allocations first.
-        for c in compounds:
-            c.hostage_count = 0
-
-        if lower_indices and lower_total > 0:
-            if len(lower_indices) == 1:
-                compounds[lower_indices[0]].hostage_count = lower_total
-            else:
-                first = random.randint(0, lower_total)
-                second = lower_total - first
-                compounds[lower_indices[0]].hostage_count = first
-                compounds[lower_indices[1]].hostage_count = second
-
-        # Elevated compound hostages are tracked by airport_hostage_state, not mission.hostages.
-        compounds[elevated_index].hostage_count = 0
-
-        return [elevated_center_x], elevated_total
-
     if selected_mission_id == "airport":
-        airport_pickup_points, airport_elevated_total = configure_airport_passenger_distribution(airport_total_rescue_target)
-        airport_bus_state = create_bus_state(start_x=2200, ground_y=heli_settings.ground_y)
-        airport_hostage_state = create_airport_hostage_state(
-            total_hostages=airport_elevated_total,
-            pickup_x=airport_raised_bunker_x,
-            pickup_points=airport_pickup_points,
-        )
-        airport_enemy_state = create_airport_enemy_state()
-        airport_tech_state = create_mission_tech_state()
-        mission.mission_tech = airport_tech_state  # Store for rendering
-        airport_objective_state = create_airport_objective_state(hostage_deadline_s=120.0)
-        airport_cutscene_state = create_airport_cutscene_state()
-        airport_meal_truck_state = create_airport_meal_truck_state(
-            start_x=airport_meal_truck_spawn_x,
+        airport_runtime = initialize_airport_runtime(
+            mission=mission,
             ground_y=heli_settings.ground_y,
-            plane_lz_x=airport_raised_bunker_x,
+            total_rescue_target=airport_total_rescue_target,
+            meal_truck_spawn_x=airport_meal_truck_spawn_x,
+            hostage_deadline_s=120.0,
         )
-        mission.airport_hostage_state = airport_hostage_state
-        mission.airport_meal_truck_state = airport_meal_truck_state
+        airport_bus_state = airport_runtime.bus_state
+        airport_hostage_state = airport_runtime.hostage_state
+        airport_enemy_state = airport_runtime.enemy_state
+        airport_tech_state = airport_runtime.tech_state
+        airport_objective_state = airport_runtime.objective_state
+        airport_cutscene_state = airport_runtime.cutscene_state
+        airport_meal_truck_state = airport_runtime.meal_truck_state
+        airport_raised_bunker_x = float(airport_runtime.raised_bunker_x)
 
     def apply_mission_preview_wrapper() -> None:
         nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
@@ -395,25 +348,21 @@ def run() -> None:
         
         # Initialize mission-specific state
         if selected_mission_id == "airport":
-            airport_pickup_points, airport_elevated_total = configure_airport_passenger_distribution(airport_total_rescue_target)
-            airport_bus_state = create_bus_state(start_x=2200, ground_y=heli_settings.ground_y)
-            airport_hostage_state = create_airport_hostage_state(
-                total_hostages=airport_elevated_total,
-                pickup_x=airport_raised_bunker_x,
-                pickup_points=airport_pickup_points,
-            )
-            airport_enemy_state = create_airport_enemy_state()
-            airport_tech_state = create_mission_tech_state()
-            mission.mission_tech = airport_tech_state  # Store for rendering
-            airport_objective_state = create_airport_objective_state(hostage_deadline_s=120.0)
-            airport_cutscene_state = create_airport_cutscene_state()
-            airport_meal_truck_state = create_airport_meal_truck_state(
-                start_x=airport_meal_truck_spawn_x,
+            airport_runtime = initialize_airport_runtime(
+                mission=mission,
                 ground_y=heli_settings.ground_y,
-                plane_lz_x=airport_raised_bunker_x,
+                total_rescue_target=airport_total_rescue_target,
+                meal_truck_spawn_x=airport_meal_truck_spawn_x,
+                hostage_deadline_s=120.0,
             )
-            mission.airport_hostage_state = airport_hostage_state
-            mission.airport_meal_truck_state = airport_meal_truck_state
+            airport_bus_state = airport_runtime.bus_state
+            airport_hostage_state = airport_runtime.hostage_state
+            airport_enemy_state = airport_runtime.enemy_state
+            airport_tech_state = airport_runtime.tech_state
+            airport_objective_state = airport_runtime.objective_state
+            airport_cutscene_state = airport_runtime.cutscene_state
+            airport_meal_truck_state = airport_runtime.meal_truck_state
+            airport_raised_bunker_x = float(airport_runtime.raised_bunker_x)
 
     def toggle_particles_wrapper() -> None:
         nonlocal particles_enabled
@@ -1299,6 +1248,10 @@ def run() -> None:
                         if airport_meal_truck_state is not None:
                             airport_meal_truck_state.driver_mode_active = False
                     mission.mission_tech = airport_tech_state  # Store for rendering
+                    if airport_meal_truck_state is not None and airport_hostage_state is not None:
+                        airport_meal_truck_state.plane_lz_x = float(
+                            getattr(airport_hostage_state, "pickup_x", airport_meal_truck_state.plane_lz_x)
+                        )
                     airport_meal_truck_state = update_airport_meal_truck(
                         airport_meal_truck_state,
                         tick.dt,
@@ -1555,6 +1508,10 @@ def run() -> None:
                     draw_mission_select_overlay_fn=draw_mission_select_overlay,
                     draw_chopper_select_overlay_fn=draw_chopper_select_overlay,
                 )
+
+            # Keep mission-end debrief above all world/weather/chopper layers.
+            draw_mission_end_overlay(target, mission)
+
             render_frame_post_fx(
                 mode=mode,
                 target=target,

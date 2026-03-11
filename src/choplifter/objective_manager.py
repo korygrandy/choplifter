@@ -90,9 +90,9 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 	elif truck_active and tech_operating:
 		objective_state.mission_phase = "truck_driving_to_bunker"
 		if truck_at_plane_lz and not truck_extended:
-			objective_state.status_text = "Extend meal-truck lift at damaged plane"
+			objective_state.status_text = "Extend meal-truck lift at elevated terminal"
 		else:
-			objective_state.status_text = "Drive meal truck to damaged plane"
+			objective_state.status_text = "Drive meal truck to elevated terminal"
 	elif waiting:
 		objective_state.mission_phase = "waiting_for_tech_deploy"
 		objective_state.status_text = "Deploy mission tech to meal truck"
@@ -124,7 +124,21 @@ def draw_airport_objectives(target: pygame.Surface, objective_state, *, camera_x
 	pygame.draw.circle(target, (20, 20, 20), (marker_x, marker_y), 6, 1)
 
 	# Compact top-center status panel (1980s green-screen terminal style).
+	status = str(getattr(objective_state, "status_text", "Objective")).upper().strip()
+	if not status:
+		status = "OBJECTIVE"
+
 	panel_w = 380
+	try:
+		font_probe = pygame.font.SysFont("consolas", 18, bold=True)
+		prompt_w = font_probe.size(">")[0]
+		status_w = font_probe.size(status)[0]
+		required_w = 34 + prompt_w + status_w
+		panel_w = min(max(380, required_w), max(380, target.get_width() - 16))
+	except Exception:
+		# Keep fixed baseline width if font probing is unavailable.
+		panel_w = min(380, max(180, target.get_width() - 16))
+
 	panel_h = 28
 	panel_x = max(8, (target.get_width() - panel_w) // 2)
 	panel = pygame.Rect(panel_x, 10, panel_w, panel_h)
@@ -147,9 +161,6 @@ def draw_airport_objectives(target: pygame.Surface, objective_state, *, camera_x
 	target.set_clip(inner)
 	try:
 		font = pygame.font.SysFont("consolas", 18, bold=True)
-		status = str(getattr(objective_state, "status_text", "Objective")).upper().strip()
-		if not status:
-			status = "OBJECTIVE"
 
 		now_ms = pygame.time.get_ticks()
 		if _TYPEWRITER_LAST_TICK_MS <= 0:

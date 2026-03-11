@@ -52,21 +52,25 @@ def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: flo
     from .particles import draw_wind_dust_clouds
     draw_wind_dust_clouds(screen, mission, camera_x=camera_x)
 
-    if mission.ended and mission.end_text:
-        boarded = sum(1 for h in mission.hostages if h.state is HostageState.BOARDED)
-        _draw_end(
-            screen,
-            mission.end_text,
-            mission.end_reason,
-            mission.stats.saved,
-            boarded,
-            mission.stats.kia_by_player,
-            mission.stats.kia_by_enemy,
-            mission.stats.lost_in_transit,
-            mission.stats.enemies_destroyed,
-            mission.crashes,
-            mission.sentiment,
-        )
+def draw_mission_end_overlay(screen: pygame.Surface, mission: MissionState) -> None:
+    """Draw THE END/debrief overlay as a top-most layer above world entities and weather."""
+    if not (getattr(mission, "ended", False) and getattr(mission, "end_text", "")):
+        return
+
+    boarded = sum(1 for h in mission.hostages if h.state is HostageState.BOARDED)
+    _draw_end(
+        screen,
+        mission.end_text,
+        mission.end_reason,
+        mission.stats.saved,
+        boarded,
+        mission.stats.kia_by_player,
+        mission.stats.kia_by_enemy,
+        mission.stats.lost_in_transit,
+        mission.stats.enemies_destroyed,
+        mission.crashes,
+        mission.sentiment,
+    )
 
 
 def _draw_base(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:

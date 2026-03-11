@@ -90,6 +90,30 @@ Current script behavior (`scripts/build_windows_exe.ps1`):
 3. Convert heavy WAV effects to OGG where acceptable.
 4. Keep the explicit asset-manifest staging approach and update docs when include rules change.
 
+### Mission Select Pre-check UI (Planned)
+
+Implementation checklist for the new Mission Select onboarding overlay:
+
+1. Add a `precheck` mode/overlay state that can be entered from Mission Select before mission launch.
+2. Render a helicopter blowout panel with labeled gameplay/control icons and a short objective summary.
+3. Add `Skip` and `Start Mission` actions with explicit keyboard/gamepad mappings.
+4. Add a Mission Select reopen affordance (for example `Controls/Pre-check`) so players can revisit the overlay.
+5. Ensure mission launch handoff preserves existing selected mission/chopper state.
+
+Suggested file touchpoints:
+
+- `src/choplifter/main.py`: mode transition wiring and launch handoff.
+- `src/choplifter/app/event_loop.py`: keyboard/gamepad confirm/back handling for pre-check actions.
+- `src/choplifter/render/hud.py` or mission-select overlay render path: panel composition for the blowout diagram and icon labels.
+- `src/choplifter/rendering.py`: exports if new draw helper(s) are added.
+
+Acceptance gates:
+
+1. Works on keyboard and gamepad with parity for navigate/confirm/back.
+2. `Skip` and `Start Mission` both start mission reliably without losing selected mission/chopper.
+3. Overlay scales/readability hold at common window sizes and does not clip long labels.
+4. Smoke pass remains green and import smoke test passes.
+
 ## Validation Commands
 
 - Import smoke test:
@@ -156,6 +180,29 @@ Recommended usage per cycle:
 3. Transfer elevated civilians from truck to bus, then escort bus to LZ stop.
 4. Independently open lower compounds and rescue lower-level civilians via chopper.
 5. Mission ends in success when lower + elevated rescued total reaches 16.
+
+### Planned Pivot: Dual Elevated Extraction (Not Yet Implemented)
+
+Goal: add a second elevated compound on the left (`elevated_fuselage_passenger_compound`) while keeping the existing jetway compound, then distribute elevated civilians across both.
+
+Risk-first implementation order:
+
+1. Data model + allocation updates:
+  - represent two elevated pickup points in airport hostage state.
+  - distribute elevated civilians across both terminals at mission start/reset.
+2. Sequence/state-machine updates:
+  - update meal-truck + mission-tech flow so extraction can iterate terminal A/B without soft-locking.
+  - hold transfer-complete gate until both elevated terminals are emptied.
+3. Objective/cutscene/hint updates:
+  - identify active elevated terminal in objective text and markers.
+4. Art integration:
+  - add burning fuselage base art + raised compound overlay composition for the left elevated terminal.
+5. Indicator modernization:
+  - replace procedural icon markers with PNG assets; include fallback path.
+
+Known placeholder indicator to replace:
+
+- The ground-moving red chevron-like marker is currently a procedural raider triangle in `src/choplifter/enemy_spawns.py` inside `draw_airport_enemies(...)`.
 
 ### Airport Modules With Active Ownership
 
@@ -275,3 +322,30 @@ Recommended usage per cycle:
 - Avoid broad behavior changes during structural refactors.
 - If changing controls or mode flow, update `README.md` and this file in the same change.
 - Airport mission modules use wildcard imports (`from .module import *`) - may need cleanup later.
+
+## Long-Term Strategy: Keep `main.py` Modular and Manageable
+
+Purpose: keep `src/choplifter/main.py` functional as the game orchestrator without letting it become a monolith that blocks feature velocity.
+
+### Target Boundaries
+
+1. Keep `main.py` focused on composition/orchestration only (wiring, mode transitions, top-level frame loop).
+2. Keep feature logic in domain modules (`app/`, `mission_*`, and airport-specific modules).
+3. Maintain a soft line budget target for `main.py` (aim <= `1400` lines, hard warning at `1600+`).
+
+### Extraction Plan (Priority Order)
+
+1. `P0`: Extract airport mission setup/reset/config blocks from `main.py` into `app/airport_session.py`.
+2. `P0`: Extract airport per-tick update pipeline into `app/airport_update.py` (bus, hostages, tech, truck, enemies, objectives, cutscene state).
+3. `P1`: Extract airport render orchestration hooks into `app/airport_render.py`.
+4. `P1`: Replace wildcard airport imports in `main.py` with explicit imports from thin facade modules.
+5. `P2`: Add an internal `MainLoopContext`/`AirportRuntimeContext` structure to reduce long `nonlocal` variable lists.
+
+### Governance Rules
+
+1. Any new feature branch that adds `>80` lines to `main.py` should include at least one compensating extraction.
+2. Refactors must be behavior-preserving by default; pair each extraction with focused tests.
+3. Run after each extraction step:
+  - import smoke: `./.venv/Scripts/python.exe -c "from src.choplifter.main import run; print('import-ok')"`
+  - targeted airport smoke subset (`-m airport_smoke`)
+4. Keep docs in sync: update this handoff when ownership boundaries move.

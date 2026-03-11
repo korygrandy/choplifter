@@ -40,6 +40,33 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 
 - [ ] Re-verify failure paths: bus destroyed, all passengers lost, deadline expiration.
 
+### Airport Pivot: Dual Elevated Compounds (Risk-First)
+
+- [ ] `P0` Add second elevated extraction compound (`elevated_fuselage_passenger_compound`) on the left side with parity behavior to the existing `elevated_jetway_passenger_compound`.
+
+- [ ] `P0` Update elevated passenger allocation to distribute civilians across both elevated compounds at mission start/reset (not a single elevated pickup point).
+
+- [ ] `P0` Update mission-tech and meal-truck extraction sequencing so both elevated compounds can be serviced without soft-locks:
+  - pickup targeting/order for terminal A/B
+  - truck loading/retraction/transferring loops per terminal
+  - completion gate only after both elevated compounds are emptied.
+
+- [ ] `P0` Expand objective/event flow text and state progression to explicitly handle dual elevated extraction before transfer completion.
+
+- [ ] `P0` Add regression tests for dual elevated flow (distribution, terminal switching, transfer completion, rescue aggregation, and interruption/reboard paths).
+
+- [ ] `P1` Add burning plane fuselage visual set and overlay composition under the new raised left elevated compound (layering + collision/readability validation).
+
+- [ ] `P1` Add elevated compound window flicker when passengers are present (both `fuselage` and `jetway` compounds) with reduced/disabled flicker when empty.
+
+- [ ] `P1` Update airport cutscene markers and mission prompts to identify the active elevated compound (`fuselage` vs `jetway`) and avoid ambiguous routing.
+
+- [ ] `P1` Add playtest matrix rows for two-elevated-compound scenarios, including edge timing and recovery from interrupted extraction.
+
+- [ ] `P2` Replace procedural indicator icons with PNG assets in prioritized order (objective marker, pickup marker, truck/bus passenger marker, mission-tech markers).
+
+- [ ] `P2` Replace the ground-moving red chevron placeholder (current raider triangle renderer in `src/choplifter/enemy_spawns.py`) with a dedicated PNG sprite + fallback draw path.
+
 ### Immediate Bug Fixes (Priority Order)
 
 - [x] `P0` Barak missile overlap-hit bug: when chopper and bus overlap, missiles currently miss both targets.
@@ -67,6 +94,14 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 ### Onboarding and Tutorial
 
 - [ ] Create a `Ground School` interactive walkthrough tutorial + overlay that guides players through gameplay and controls in sequenced steps.
+
+- [ ] Add a Mission Select `Pre-check UI` overlay that opens before mission start with a helicopter blowout diagram and labeled gameplay/control icons to teach core interactions.
+
+- [ ] Define `Pre-check UI` trigger and flow: auto-open on mission start preview, with `Skip` and `Start Mission` actions.
+
+- [ ] Add `Pre-check UI` reopen affordance on Mission Select (for example a `Controls/Pre-check` button or keybind prompt).
+
+- [ ] Validate keyboard/gamepad parity for `Pre-check UI` navigation, dismissal, and mission launch handoff.
 
 ### Test Coverage
 
