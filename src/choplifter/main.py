@@ -16,6 +16,7 @@ from .game_logging import create_session_logger
 from .helicopter import Facing, Helicopter, HelicopterInput, update_helicopter
 from . import haptics
 from .mission import update_mission
+from .mission_ending import _end_mission
 from .mission_configs import get_mission_config_by_id
 from .mission_helpers import boarded_count
 from .mission_hostages import hostage_crush_check_logged
@@ -263,12 +264,62 @@ def run() -> None:
     airport_objective_state = None
     airport_cutscene_state = None
     airport_meal_truck_state = None
-    airport_raised_bunker_x = 1500.0  # Second compound (index 1) is the elevated bunker
+    airport_raised_bunker_x = 1500.0  # Elevated airport jetway pickup point.
     airport_meal_truck_spawn_x = 1060.0  # Left of leftmost compound, tech drives it to elevated bunker
+    airport_total_rescue_target = 16
+
+    def airport_terminal_pickups() -> list[float]:
+        pickups: list[float] = []
+        for c in getattr(mission, "compounds", []):
+            pickups.append(float(c.pos.x) + float(c.width) * 0.5)
+        return pickups
+
+    def configure_airport_passenger_distribution(total_passengers: int = 16) -> tuple[list[float], int]:
+        """Split airport civilians: lower compounds for chopper, elevated jetway for truck/bus."""
+        nonlocal airport_raised_bunker_x
+        compounds = list(getattr(mission, "compounds", []))
+        if not compounds:
+            airport_raised_bunker_x = 1500.0
+            return [airport_raised_bunker_x], int(total_passengers)
+
+        elevated_index = min(range(len(compounds)), key=lambda i: float(compounds[i].pos.y))
+        elevated_center_x = float(compounds[elevated_index].pos.x) + float(compounds[elevated_index].width) * 0.5
+        airport_raised_bunker_x = elevated_center_x
+
+        lower_indices = [i for i in range(len(compounds)) if i != elevated_index]
+        total = max(1, int(total_passengers))
+        if lower_indices:
+            elevated_total = random.randint(4, max(4, total - 2)) if total >= 6 else max(1, total // 2)
+        else:
+            elevated_total = total
+        lower_total = max(0, total - elevated_total)
+
+        # Reset all compound allocations first.
+        for c in compounds:
+            c.hostage_count = 0
+
+        if lower_indices and lower_total > 0:
+            if len(lower_indices) == 1:
+                compounds[lower_indices[0]].hostage_count = lower_total
+            else:
+                first = random.randint(0, lower_total)
+                second = lower_total - first
+                compounds[lower_indices[0]].hostage_count = first
+                compounds[lower_indices[1]].hostage_count = second
+
+        # Elevated compound hostages are tracked by airport_hostage_state, not mission.hostages.
+        compounds[elevated_index].hostage_count = 0
+
+        return [elevated_center_x], elevated_total
 
     if selected_mission_id == "airport":
+        airport_pickup_points, airport_elevated_total = configure_airport_passenger_distribution(airport_total_rescue_target)
         airport_bus_state = create_bus_state(start_x=2200, ground_y=heli_settings.ground_y)
-        airport_hostage_state = create_airport_hostage_state(total_hostages=16, pickup_x=airport_raised_bunker_x)
+        airport_hostage_state = create_airport_hostage_state(
+            total_hostages=airport_elevated_total,
+            pickup_x=airport_raised_bunker_x,
+            pickup_points=airport_pickup_points,
+        )
         airport_enemy_state = create_airport_enemy_state()
         airport_tech_state = create_mission_tech_state()
         mission.mission_tech = airport_tech_state  # Store for rendering
@@ -341,8 +392,13 @@ def run() -> None:
         
         # Initialize mission-specific state
         if selected_mission_id == "airport":
+            airport_pickup_points, airport_elevated_total = configure_airport_passenger_distribution(airport_total_rescue_target)
             airport_bus_state = create_bus_state(start_x=2200, ground_y=heli_settings.ground_y)
-            airport_hostage_state = create_airport_hostage_state(total_hostages=16, pickup_x=airport_raised_bunker_x)
+            airport_hostage_state = create_airport_hostage_state(
+                total_hostages=airport_elevated_total,
+                pickup_x=airport_raised_bunker_x,
+                pickup_points=airport_pickup_points,
+            )
             airport_enemy_state = create_airport_enemy_state()
             airport_tech_state = create_mission_tech_state()
             mission.mission_tech = airport_tech_state  # Store for rendering
@@ -1249,6 +1305,13 @@ def run() -> None:
                     )
                     mission.airport_hostage_state = airport_hostage_state
                     mission.airport_meal_truck_state = airport_meal_truck_state
+
+                    # Airport win condition: lower-level (chopper) + elevated (truck->bus) must total 16 rescued.
+                    if not bool(getattr(mission, "ended", False)):
+                        lower_rescued = int(getattr(getattr(mission, "stats", None), "saved", 0))
+                        elevated_rescued = int(getattr(airport_hostage_state, "rescued_hostages", 0)) if airport_hostage_state is not None else 0
+                        if (lower_rescued + elevated_rescued) >= int(airport_total_rescue_target):
+                            _end_mission(mission, "THE END", "RESCUE SUCCESS", logger)
 
                     # NOTE: Helicopter parking logic removed in redesign
                     # Tech deploys from chopper to meal truck, chopper is free to move after deployment

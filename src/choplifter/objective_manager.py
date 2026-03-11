@@ -3,8 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 import pygame
+
+
+# Top-center objective strip typewriter state.
+_TYPEWRITER_TEXT: str = ""
+_TYPEWRITER_TYPED_LEN: int = 0
+_TYPEWRITER_LAST_TICK_MS: int = 0
+_TYPEWRITER_CHARS_PER_SEC: float = 26.0
 
 
 @dataclass
@@ -12,7 +20,7 @@ class AirportObjectiveState:
 	hostage_deadline_s: float = 120.0
 	deadline_failed: bool = False
 	mission_phase: str = "waiting_for_tech_deploy"
-	status_text: str = "Deploy tech to meal truck"
+	status_text: str = "Deploy mission tech to meal truck"
 
 
 def create_airport_objective_state(*, hostage_deadline_s: float = 120.0) -> AirportObjectiveState:
@@ -83,6 +91,8 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 
 
 def draw_airport_objectives(target: pygame.Surface, objective_state, *, camera_x: float, ground_y: float, bus_state=None) -> None:
+	global _TYPEWRITER_TEXT, _TYPEWRITER_TYPED_LEN, _TYPEWRITER_LAST_TICK_MS
+
 	if objective_state is None:
 		return
 
@@ -100,15 +110,80 @@ def draw_airport_objectives(target: pygame.Surface, objective_state, *, camera_x
 	pygame.draw.circle(target, color, (marker_x, marker_y), 6)
 	pygame.draw.circle(target, (20, 20, 20), (marker_x, marker_y), 6, 1)
 
-	# Compact top-left status panel.
-	panel = pygame.Rect(12, 46, 248, 24)
-	pygame.draw.rect(target, (20, 24, 30), panel, border_radius=5)
-	pygame.draw.rect(target, (70, 80, 95), panel, 1, border_radius=5)
+	# Compact top-center status panel (1980s green-screen terminal style).
+	panel_w = 380
+	panel_h = 28
+	panel_x = max(8, (target.get_width() - panel_w) // 2)
+	panel = pygame.Rect(panel_x, 10, panel_w, panel_h)
+
+	t = pygame.time.get_ticks() / 1000.0
+	flicker = 0.80 + 0.20 * (0.5 + 0.5 * math.sin(t * 18.0))
+
+	# Panel background + old CRT green frame.
+	pygame.draw.rect(target, (8, 16, 8), panel, border_radius=4)
+	border_green = int(90 + 70 * flicker)
+	pygame.draw.rect(target, (24, border_green, 24), panel, 1, border_radius=4)
+
+	# Subtle scan lines for old display feel.
+	for y in range(panel.y + 2, panel.bottom - 1, 3):
+		pygame.draw.line(target, (6, 24, 6), (panel.x + 2, y), (panel.right - 2, y), 1)
+
+	# Clip text rendering inside panel interior.
+	old_clip = target.get_clip()
+	inner = panel.inflate(-8, -8)
+	target.set_clip(inner)
 	try:
-		font = pygame.font.Font(None, 20)
-		text = str(getattr(objective_state, "status_text", "Objective"))
-		surf = font.render(text, True, (236, 236, 236))
-		target.blit(surf, (panel.x + 8, panel.y + 5))
+		font = pygame.font.SysFont("consolas", 18, bold=True)
+		status = str(getattr(objective_state, "status_text", "Objective")).upper().strip()
+		if not status:
+			status = "OBJECTIVE"
+
+		now_ms = pygame.time.get_ticks()
+		if _TYPEWRITER_LAST_TICK_MS <= 0:
+			_TYPEWRITER_LAST_TICK_MS = now_ms
+
+		# Event-driven update: clear previous line and retype only when objective text changes.
+		if status != _TYPEWRITER_TEXT:
+			_TYPEWRITER_TEXT = status
+			_TYPEWRITER_TYPED_LEN = 0
+			_TYPEWRITER_LAST_TICK_MS = now_ms
+
+		dt_s = max(0.0, (now_ms - _TYPEWRITER_LAST_TICK_MS) / 1000.0)
+		if _TYPEWRITER_TYPED_LEN < len(_TYPEWRITER_TEXT):
+			advance = int(dt_s * _TYPEWRITER_CHARS_PER_SEC)
+			if advance > 0:
+				_TYPEWRITER_TYPED_LEN = min(len(_TYPEWRITER_TEXT), _TYPEWRITER_TYPED_LEN + advance)
+				_TYPEWRITER_LAST_TICK_MS = now_ms
+
+		typed_text = _TYPEWRITER_TEXT[:_TYPEWRITER_TYPED_LEN]
+
+		prompt_color = (72, int(208 * flicker), 72)
+		text_color = (92, int(236 * flicker), 92)
+		glow_color = (24, 82, 24)
+
+		# Left DOS prompt anchor.
+		cursor_on = int(t * 2.2) % 2 == 0
+		prompt = font.render(">", True, prompt_color)
+		prompt_x = inner.x + 4
+		prompt_y = inner.centery - prompt.get_height() // 2
+		target.blit(prompt, (prompt_x, prompt_y))
+
+		surf = font.render(typed_text, True, text_color)
+		text_x = prompt_x + prompt.get_width() + 8
+		text_y = inner.centery - surf.get_height() // 2
+
+		# Soft glow pass then bright text pass.
+		glow = font.render(typed_text, True, glow_color)
+		target.blit(glow, (text_x + 1, text_y + 1))
+		target.blit(surf, (text_x, text_y))
+
+		# Blinking cursor follows the typed text like a classic terminal.
+		if cursor_on:
+			cursor_x = text_x + surf.get_width() + 1
+			cursor = font.render("_", True, text_color)
+			target.blit(cursor, (cursor_x, text_y))
 	except Exception:
 		# Keep draw path resilient when font init is unavailable.
 		pass
+	finally:
+		target.set_clip(old_clip)

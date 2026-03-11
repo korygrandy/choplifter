@@ -12,6 +12,11 @@ The current branch includes a major mission/main refactor, weather and FX system
 - Weather/FX systems: rain, fog, dust, lightning, storm clouds.
 - Intro + mission cutscene playback with skip controls.
 - Windows EXE builds (onefile and onedir) via PyInstaller.
+- Airport Special Ops mission supports a split rescue objective with combined completion target:
+  - total target: 16 civilians per mission
+  - lower terminal civilians: helicopter rescue path
+  - elevated jetway civilians: meal-truck to bus transfer path
+  - airport run success is based on combined rescued count across both paths
 
 ## Quick Start (Windows)
 
@@ -56,6 +61,11 @@ Debug-related:
 - `Start`: pause/resume
 - `LB`: debug overlay toggle
 - D-pad: optional discrete input/menu navigation
+
+Airport mission interaction notes:
+- `E` / `A` near meal truck: deploy/return engineer and toggle truck driver mode.
+- `Space` / `X` while driving meal truck: toggle lift extension command.
+- `E` / `A` near bus (when tech is on bus): toggle bus driver mode.
 
 ## Optional Config Files
 

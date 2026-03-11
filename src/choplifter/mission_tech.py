@@ -198,7 +198,8 @@ def update_mission_tech(
 			hostage_state_name = str(getattr(hostage_state, "state", ""))
 			boarded = int(getattr(hostage_state, "boarded_hostages", 0))
 			rescued = int(getattr(hostage_state, "rescued_hostages", 0))
-			if hostage_state_name in ("boarded", "rescued") or boarded > 0 or rescued > 0:
+			total_hostages = int(getattr(hostage_state, "total_hostages", 16))
+			if hostage_state_name in ("boarded", "rescued") or boarded >= total_hostages or rescued >= total_hostages:
 				tech_state.state = "transfer_complete"
 	
 	# --- State: transfer_complete ---

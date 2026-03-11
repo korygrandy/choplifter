@@ -25,6 +25,32 @@ def _assets_ui_dir() -> Path:
     return Path(__file__).resolve().parent.parent / "assets" / "ui"
 
 
+def _create_crt_panel(width: int, height: int, *, panel_color: tuple[int, int, int, int]) -> pygame.Surface:
+    """Create a subtle 80s CRT-looking panel with phosphor tint, flicker, and scan lines."""
+    t = pygame.time.get_ticks() / 1000.0
+    flicker = 0.88 + 0.12 * (0.5 + 0.5 * math.sin(t * 21.0 + width * 0.03))
+
+    br, bg, bb, ba = panel_color
+    panel = pygame.Surface((width, height), pygame.SRCALPHA)
+    panel.fill((br, bg, bb, max(0, min(255, int(ba * flicker)))))
+
+    # Gentle phosphor wash.
+    wash = pygame.Surface((width, height), pygame.SRCALPHA)
+    wash.fill((18, 58, 26, 26))
+    panel.blit(wash, (0, 0))
+
+    # Subtle vertical lines to mimic old terminal glass.
+    for x in range(2, width, 4):
+        pygame.draw.line(panel, (26, 82, 34, 26), (x, 1), (x, height - 2), 1)
+
+    # Faint horizontal scanlines.
+    for y in range(1, height, 3):
+        pygame.draw.line(panel, (10, 28, 14, 16), (1, y), (width - 2, y), 1)
+
+    pygame.draw.rect(panel, (28, 90, 38, 70), (0, 0, width, height), 1, border_radius=2)
+    return panel
+
+
 def _load_hud_icon(name: str, size: int) -> pygame.Surface | None:
     key = (name, size)
     if key in _HUD_ICON_CACHE:
@@ -118,8 +144,7 @@ def _draw_stat_chip(
     chip_w = 198
     chip_h = 34
     icon_size = 18
-    panel = pygame.Surface((chip_w, chip_h), pygame.SRCALPHA)
-    panel.fill(panel_color)
+    panel = _create_crt_panel(chip_w, chip_h, panel_color=panel_color)
 
     ix = 8
     iy = (chip_h - icon_size) // 2
@@ -153,8 +178,7 @@ def _draw_fuel_gauge_chip(
     chip_h = 34
     icon_size = 18
 
-    panel = pygame.Surface((chip_w, chip_h), pygame.SRCALPHA)
-    panel.fill(panel_color)
+    panel = _create_crt_panel(chip_w, chip_h, panel_color=panel_color)
 
     icon = _load_hud_icon("hud_fuel", icon_size)
     ix = 8
@@ -208,8 +232,7 @@ def _draw_health_icons_chip(
     chip_h = 34
     icon_size = 18
 
-    panel = pygame.Surface((chip_w, chip_h), pygame.SRCALPHA)
-    panel.fill(panel_color)
+    panel = _create_crt_panel(chip_w, chip_h, panel_color=panel_color)
 
     icon = _load_hud_icon("hud_health", icon_size)
     ix = 8
@@ -304,8 +327,7 @@ def _draw_lives_strip(screen: pygame.Surface, mission: MissionState, helicopter:
 
     panel_w = 198
     panel_h = 38
-    panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-    panel.fill((0, 0, 0, 152))
+    panel = _create_crt_panel(panel_w, panel_h, panel_color=(0, 0, 0, 152))
 
     icon_w = 60
     gap = 8
@@ -339,6 +361,13 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
 
     font = _HUD_FONT
     small = _HUD_SMALL_FONT
+    hud_t = pygame.time.get_ticks() / 1000.0
+    hud_flicker = 0.90 + 0.10 * (0.5 + 0.5 * math.sin(hud_t * 16.0))
+    hud_text_color = (
+        int(148 * hud_flicker),
+        int(214 * hud_flicker),
+        int(148 * hud_flicker),
+    )
 
     boarding_ux = compute_boarding_ux_status(mission, helicopter)
     boarding_visual = get_boarding_ux_visual(boarding_ux)
@@ -510,7 +539,7 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
             surf = font.render(line, True, boarding_visual.color)
             screen.blit(surf, (x + 20, line_y))
         else:
-            surf = font.render(line, True, (240, 240, 240))
+            surf = font.render(line, True, hud_text_color)
             screen.blit(surf, (x, line_y))
 
 

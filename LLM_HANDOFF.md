@@ -1,6 +1,6 @@
 # LLM Handoff (Current Engineering State)
 
-Last updated: 2026-03-07
+Last updated: 2026-03-10
 
 This file is the canonical engineering handoff for future AI/dev sessions.
 
@@ -8,7 +8,7 @@ This file is the canonical engineering handoff for future AI/dev sessions.
 
 - Runtime: Python 3.13 + Pygame 2.6.1
 - Entry point: `run.py` -> `src.choplifter.main:run`
-- Branch context: refactor follow-up on `feature/missile-flare-diversion` with packaging-doc sync and fresh onefile/onedir rebuild.
+- Branch context: active gameplay + mission iteration on `feature/airport-special-ops-mission`.
 
 ## What Is Implemented
 
@@ -97,11 +97,50 @@ Current script behavior (`scripts/build_windows_exe.ps1`):
 - Run game:
   - `& .\.venv\Scripts\python.exe .\run.py`
 
-## Current Work: Airport Special Ops Mission (In Progress)
+## Current Work: Airport Special Ops Mission
 
 ### Branch: `feature/airport-special-ops-mission`
 
-**Status:** Phase 1 integration complete - redesigning mission flow
+**Status:** Implemented and playable with split rescue paths.
+
+### Current Gameplay Truth (Supersedes Older Notes)
+
+1. Airport mission rescue target is a combined total of `16` civilians per run.
+2. Civilian allocation is randomized on mission start/reset between:
+   - lower terminal compounds (rescued by normal helicopter loop)
+   - elevated jetway compound (rescued by meal-truck -> bus -> LZ transfer)
+3. Lower-level civilians can only be rescued via chopper compound workflow.
+4. Elevated civilians are tracked by airport hostage state and require truck/bus transfer.
+5. Airport mission success is based on combined rescued total reaching `16`.
+6. Generic mission auto-win (`saved >= 20`) is disabled for airport missions.
+7. Passenger presentation has been shifted toward animated stick-figure visuals.
+
+### Player Flow (Current)
+
+1. Deploy Mission Tech from chopper to meal truck near truck position.
+2. Use truck to extract elevated jetway civilians.
+3. Transfer elevated civilians from truck to bus, then escort bus to LZ stop.
+4. Independently open lower compounds and rescue lower-level civilians via chopper.
+5. Mission ends in success when lower + elevated rescued total reaches 16.
+
+### Airport Modules With Active Ownership
+
+- `src/choplifter/main.py`: airport setup/reset distribution logic, mission-end aggregation.
+- `src/choplifter/hostage_logic.py`: elevated-hostage flow, transfer state, airport passenger rendering.
+- `src/choplifter/mission_tech.py`: tech lifecycle and transfer completion gating.
+- `src/choplifter/objective_manager.py`: objective phase labels/status progression.
+- `src/choplifter/render/world.py`: airport scene, terminals, tower, on-foot passenger rendering.
+
+### Verification Commands Used
+
+- Import smoke test:
+  - `./.venv/Scripts/python.exe -c "from src.choplifter.main import run; print('import-ok')"`
+- Run game:
+  - `& .\.venv\Scripts\python.exe .\run.py`
+
+### Notes
+
+- Legacy design notes below are preserved for context, but the "Current Gameplay Truth" section above is authoritative.
 
 **Mission Flow (Redesigned):**
 

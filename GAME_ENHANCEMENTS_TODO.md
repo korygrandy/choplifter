@@ -1,5 +1,20 @@
 # Planned Mission: Airport Special Ops
 
+## Audit Update (2026-03-10)
+
+This file contains legacy planning notes and backlog items. The current implemented airport gameplay is:
+
+- Airport mission uses a combined rescue target of `16` civilians.
+- Civilians are randomized per mission start/reset between:
+  - lower terminals (helicopter rescue flow)
+  - elevated jetway (meal-truck -> bus transfer flow)
+- Lower-level hostages are not part of airport truck/bus transfer.
+- Elevated hostages are not rescued directly by chopper; they require truck/bus pipeline.
+- Airport mission success uses combined lower + elevated rescued totals (not generic saved>=20).
+- Passenger visuals are moving to animated stick-figure representation across mission contexts.
+
+Use `LLM_HANDOFF.md` as the canonical implementation snapshot. Treat the sections below as historical planning/backlog unless explicitly marked complete.
+
 ## Mission Concept
 Escort/Convoy: A ground vehicle (bus) moves across the screen. The player must hover above it, destroying incoming rockets and MRAPs before they reach the convoy. The mission is set at an airport with a crashed plane and jetway, guarded by militants with hostages inside. The bus is a rectangle placeholder until a sprite is available.
 

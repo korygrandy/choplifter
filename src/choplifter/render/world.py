@@ -20,6 +20,7 @@ thermal_mode = False
 
 from ..game_types import EnemyKind, HostageState, ProjectileKind
 from ..barak_mrad import BARAK_LAUNCHER_VISIBLE_STATES
+from ..hostage_logic import _draw_stick_figure_passenger
 from ..mission_helpers import sentiment_band_label, sentiment_contributions
 
 if TYPE_CHECKING:
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
 def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0, enable_particles: bool = True) -> None:
     _draw_base(screen, mission, camera_x=camera_x)
     _draw_compounds(screen, mission, camera_x=camera_x)
+    _draw_airport_lz_tower(screen, mission, camera_x=camera_x)
     _draw_hostages(screen, mission, camera_x=camera_x)
     _draw_engineer_boarding(screen, mission, camera_x=camera_x)
     _draw_engineer_wrench_indicator(screen, mission, camera_x=camera_x)
@@ -87,19 +89,19 @@ def _draw_base(screen: pygame.Surface, mission: MissionState, *, camera_x: float
     t = float(getattr(mission, "elapsed_seconds", 0.0))
     unload_pulse = (math.sin(t * 6.2) + 1.0) * 0.5 if unload_active else 0.0
 
-    # Embassy body.
-    main_color = (176, 182, 194)
-    shadow_color = (120, 126, 140)
-    frame_color = (54, 60, 74)
-    trim_color = (214, 218, 226)
+    # Post Office body (retro utilitarian palette).
+    main_color = (164, 172, 186)
+    shadow_color = (112, 118, 132)
+    frame_color = (44, 50, 64)
+    trim_color = (208, 214, 224)
 
     pygame.draw.rect(screen, main_color, r, border_radius=6)
     pygame.draw.rect(screen, frame_color, r, 2, border_radius=6)
 
-    # Lower facade brick texture (light gray) for depth.
+    # Lower facade block texture for depth.
     brick_band_h = max(10, int(r.height * 0.20))
     brick_band = pygame.Rect(r.x + 2, r.bottom - brick_band_h - 2, r.width - 4, brick_band_h)
-    pygame.draw.rect(screen, (202, 207, 216), brick_band, border_radius=3)
+    pygame.draw.rect(screen, (194, 202, 214), brick_band, border_radius=3)
     brick_h = 4
     brick_w = 10
     mortar = (146, 152, 164)
@@ -152,12 +154,12 @@ def _draw_base(screen: pygame.Surface, mission: MissionState, *, camera_x: float
     entry_h = max(22, int(r.height * 0.44))
     entry = pygame.Rect(r.centerx - entry_w // 2, r.bottom - entry_h - 4, entry_w, entry_h)
 
-    # Embassy placard label.
+    # Post Office placard label.
     placard_w = max(44, int(r.width * 0.42))
     placard_h = max(10, int(r.height * 0.12))
     placard_y = roof.bottom + 4
     placard = pygame.Rect(r.centerx - placard_w // 2, placard_y, placard_w, placard_h)
-    pygame.draw.rect(screen, (36, 42, 56), placard, border_radius=2)
+    pygame.draw.rect(screen, (34, 44, 72), placard, border_radius=2)
     placard_border_boost = int(26 * unload_pulse)
     placard_border = (
         min(255, 184 + placard_border_boost),
@@ -167,10 +169,25 @@ def _draw_base(screen: pygame.Surface, mission: MissionState, *, camera_x: float
     pygame.draw.rect(screen, placard_border, placard, 1, border_radius=2)
     font_size = max(8, min(13, int(placard_h * 0.8)))
     placard_font = pygame.font.SysFont("consolas", font_size, bold=True)
-    placard_text = placard_font.render("US EMBASSY", True, (232, 236, 244))
+    placard_text = placard_font.render("US POST OFFICE", True, (232, 236, 244))
     text_x = placard.centerx - placard_text.get_width() // 2
     text_y = placard.centery - placard_text.get_height() // 2
     screen.blit(placard_text, (text_x, text_y))
+
+    # Tiny pixel eagle/mail emblem to reinforce the postal identity.
+    emblem = pygame.Rect(placard.x + 6, placard.y + 2, 12, max(6, placard.height - 4))
+    pygame.draw.rect(screen, (228, 232, 240), emblem, border_radius=1)
+    pygame.draw.rect(screen, (28, 34, 46), emblem, 1, border_radius=1)
+    # Stylized eagle wings (blue chevrons) + mail bar (red stripe).
+    wing_y = emblem.y + 2
+    pygame.draw.line(screen, (54, 94, 176), (emblem.x + 1, wing_y + 1), (emblem.centerx, wing_y + 3), 1)
+    pygame.draw.line(screen, (54, 94, 176), (emblem.right - 2, wing_y + 1), (emblem.centerx, wing_y + 3), 1)
+    pygame.draw.line(screen, (188, 48, 58), (emblem.x + 2, emblem.bottom - 3), (emblem.right - 3, emblem.bottom - 3), 1)
+
+    # Red/blue postal accent stripes.
+    stripe_y = placard.bottom + 4
+    pygame.draw.rect(screen, (184, 36, 42), pygame.Rect(r.x + 8, stripe_y, r.width - 16, 3), border_radius=1)
+    pygame.draw.rect(screen, (52, 86, 164), pygame.Rect(r.x + 8, stripe_y + 4, r.width - 16, 3), border_radius=1)
 
     pygame.draw.rect(screen, (58, 68, 84), entry, border_radius=3)
     pygame.draw.rect(screen, (22, 26, 34), entry, 1, border_radius=3)
@@ -184,6 +201,16 @@ def _draw_base(screen: pygame.Surface, mission: MissionState, *, camera_x: float
     step = pygame.Rect(entry.x - 8, entry.bottom, entry.width + 16, step_h)
     pygame.draw.rect(screen, (132, 138, 150), step, border_radius=2)
     pygame.draw.rect(screen, frame_color, step, 1, border_radius=2)
+
+    # Painted postal LZ apron marking in front of the post office entry.
+    apron_mark = pygame.Rect(entry.centerx - 38, r.bottom + 2, 76, 10)
+    pygame.draw.rect(screen, (176, 168, 132), apron_mark, border_radius=2)
+    pygame.draw.rect(screen, (56, 62, 72), apron_mark, 1, border_radius=2)
+    inner = apron_mark.inflate(-10, -4)
+    pygame.draw.rect(screen, (40, 66, 118), inner, border_radius=1)
+    lz_font = pygame.font.SysFont("consolas", 9, bold=True)
+    lz_text = lz_font.render("LZ", True, (238, 220, 132))
+    screen.blit(lz_text, (inner.centerx - lz_text.get_width() // 2, inner.centery - lz_text.get_height() // 2))
 
     # Windows.
     win_w = max(9, int(r.width * 0.11))
@@ -203,6 +230,29 @@ def _draw_base(screen: pygame.Surface, mission: MissionState, *, camera_x: float
         pygame.draw.rect(screen, window_color, right, border_radius=2)
         pygame.draw.rect(screen, frame_color, left, 1, border_radius=2)
         pygame.draw.rect(screen, frame_color, right, 1, border_radius=2)
+
+    # Loading-bay roller door and stencil to match the smuggled manifest lore.
+    bay_w = max(24, int(r.width * 0.26))
+    bay_h = max(14, int(r.height * 0.24))
+    bay = pygame.Rect(r.right - bay_w - 8, r.bottom - bay_h - 4, bay_w, bay_h)
+    pygame.draw.rect(screen, (126, 132, 146), bay, border_radius=2)
+    pygame.draw.rect(screen, (34, 38, 48), bay, 1, border_radius=2)
+    for y in range(bay.y + 3, bay.bottom, 3):
+        pygame.draw.line(screen, (104, 110, 124), (bay.x + 2, y), (bay.right - 2, y), 1)
+
+    tiny_font = pygame.font.SysFont("consolas", max(8, int(font_size * 0.75)), bold=True)
+    lore_text = tiny_font.render("MAIL SORTING EQUIP", True, (196, 146, 92))
+    lore_x = entry.centerx - lore_text.get_width() // 2
+    lore_y = max(r.y + 4, entry.y - lore_text.get_height() - 5)
+    screen.blit(lore_text, (lore_x, lore_y))
+
+    # Two small mail crates near the entry.
+    crate_a = pygame.Rect(entry.x - 18, entry.bottom - 8, 10, 8)
+    crate_b = pygame.Rect(entry.right + 8, entry.bottom - 8, 10, 8)
+    for crate in (crate_a, crate_b):
+        pygame.draw.rect(screen, (142, 112, 74), crate, border_radius=1)
+        pygame.draw.rect(screen, (58, 42, 28), crate, 1, border_radius=1)
+        pygame.draw.line(screen, (98, 74, 48), (crate.x + 2, crate.y + 2), (crate.right - 2, crate.bottom - 2), 1)
 
     # Animated red/white/blue flag.
     pole_x = r.right - 20
@@ -233,8 +283,227 @@ def _draw_base(screen: pygame.Surface, mission: MissionState, *, camera_x: float
 
 
 def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    is_airport_special = mission_id in ("airport", "airport_special_ops")
+    airport_hostage_state = getattr(mission, "airport_hostage_state", None)
+    airport_meal_truck_state = getattr(mission, "airport_meal_truck_state", None)
+    airport_hostage_state_name = str(getattr(airport_hostage_state, "state", "")) if airport_hostage_state is not None else ""
+    pickup_x = float(getattr(airport_hostage_state, "pickup_x", 1500.0)) if airport_hostage_state is not None else 1500.0
+    terminal_pickup_xs = list(getattr(airport_hostage_state, "terminal_pickup_xs", ()) or ()) if airport_hostage_state is not None else []
+    terminal_remaining = list(getattr(airport_hostage_state, "terminal_remaining", []) or []) if airport_hostage_state is not None else []
+    loading_terminal_index = int(getattr(airport_hostage_state, "loading_terminal_index", -1)) if airport_hostage_state is not None else -1
+    truck_load_base = int(getattr(airport_hostage_state, "truck_load_base", 0)) if airport_hostage_state is not None else 0
+    loaded_now = int(getattr(airport_hostage_state, "meal_truck_loaded_hostages", 0)) if airport_hostage_state is not None else 0
+    loading_total = int(getattr(airport_hostage_state, "loading_terminal_initial_count", 0)) if airport_hostage_state is not None else 0
+    loading_left = max(0, loading_total - max(0, loaded_now - truck_load_base))
+    t = float(getattr(mission, "elapsed_seconds", 0.0))
+    elevated_y = min((float(c.pos.y) for c in mission.compounds), default=99999.0)
+
+    def _terminal_index_for_compound(compound_center_x: float, compound_width: float) -> int:
+        if terminal_pickup_xs:
+            best_i = -1
+            best_d = 1e9
+            for i, tx in enumerate(terminal_pickup_xs):
+                d = abs(float(tx) - compound_center_x)
+                if d < best_d:
+                    best_d = d
+                    best_i = i
+            if best_i >= 0 and best_d <= max(90.0, compound_width * 0.9):
+                return best_i
+        if abs(compound_center_x - pickup_x) <= max(80.0, compound_width * 0.65):
+            return 0
+        return -1
+
     for c in mission.compounds:
         r = pygame.Rect(int(c.pos.x - camera_x), int(c.pos.y), int(c.width), int(c.height))
+
+        if is_airport_special:
+            compound_center_x = float(c.pos.x) + float(c.width) * 0.5
+            terminal_index = _terminal_index_for_compound(compound_center_x, float(c.width))
+            terminal_remaining_count = 0
+            if 0 <= terminal_index < len(terminal_remaining):
+                terminal_remaining_count = max(0, int(terminal_remaining[terminal_index]))
+            if airport_hostage_state_name == "truck_loading" and terminal_index == loading_terminal_index:
+                terminal_remaining_count = max(terminal_remaining_count, loading_left)
+            is_loading_terminal = terminal_index >= 0 and terminal_index == loading_terminal_index
+            boarding_active = is_loading_terminal and airport_hostage_state_name == "truck_loading"
+            passengers_inside = terminal_remaining_count > 0
+            is_elevated_terminal = abs(float(c.pos.y) - elevated_y) <= 1.0
+
+            # Elevated jetway set piece: smoke plume behind roof + intense side flames.
+            if is_elevated_terminal:
+                smoke_layer = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
+                plume_x = r.x + int(r.width * 0.72)
+                plume_base_y = r.y + 4
+                for i in range(7):
+                    phase = t * (0.85 + i * 0.06) + i * 0.55
+                    drift_x = int(math.sin(phase) * (4 + i))
+                    rise = int((t * 26 + i * 18) % 96)
+                    puff_y = plume_base_y - rise
+                    puff_r = 8 + i * 2
+                    alpha = max(26, 120 - i * 12)
+                    shade = 96 + i * 8
+                    pygame.draw.circle(
+                        smoke_layer,
+                        (shade, shade, shade + 6, alpha),
+                        (plume_x + drift_x, puff_y),
+                        puff_r,
+                    )
+                screen.blit(smoke_layer, (0, 0))
+
+                flame_core = 0.5 + 0.5 * math.sin(t * 13.0)
+                flame_h = 20 + int(flame_core * 12)
+                flame_w = 14 + int(flame_core * 6)
+                flame_origin_x = r.right - 4
+                flame_origin_y = r.bottom - 9
+
+                outer = [
+                    (flame_origin_x, flame_origin_y),
+                    (flame_origin_x + flame_w, flame_origin_y - flame_h // 2),
+                    (flame_origin_x, flame_origin_y - flame_h),
+                    (flame_origin_x - 3, flame_origin_y - flame_h // 2),
+                ]
+                inner = [
+                    (flame_origin_x + 1, flame_origin_y - 2),
+                    (flame_origin_x + flame_w // 2, flame_origin_y - flame_h // 2),
+                    (flame_origin_x + 1, flame_origin_y - flame_h + 4),
+                    (flame_origin_x - 1, flame_origin_y - flame_h // 2),
+                ]
+                ember = [
+                    (flame_origin_x + 1, flame_origin_y - 4),
+                    (flame_origin_x + max(2, flame_w // 3), flame_origin_y - flame_h // 2),
+                    (flame_origin_x + 1, flame_origin_y - flame_h + 8),
+                ]
+                pygame.draw.polygon(screen, (255, 132, 28), outer)
+                pygame.draw.polygon(screen, (255, 202, 62), inner)
+                pygame.draw.polygon(screen, (255, 238, 140), ember)
+
+            # Light tan jetway body.
+            body_color = (212, 198, 172) if not c.is_open else (170, 156, 132)
+            edge_color = (78, 72, 60)
+            roof_color = (194, 184, 164)
+            pygame.draw.rect(screen, body_color, r, border_radius=2)
+            pygame.draw.rect(screen, edge_color, r, 2, border_radius=2)
+
+            # Jetway roof cap.
+            roof_h = max(6, int(c.height * 0.16))
+            roof = pygame.Rect(r.x - 3, r.y - roof_h + 2, r.width + 6, roof_h)
+            pygame.draw.rect(screen, roof_color, roof, border_radius=3)
+            pygame.draw.rect(screen, (96, 88, 72), roof, 1, border_radius=3)
+
+            # Side panel seams.
+            seam_color = (172, 158, 132)
+            for i in range(1, 4):
+                sx = r.x + int((r.width / 4.0) * i)
+                pygame.draw.line(screen, seam_color, (sx, r.y + 4), (sx, r.bottom - 4), 1)
+
+            # French door pair near lower center with long vertical windows.
+            door_h = max(18, int(r.height * 0.38))
+            door_w_total = max(26, int(r.width * 0.32))
+            door_y = r.bottom - door_h - 3
+            door_x = r.centerx - door_w_total // 2
+            door_area = pygame.Rect(door_x, door_y, door_w_total, door_h)
+            leaf_w = max(10, door_w_total // 2 - 1)
+
+            # Doors animate in explicit cycles: open -> release small group -> close.
+            if boarding_active and airport_hostage_state is not None:
+                rate = max(0.2, float(getattr(airport_hostage_state, "transfer_rate_s", 0.5)))
+                started = float(getattr(airport_hostage_state, "boarding_started_s", t))
+                elapsed = max(0.0, t - started)
+                door_cycle_s = max(0.55, rate * 2.4)
+                cycle_phase = (elapsed % door_cycle_s) / door_cycle_s
+                if cycle_phase < 0.20:
+                    door_open_t = cycle_phase / 0.20
+                elif cycle_phase < 0.62:
+                    door_open_t = 1.0
+                elif cycle_phase < 0.82:
+                    door_open_t = 1.0 - ((cycle_phase - 0.62) / 0.20)
+                else:
+                    door_open_t = 0.0
+            else:
+                door_open_t = 0.0
+            slide_px = int(door_open_t * 6.0)
+
+            left_door = pygame.Rect(door_area.x - slide_px, door_area.y, leaf_w, door_h)
+            right_door = pygame.Rect(door_area.centerx + slide_px, door_area.y, leaf_w, door_h)
+            door_color = (164, 154, 132)
+            pygame.draw.rect(screen, door_color, left_door, border_radius=1)
+            pygame.draw.rect(screen, door_color, right_door, border_radius=1)
+            pygame.draw.rect(screen, edge_color, left_door, 1, border_radius=1)
+            pygame.draw.rect(screen, edge_color, right_door, 1, border_radius=1)
+
+            # Window colors shift when passengers are still in the terminal.
+            if passengers_inside:
+                glow = int((math.sin(t * 5.0) + 1.0) * 22)
+                win_fill = (96 + glow, 176 + glow // 2, 220)
+            else:
+                win_fill = (92, 128, 152)
+
+            # Long windows on each french door leaf.
+            left_glass = left_door.inflate(-6, -4)
+            right_glass = right_door.inflate(-6, -4)
+            pygame.draw.rect(screen, win_fill, left_glass, border_radius=1)
+            pygame.draw.rect(screen, win_fill, right_glass, border_radius=1)
+            pygame.draw.rect(screen, (34, 42, 52), left_glass, 1, border_radius=1)
+            pygame.draw.rect(screen, (34, 42, 52), right_glass, 1, border_radius=1)
+
+            # Additional right-side window beside the french doors.
+            side_window = pygame.Rect(door_area.right + 4, door_area.y + 1, max(8, int(r.width * 0.11)), door_h - 2)
+            side_window.clamp_ip(pygame.Rect(r.x + 2, r.y + 2, r.width - 4, r.height - 4))
+            pygame.draw.rect(screen, win_fill, side_window, border_radius=1)
+            pygame.draw.rect(screen, (34, 42, 52), side_window, 1, border_radius=1)
+
+            # During elevated boarding, release passengers only through open jetway doors.
+            if boarding_active and airport_hostage_state is not None:
+                rate = max(0.2, float(getattr(airport_hostage_state, "transfer_rate_s", 0.5)))
+                started = float(getattr(airport_hostage_state, "boarding_started_s", t))
+                elapsed = max(0.0, t - started)
+                door_cycle_s = max(0.55, rate * 2.4)
+                cycle_idx = int(elapsed / door_cycle_s)
+                cycle_phase = (elapsed % door_cycle_s) / door_cycle_s
+
+                facing_right = bool(getattr(airport_meal_truck_state, "facing_right", True))
+                move_dir = 1 if facing_right else -1
+                start_x = door_area.centerx
+                front_x = start_x + move_dir * 22
+                group_size = min(max(1, terminal_remaining_count), 1 + ((cycle_idx + int(compound_center_x)) % 3))
+
+                if door_open_t > 0.05:
+                    for i in range(group_size):
+                        local_phase = (cycle_phase - 0.22 - i * 0.14) / 0.36
+                        if local_phase < 0.0 or local_phase > 1.0:
+                            continue
+
+                        px = int(start_x + move_dir * (front_x - start_x) * local_phase)
+                        py = door_area.bottom - 1 - (i % 2)
+
+                        # Tiny passenger silhouette (head + torso + legs).
+                        pygame.draw.circle(screen, (224, 206, 176), (px, py - 10), 2)
+                        pygame.draw.line(screen, (236, 222, 196), (px, py - 8), (px, py - 3), 2)
+                        leg_swing = -1 if math.sin(t * 10.0 + i * 0.8) > 0 else 1
+                        pygame.draw.line(screen, (236, 222, 196), (px, py - 3), (px - leg_swing, py), 1)
+                        pygame.draw.line(screen, (236, 222, 196), (px, py - 3), (px + leg_swing, py), 1)
+                        pygame.draw.circle(screen, (30, 34, 40), (px, py - 10), 2, 1)
+
+                # After the burst exits, keep a tiny group visible in front of the compound.
+                if cycle_phase >= 0.60 and cycle_phase <= 0.96:
+                    settled = min(2, group_size)
+                    for i in range(settled):
+                        px = int(front_x + move_dir * i * 7)
+                        py = door_area.bottom - 1 - (i % 2)
+                        pygame.draw.circle(screen, (224, 206, 176), (px, py - 10), 2)
+                        pygame.draw.line(screen, (236, 222, 196), (px, py - 8), (px, py - 3), 2)
+                        pygame.draw.line(screen, (236, 222, 196), (px, py - 3), (px - 1, py), 1)
+                        pygame.draw.line(screen, (236, 222, 196), (px, py - 3), (px + 1, py), 1)
+                        pygame.draw.circle(screen, (30, 34, 40), (px, py - 10), 2, 1)
+
+            # Preserve destroyed/open gameplay readability.
+            if c.is_open:
+                breach = pygame.Rect(r.centerx - 14, r.bottom - 16, 28, 16)
+                pygame.draw.rect(screen, (52, 48, 42), breach)
+                pygame.draw.rect(screen, (92, 84, 70), breach, 1)
+            continue
+
         color = (150, 112, 68) if not c.is_open else (118, 92, 58)
 
         # Main bunker body.
@@ -269,9 +538,117 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
             pygame.draw.rect(screen, (70, 70, 70), gap, 1)
 
 
+def _draw_airport_lz_tower(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+    bg_asset = str(getattr(mission, "bg_asset", "")).lower()
+    if "airport" not in bg_asset and "mission2" not in bg_asset:
+        return
+
+    # Keep the tower in the bus unload LZ neighborhood (bus stop_x is ~500).
+    tower_world_x = 620
+    compounds = list(getattr(mission, "compounds", []))
+    if compounds:
+        ground_y = int(max(float(c.pos.y) + float(c.height) for c in compounds))
+    else:
+        ground_y = int(float(getattr(mission.base.pos, "y", 400.0)) + float(getattr(mission.base, "height", 44.0)))
+
+    t = float(getattr(mission, "elapsed_seconds", 0.0))
+    x = int(tower_world_x - camera_x)
+
+    # Tower footing and apron pad.
+    apron = pygame.Rect(x - 56, ground_y - 7, 112, 7)
+    pygame.draw.rect(screen, (108, 112, 122), apron, border_radius=2)
+    pygame.draw.rect(screen, (36, 40, 48), apron, 1, border_radius=2)
+
+    footing = pygame.Rect(x - 24, ground_y - 18, 48, 18)
+    pygame.draw.rect(screen, (130, 136, 148), footing, border_radius=3)
+    pygame.draw.rect(screen, (38, 42, 50), footing, 1, border_radius=3)
+
+    # Adjacent low terminal block aligned so the bus stops in front of its facade.
+    terminal = pygame.Rect(x - 182, ground_y - 34, 132, 28)
+    pygame.draw.rect(screen, (142, 148, 160), terminal, border_radius=3)
+    pygame.draw.rect(screen, (36, 40, 48), terminal, 1, border_radius=3)
+
+    terminal_roof = pygame.Rect(terminal.x - 4, terminal.y - 7, terminal.width + 8, 7)
+    pygame.draw.rect(screen, (124, 130, 142), terminal_roof, border_radius=2)
+    pygame.draw.rect(screen, (34, 38, 46), terminal_roof, 1, border_radius=2)
+
+    for i in range(6):
+        win = pygame.Rect(terminal.x + 8 + i * 14, terminal.y + 8, 10, 10)
+        pygame.draw.rect(screen, (108, 146, 184), win, border_radius=1)
+        pygame.draw.rect(screen, (24, 28, 34), win, 1, border_radius=1)
+
+    # Main tapered shaft.
+    shaft_bottom_y = ground_y - 18
+    shaft_top_y = shaft_bottom_y - 128
+    shaft_points = [
+        (x - 14, shaft_bottom_y),
+        (x + 14, shaft_bottom_y),
+        (x + 7, shaft_top_y),
+        (x - 7, shaft_top_y),
+    ]
+    pygame.draw.polygon(screen, (166, 172, 186), shaft_points)
+    pygame.draw.polygon(screen, (42, 46, 54), shaft_points, 2)
+
+    # Vertical panel seams to avoid a flat silhouette.
+    pygame.draw.line(screen, (144, 150, 164), (x - 5, shaft_bottom_y - 2), (x - 2, shaft_top_y + 4), 1)
+    pygame.draw.line(screen, (144, 150, 164), (x + 5, shaft_bottom_y - 2), (x + 2, shaft_top_y + 4), 1)
+
+    # Mid-ring platform and neck (Mehrabad-like broad cabin support).
+    ring = pygame.Rect(x - 26, shaft_top_y - 8, 52, 9)
+    pygame.draw.rect(screen, (106, 114, 126), ring, border_radius=2)
+    pygame.draw.rect(screen, (36, 40, 48), ring, 1, border_radius=2)
+
+    neck = pygame.Rect(x - 12, shaft_top_y - 24, 24, 16)
+    pygame.draw.rect(screen, (148, 156, 170), neck, border_radius=2)
+    pygame.draw.rect(screen, (36, 40, 48), neck, 1, border_radius=2)
+
+    # Glazed control cab in an upside-down trapezoid to match Tehran tower profile.
+    cab_top_y = shaft_top_y - 46
+    cab_bottom_y = shaft_top_y - 16
+    cab_points = [
+        (x - 44, cab_top_y),
+        (x + 44, cab_top_y),
+        (x + 30, cab_bottom_y),
+        (x - 30, cab_bottom_y),
+    ]
+    pygame.draw.polygon(screen, (158, 168, 184), cab_points)
+    pygame.draw.polygon(screen, (30, 34, 42), cab_points, 2)
+
+    # Cabin glazing band.
+    window_color = (102, 146, 186)
+    win_y = cab_top_y + 10
+    for i in range(7):
+        wx = x - 32 + i * 10
+        win = pygame.Rect(wx, win_y, 8, 9)
+        pygame.draw.rect(screen, window_color, win, border_radius=1)
+        pygame.draw.rect(screen, (26, 30, 36), win, 1, border_radius=1)
+
+    # Roof cap plus a small radar deck.
+    roof = pygame.Rect(x - 26, cab_top_y - 8, 52, 8)
+    pygame.draw.rect(screen, (132, 138, 152), roof, border_radius=2)
+    pygame.draw.rect(screen, (36, 40, 48), roof, 1, border_radius=2)
+
+    radar_deck = pygame.Rect(x - 16, roof.y - 5, 32, 5)
+    pygame.draw.rect(screen, (118, 124, 138), radar_deck, border_radius=2)
+    pygame.draw.rect(screen, (34, 38, 46), radar_deck, 1, border_radius=2)
+
+    # Beacon mast and blink light.
+    mast_top_y = roof.y - 26
+    pygame.draw.line(screen, (214, 216, 224), (x, roof.y), (x, mast_top_y), 2)
+    blink = (math.sin(t * 6.0) + 1.0) * 0.5
+    beacon_color = (255, int(70 + 150 * blink), int(70 + 120 * blink))
+    pygame.draw.circle(screen, beacon_color, (x, mast_top_y), 3)
+    pygame.draw.circle(screen, (40, 20, 20), (x, mast_top_y), 3, 1)
+
+    # Ground shadow helps anchor the tall object in side-view.
+    shadow = pygame.Rect(x - 22, ground_y - 3, 44, 3)
+    pygame.draw.ellipse(screen, (28, 30, 36), shadow)
+
+
 def _draw_hostages(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
     vip_positions: list[tuple[int, int]] = []
-    for h in mission.hostages:
+    mission_time = float(getattr(mission, "elapsed_seconds", 0.0))
+    for i, h in enumerate(mission.hostages):
         if h.state in (HostageState.IDLE, HostageState.BOARDED):
             continue
 
@@ -284,15 +661,8 @@ def _draw_hostages(screen: pygame.Surface, mission: MissionState, *, camera_x: f
             pygame.draw.circle(screen, color, (x, y), 4)
             continue
 
-        # Keep VIP marker a clearly filled purple dot that stays readable under effects.
-        if getattr(h, "is_vip", False):
-            body_color = (170, 65, 220)
-            pygame.draw.circle(screen, body_color, (x, y), 6)
-            pygame.draw.circle(screen, (25, 25, 25), (x, y), 6, 1)
-        else:
-            body_color = (245, 235, 210)  # Beige
-            pygame.draw.circle(screen, body_color, (x, y), 5)
-            pygame.draw.circle(screen, (25, 25, 25), (x, y), 5, 1)
+        # All active passengers use the same animated stick-figure language.
+        _draw_stick_figure_passenger(screen, x, y + 4, passenger_index=i, mission_time=mission_time)
 
         # Tiny accent for EXITING so it's visually distinct.
         if h.state is HostageState.EXITING:

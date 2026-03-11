@@ -8,7 +8,12 @@
 - Intro + mission cutscenes are integrated and skippable.
 - Mission and main loop refactor work has been completed into modular app/mission layers.
 - Input lock on mission end is implemented.
-- Current engineering focus includes package-size reduction for Windows onefile distribution.
+- Airport Special Ops mission is implemented with split rescue paths:
+  - lower-level terminal hostages are rescued by chopper flow
+  - elevated jetway hostages are rescued via meal-truck + bus transfer
+- Airport mission rescue target is a combined total of 16 per run, with randomized lower/elevated distribution at mission start.
+- Airport mission success uses airport-specific aggregation logic instead of global generic rescue threshold.
+- Current engineering focus includes gameplay polish and package-size reduction for Windows onefile distribution.
 
 See `LLM_HANDOFF.md` for current architecture and refactor ownership map.
 

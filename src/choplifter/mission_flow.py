@@ -82,5 +82,7 @@ def update_mission(
 
     _log_progress_if_changed(mission, logger)
 
-    if mission.stats.saved >= 20:
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    is_airport_mission = mission_id in ("airport", "airport_special_ops", "mission2", "m2")
+    if (not is_airport_mission) and mission.stats.saved >= 20:
         end_mission(mission, "THE END", "RESCUE SUCCESS", logger)
