@@ -164,6 +164,21 @@ def draw_helicopter_damage_fx(
     _draw_fx_particles(screen, list(getattr(fx, "particles", [])), camera_x=camera_x)
 
 
+def draw_enemy_damage_fx(
+    screen: pygame.Surface,
+    mission: MissionState,
+    *,
+    camera_x: float = 0.0,
+    enable_particles: bool = True,
+) -> None:
+    if not enable_particles:
+        return
+    fx = getattr(mission, "enemy_damage_fx", None)
+    if fx is None:
+        return
+    _draw_fx_particles(screen, list(getattr(fx, "particles", [])), camera_x=camera_x)
+
+
 def draw_impact_sparks(screen: pygame.Surface, mission: MissionState, *, camera_x: float = 0.0, enable_particles: bool = True) -> None:
     if not enable_particles:
         return

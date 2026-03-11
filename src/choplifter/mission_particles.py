@@ -17,5 +17,6 @@ def _update_world_particles(
     mission.jet_trails.update(dt)
     mission.dust_storm.update(dt, heli_pos=helicopter.pos, heli_vel=helicopter.vel, ground_y=heli.ground_y)
     mission.heli_damage_fx.update(dt, heli_pos=helicopter.pos, heli_vel=helicopter.vel, damage=helicopter.damage)
+    mission.enemy_damage_fx.update(dt, enemies=mission.enemies, tank_health=mission.tuning.tank_health)
     mission.explosions.update(dt)
     mission.flares.update(dt)

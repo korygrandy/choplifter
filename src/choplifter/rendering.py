@@ -17,7 +17,7 @@ from .render.overlays import (
     draw_mission_select_overlay,
     draw_skip_overlay,
 )
-from .render.particles import draw_explosion_particles, draw_flares, draw_helicopter_damage_fx, draw_impact_sparks
+from .render.particles import draw_enemy_damage_fx, draw_explosion_particles, draw_flares, draw_helicopter_damage_fx, draw_impact_sparks
 from .render.world import draw_mission
 
 
@@ -25,6 +25,7 @@ __all__ = [
     "bg_asset_exists",
     "draw_chopper_select_overlay",
     "draw_damage_flash",
+    "draw_enemy_damage_fx",
     "draw_explosion_particles",
     "draw_flares",
     "draw_ground",

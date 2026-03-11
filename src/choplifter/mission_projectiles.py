@@ -495,7 +495,7 @@ def _update_projectiles(
             for e in mission.enemies:
                 if not e.alive:
                     continue
-                if _projectile_hits_enemy(p, e, heli, mission.tuning):
+                if _projectile_hits_enemy(p, e, heli, mission.tuning, previous_pos=prev_pos):
                     if p.kind is ProjectileKind.BULLET and e.kind in (EnemyKind.TANK, EnemyKind.BARAK_MRAD):
                         sparks = getattr(mission, "impact_sparks", None)
                         if sparks is not None and hasattr(sparks, "emit_hit"):
@@ -507,10 +507,20 @@ def _update_projectiles(
                                 )
                             except Exception:
                                 pass
+                    enemy_damage_fx = getattr(mission, "enemy_damage_fx", None)
                     if p.kind is ProjectileKind.BULLET:
                         e.health -= 10.0
                     else:
                         e.health -= 40.0
+                    if e.kind is EnemyKind.BARAK_MRAD and e.health > 0.0 and enemy_damage_fx is not None and hasattr(enemy_damage_fx, "emit_hit_puff"):
+                        try:
+                            enemy_damage_fx.emit_hit_puff(
+                                Vec2(float(p.pos.x), float(p.pos.y)),
+                                incoming_vel=Vec2(float(p.vel.x), float(p.vel.y)),
+                                strength=0.55 if p.kind is ProjectileKind.BULLET else 0.78,
+                            )
+                        except Exception:
+                            pass
                     if e.health <= 0.0:
                         e.alive = False
                         mission.stats.enemies_destroyed += 1
@@ -573,8 +583,8 @@ def _update_projectiles(
                         bus_w = float(getattr(bus_state, "width", 64.0)) if bus_state is not None else 64.0
                         hit_radius = max(24.0, bus_w * 0.35)
                         barak_damage_target = "bus"
-                elif not diverted_collision:
-                    # While flying the helicopter, center hits on the airframe for overlap reliability.
+                elif (not diverted_collision) and (not bool(helicopter.grounded)):
+                    # While airborne, center hits on the airframe for overlap reliability.
                     barak_target = Vec2(float(helicopter.pos.x), float(helicopter.pos.y))
                     hit_radius = max(hit_radius, 28.0)
             else:
@@ -645,7 +655,7 @@ def _update_projectiles(
                     if bus_target is not None:
                         barak_target = bus_target
                         barak_damage_target = "bus"
-                elif not diverted_collision:
+                elif (not diverted_collision) and (not bool(helicopter.grounded)):
                     barak_target = Vec2(float(helicopter.pos.x), float(helicopter.pos.y))
                 near_ground_radius = 22.0 if diverted_collision else 36.0
                 near_ground_impact = _hits_circle_or_swept(

@@ -26,6 +26,7 @@ from .rendering import (
     bg_asset_exists,
     draw_chopper_select_overlay,
     draw_damage_flash,
+    draw_enemy_damage_fx,
     draw_explosion_particles,
     draw_flares,
     draw_helicopter_damage_fx,
@@ -1490,6 +1491,7 @@ def run() -> None:
             
             draw_flares(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
             draw_explosion_particles(target, mission, camera_x=camera_x)
+            draw_enemy_damage_fx(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
             draw_helicopter_damage_fx(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
             draw_helicopter(target, helicopter, camera_x=camera_x, boarded=boarded_count(mission))
             draw_impact_sparks(target, mission, camera_x=camera_x, enable_particles=particles_enabled)

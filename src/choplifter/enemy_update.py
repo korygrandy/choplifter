@@ -45,6 +45,18 @@ def _barak_next_reload_seconds(tuning: object) -> float:
     return max(0.25, random.uniform(lo, hi))
 
 
+def _tank_turret_muzzle_pos(mission: MissionState, e: Enemy) -> Vec2:
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    is_airport = mission_id in ("airport", "airport_special_ops")
+    turret_length = 48.0 if is_airport else 24.0
+    turret_base = Vec2(float(e.pos.x), float(e.pos.y) - 18.0)
+    angle = float(getattr(e, "turret_angle", 0.0))
+    return Vec2(
+        turret_base.x + turret_length * math.cos(angle),
+        turret_base.y + turret_length * math.sin(angle),
+    )
+
+
 def _update_enemies(
     mission: MissionState,
     helicopter: Helicopter,
@@ -351,9 +363,10 @@ def _update_enemies(
                     e.cooldown = clamp(tank_cd, tuning.tank_fire_min_cooldown_s, tuning.tank_fire_max_cooldown_s)
                     e.muzzle_flash_seconds = max(0.04, float(tuning.tank_muzzle_flash_s))
                     e.fire_tell_armed = False
+                    muzzle_pos = _tank_turret_muzzle_pos(mission, e)
                     spawn_enemy_bullet_toward(
                         mission,
-                        e.pos,
+                        muzzle_pos,
                         helicopter.pos,
                         kind=ProjectileKind.ENEMY_ARTILLERY,
                         source=EnemyKind.TANK,

@@ -66,6 +66,7 @@ class Enemy:
     pos: Vec2
     vel: Vec2
     health: float
+    max_health: float = 0.0
     cooldown: float = 0.0
     ttl: float = 999.0
     alive: bool = True

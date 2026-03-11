@@ -19,6 +19,14 @@ class _DummySparks:
         self.calls += 1
 
 
+class _DummyEnemyDamageFx:
+    def __init__(self) -> None:
+        self.hit_puff_calls = 0
+
+    def emit_hit_puff(self, *_args, **_kwargs) -> None:
+        self.hit_puff_calls += 1
+
+
 class ProjectileHitSparkTests(unittest.TestCase):
     def _base_mission(self, *, projectile: Projectile, enemy: Enemy, sparks: _DummySparks) -> SimpleNamespace:
         return SimpleNamespace(
@@ -37,6 +45,7 @@ class ProjectileHitSparkTests(unittest.TestCase):
                 emit_fire_plume=lambda *_a, **_k: None,
                 emit_explosion=lambda *_a, **_k: None,
             ),
+            enemy_damage_fx=_DummyEnemyDamageFx(),
             barak_suppressed=False,
             elapsed_seconds=0.0,
         )
@@ -61,6 +70,7 @@ class ProjectileHitSparkTests(unittest.TestCase):
             )
 
         self.assertEqual(sparks.calls, 1)
+        self.assertEqual(mission.enemy_damage_fx.hit_puff_calls, 0)
 
     def test_bullet_hit_on_barak_emits_sparks(self) -> None:
         p = Projectile(kind=ProjectileKind.BULLET, pos=Vec2(140.0, 100.0), vel=Vec2(220.0, 0.0), ttl=1.0)
@@ -82,6 +92,7 @@ class ProjectileHitSparkTests(unittest.TestCase):
             )
 
         self.assertEqual(sparks.calls, 1)
+        self.assertEqual(mission.enemy_damage_fx.hit_puff_calls, 1)
 
     def test_bomb_hit_does_not_emit_bullet_sparks(self) -> None:
         p = Projectile(kind=ProjectileKind.BOMB, pos=Vec2(180.0, 100.0), vel=Vec2(0.0, 0.0), ttl=1.0)

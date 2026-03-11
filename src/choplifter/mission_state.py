@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from .entities import Hostage, Compound, Projectile, Enemy, BaseZone, MissionStats
 from .burning_particles import BurningParticleSystem
-from .fx_particles import DustStormSystem, ExplosionSystem, FlareSystem, HelicopterDamageFxSystem, ImpactSparkSystem, JetTrailSystem
+from .fx_particles import DustStormSystem, EnemyDamageFxSystem, ExplosionSystem, FlareSystem, HelicopterDamageFxSystem, ImpactSparkSystem, JetTrailSystem
 from .game_types import HostageState, EnemyKind, ProjectileKind
 from .math2d import Vec2
 from .mission_configs import MissionTuning, LevelConfig
@@ -30,6 +30,7 @@ class MissionState:
     dust_storm: DustStormSystem = field(default_factory=DustStormSystem)
     wind_dust_clouds: object = field(default_factory=lambda: None)
     heli_damage_fx: HelicopterDamageFxSystem = field(default_factory=HelicopterDamageFxSystem)
+    enemy_damage_fx: EnemyDamageFxSystem = field(default_factory=EnemyDamageFxSystem)
     explosions: ExplosionSystem = field(default_factory=ExplosionSystem)
     flares: FlareSystem = field(default_factory=FlareSystem)
     supply_drops: SupplyDropManager = field(default_factory=SupplyDropManager)
@@ -149,6 +150,7 @@ class MissionState:
                     pos=Vec2(c.pos.x + c.width * 0.5, heli.ground_y - level.tuning.tank_ground_offset_y),
                     vel=Vec2(0.0, 0.0),
                     health=level.tuning.tank_health,
+                    max_health=level.tuning.tank_health,
                     cooldown=level.tuning.tank_initial_cooldown_s,
                 )
             )
@@ -158,6 +160,7 @@ class MissionState:
                 pos=Vec2(-120.0, heli.ground_y - 12.0),
                 vel=Vec2(32.0, 0.0),
                 health=level.tuning.barak_health,
+                max_health=level.tuning.barak_health,
             )
         )
         pending_mine_pos: Vec2 | None = None

@@ -307,11 +307,7 @@ class AudioBank:
         if self.barak_mrad_launch is None:
             return
         if self.mixer is not None:
-            # Prevent long deploy cue from masking the launch cue.
-            try:
-                pygame.mixer.Channel(DEDICATED_CH_BARAK_DEPLOY).stop()
-            except Exception:
-                pass
+            # Separate dedicated lanes allow deploy and launch cues to overlap.
             self.mixer.play(self.barak_mrad_launch, bus="sfx", dedicated_channel=DEDICATED_CH_BARAK_LAUNCH)
         else:
             self.barak_mrad_launch.play()
@@ -547,15 +543,19 @@ class AudioBank:
             if pause is not None:
                 pause.set_volume(0.55)
 
-            # Asset in repository is currently named barak-depoying.wav (typo preserved).
+            # Prefer the current OGG asset, but keep legacy WAV fallbacks for older checkouts.
             barak_mrad_deploy = (
-                _try_load_asset_sound(asset_dir / "barak-depoying.wav")
+                _try_load_asset_sound(asset_dir / "barak-deploying.ogg")
+                or _try_load_asset_sound(asset_dir / "barak-depoying.wav")
                 or _try_load_asset_sound(asset_dir / "barak-deploying.wav")
             )
             if barak_mrad_deploy is not None:
                 barak_mrad_deploy.set_volume(0.66)
 
-            barak_mrad_launch = _try_load_asset_sound(asset_dir / "barak-launched.wav")
+            barak_mrad_launch = (
+                _try_load_asset_sound(asset_dir / "barak-launched.ogg")
+                or _try_load_asset_sound(asset_dir / "barak-launched.wav")
+            )
             if barak_mrad_launch is not None:
                 barak_mrad_launch.set_volume(0.58)
 
