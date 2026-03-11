@@ -6,6 +6,7 @@ from typing import Final
 BOARDING_FAIL_NOT_GROUNDED: Final[str] = "not_grounded"
 BOARDING_FAIL_DOORS_CLOSED: Final[str] = "doors_closed"
 BOARDING_FAIL_FULL: Final[str] = "full"
+BOARDING_FAIL_TECH_NOT_ON_CHOPPER: Final[str] = "tech_not_on_chopper"
 
 
 def record_boarding_failure(

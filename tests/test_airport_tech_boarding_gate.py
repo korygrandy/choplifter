@@ -87,6 +87,21 @@ class AirportTechBoardingGateTests(unittest.TestCase):
 
         self.assertEqual(mission.hostages[0].state, HostageState.MOVING_TO_LZ)
 
+    def test_airport_gate_records_tech_not_on_chopper_failure_reason(self) -> None:
+        mission = _mission(mission_id="airport", tech_state_name="waiting_at_lz")
+        helicopter = SimpleNamespace(pos=SimpleNamespace(x=0.0, y=0.0), grounded=True, doors_open=True)
+
+        _update_hostages(
+            mission,
+            helicopter,
+            0.016,
+            HelicopterSettings(),
+            boarded_count_fn=lambda m: 0,
+        )
+
+        counters = getattr(mission, "boarding_failure_counts", {})
+        self.assertGreaterEqual(int(counters.get("tech_not_on_chopper", 0)), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

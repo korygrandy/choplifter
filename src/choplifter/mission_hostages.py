@@ -4,7 +4,13 @@ import logging
 import random
 from typing import Callable
 
-from .boarding_telemetry import BOARDING_FAIL_DOORS_CLOSED, BOARDING_FAIL_FULL, BOARDING_FAIL_NOT_GROUNDED, record_boarding_failure
+from .boarding_telemetry import (
+    BOARDING_FAIL_DOORS_CLOSED,
+    BOARDING_FAIL_FULL,
+    BOARDING_FAIL_NOT_GROUNDED,
+    BOARDING_FAIL_TECH_NOT_ON_CHOPPER,
+    record_boarding_failure,
+)
 from .game_types import HostageState
 from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
@@ -106,6 +112,8 @@ def _update_hostages(
         tech_on_chopper = bool(tech_state is not None and str(getattr(tech_state, "state", "")) == "on_chopper")
         if not tech_on_chopper:
             lz_available = False
+            if helicopter.grounded and helicopter.doors_open:
+                record_boarding_failure(mission, BOARDING_FAIL_TECH_NOT_ON_CHOPPER)
 
     # Boarding radius tuned from playtest feedback and exposed via mission tuning.
     load_radius = max(30.0, float(getattr(mission.tuning, "hostage_boarding_radius", 58.0)))

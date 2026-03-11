@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 import pygame
 
+from .hostage_logic import get_active_airport_terminal_label
+
 
 @dataclass
 class AirportCutsceneState:
@@ -34,9 +36,10 @@ def update_airport_cutscene_state(cutscene_state, dt: float, *, meal_truck_state
 		and tech_operating
 		and hostage_state_name in ("waiting", "truck_loading")
 	):
+		terminal_label = get_active_airport_terminal_label(hostage_state) if hostage_state is not None else "elevated"
 		cutscene_state.meal_truck_extend_triggered = True
 		cutscene_state.cue_timer_s = 4.0
-		cutscene_state.cue_text = "Plane breach reached. Extraction window open."
+		cutscene_state.cue_text = f"{terminal_label.title()} terminal reached. Extraction window open."
 
 	return cutscene_state
 

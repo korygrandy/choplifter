@@ -76,7 +76,7 @@ from .app.session import create_mission_and_helicopter
 from .app.flow import apply_mission_preview, reset_game
 from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapshot
 from .app.accessibility_toggles import toggle_particles, toggle_flashes, toggle_screenshake
-from .app.doors import toggle_doors_with_logging
+from .app.doors import check_airport_truck_retract_toast, toggle_doors_with_logging
 from .app.runtime_state import GameRuntimeState
 from .app.airport_runtime_flags import sync_airport_runtime_flags
 from .app.bus_door_flow import apply_airport_bus_door_transitions
@@ -1259,6 +1259,13 @@ def run() -> None:
                         tech_state=airport_tech_state,
                         bus_state=airport_bus_state,
                         driver_input=truck_driver_input if meal_truck_driver_mode else None,
+                    )
+                    check_airport_truck_retract_toast(
+                        mission,
+                        airport_meal_truck_state,
+                        airport_hostage_state,
+                        airport_bus_state,
+                        set_toast,
                     )
                     airport_target_x = get_airport_priority_target_x(
                         bus_state=airport_bus_state,

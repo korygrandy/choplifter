@@ -7,6 +7,8 @@ import math
 
 import pygame
 
+from .hostage_logic import get_active_airport_terminal_label
+
 
 # Top-center objective strip typewriter state.
 _TYPEWRITER_TEXT: str = ""
@@ -40,6 +42,8 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 	rescued = hostage_state is not None and str(getattr(hostage_state, "state", "waiting")) == "rescued"
     
 	interrupted_transfers = int(getattr(hostage_state, "interrupted_transfers", 0)) if hostage_state is not None else 0
+	remaining_elevated = sum(max(0, int(v)) for v in (getattr(hostage_state, "terminal_remaining", []) or [])) if hostage_state is not None else 0
+	terminal_label = get_active_airport_terminal_label(hostage_state) if hostage_state is not None else "elevated"
     
 	tech_operating = bool(tech_state is not None and getattr(tech_state, "is_deployed", False))
 	tech_on_bus = bool(tech_state is not None and getattr(tech_state, "on_bus", False))
@@ -82,17 +86,21 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 		objective_state.mission_phase = "transferring_to_bus"
 		objective_state.status_text = "Transfer civilians to bus"
 	elif truck_loaded:
-		objective_state.mission_phase = "truck_driving_to_bus"
-		objective_state.status_text = "Drive meal truck to bus transfer lane"
+		if remaining_elevated > 0:
+			objective_state.mission_phase = "truck_driving_to_bunker"
+			objective_state.status_text = f"Drive meal truck to {terminal_label} terminal"
+		else:
+			objective_state.mission_phase = "truck_driving_to_bus"
+			objective_state.status_text = "Drive meal truck to bus transfer lane"
 	elif truck_loading:
 		objective_state.mission_phase = "extracting_hostages"
-		objective_state.status_text = "Load civilians onto meal truck"
+		objective_state.status_text = f"Load civilians onto meal truck at {terminal_label} terminal"
 	elif truck_active and tech_operating:
 		objective_state.mission_phase = "truck_driving_to_bunker"
 		if truck_at_plane_lz and not truck_extended:
-			objective_state.status_text = "Extend meal-truck lift at elevated terminal"
+			objective_state.status_text = f"Extend meal-truck lift at {terminal_label} terminal"
 		else:
-			objective_state.status_text = "Drive meal truck to elevated terminal"
+			objective_state.status_text = f"Drive meal truck to {terminal_label} terminal"
 	elif waiting:
 		objective_state.mission_phase = "waiting_for_tech_deploy"
 		objective_state.status_text = "Deploy mission tech to meal truck"

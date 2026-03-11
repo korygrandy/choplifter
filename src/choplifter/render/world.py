@@ -457,6 +457,45 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
             pygame.draw.rect(screen, win_fill, side_window, border_radius=1)
             pygame.draw.rect(screen, (34, 42, 52), side_window, 1, border_radius=1)
 
+            # Render waiting civilians on top of elevated terminal roofs.
+            # For each passenger currently mid-burst through the jetway door, remove one
+            # roof silhouette simultaneously — selling the illusion they walked inside.
+            if is_elevated_terminal and terminal_remaining_count > 0:
+                # Count passengers actively walking through the door right now.
+                active_in_burst = 0
+                if boarding_active and door_open_t > 0.05 and airport_hostage_state is not None:
+                    _rb = max(0.2, float(getattr(airport_hostage_state, "transfer_rate_s", 0.5)))
+                    _sb = float(getattr(airport_hostage_state, "boarding_started_s", t))
+                    _eb = max(0.0, t - _sb)
+                    _dcb = max(0.55, _rb * 2.4)
+                    _cib = int(_eb / _dcb)
+                    _cpb = (_eb % _dcb) / _dcb
+                    _gsb = min(max(1, terminal_remaining_count), 1 + ((_cib + int(compound_center_x)) % 3))
+                    for _ib in range(_gsb):
+                        _lpb = (_cpb - 0.22 - _ib * 0.14) / 0.36
+                        if 0.0 <= _lpb <= 1.0:
+                            active_in_burst += 1
+                roof_count = max(0, terminal_remaining_count - active_in_burst)
+                max_roof_slots = max(2, min(6, int(r.width // 14)))
+                visible_on_roof = min(roof_count, max_roof_slots)
+                if visible_on_roof > 0:
+                    span_left = roof.x + 8
+                    span_right = roof.right - 8
+                    if visible_on_roof <= 1:
+                        roof_positions = [r.centerx]
+                    else:
+                        spacing = (span_right - span_left) / float(max(1, visible_on_roof - 1))
+                        roof_positions = [int(span_left + i * spacing) for i in range(visible_on_roof)]
+                    roof_feet_y = roof.bottom - 1
+                    for i, px in enumerate(roof_positions):
+                        _draw_stick_figure_passenger(
+                            screen,
+                            px,
+                            roof_feet_y,
+                            i + terminal_index * 17,
+                            t,
+                        )
+
             # During elevated boarding, release passengers only through open jetway doors.
             if boarding_active and airport_hostage_state is not None:
                 rate = max(0.2, float(getattr(airport_hostage_state, "transfer_rate_s", 0.5)))

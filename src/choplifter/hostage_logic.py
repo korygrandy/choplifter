@@ -81,6 +81,27 @@ def _find_near_terminal_index(hostage_state, truck_x: float, pickup_radius: floa
 	return best_index
 
 
+def get_airport_terminal_label(hostage_state, terminal_index: int | None = None) -> str:
+	pickup_xs = list(getattr(hostage_state, "terminal_pickup_xs", ()) or ())
+	if terminal_index is None:
+		terminal_index = int(getattr(hostage_state, "active_terminal_index", 0))
+	if not pickup_xs or terminal_index < 0 or terminal_index >= len(pickup_xs):
+		return "elevated"
+
+	sorted_indices = sorted(range(len(pickup_xs)), key=lambda i: float(pickup_xs[i]))
+	if len(sorted_indices) >= 2:
+		if terminal_index == sorted_indices[0]:
+			return "fuselage"
+		if terminal_index == sorted_indices[-1]:
+			return "jetway"
+
+	return f"terminal {terminal_index + 1}"
+
+
+def get_active_airport_terminal_label(hostage_state) -> str:
+	return get_airport_terminal_label(hostage_state, int(getattr(hostage_state, "active_terminal_index", 0)))
+
+
 def create_airport_hostage_state(*, total_hostages: int = 16, pickup_x: float = 1500.0, pickup_points: list[float] | None = None) -> AirportHostageState:
 	pickups = [float(x) for x in (pickup_points or []) if x is not None]
 	if not pickups:
@@ -436,8 +457,8 @@ def draw_airport_hostages(target: pygame.Surface, hostage_state, *, camera_x: fl
 	
 	# State: truck_loading - Draw animated stick figures at pickup location
 	if hostage_state.state == "truck_loading":
-		# Elevated airport civilians are rendered through jetway door bursts in world renderer.
-		# Keep this layer focused on objective marker only to avoid long roof-line queues.
+		# Elevated airport civilians are rendered by the world layer (roof silhouettes + door bursts).
+		# Keep this layer focused on the pickup marker.
 		
 		# Draw pulsing indicator at pickup location
 		x = int(float(hostage_state.pickup_x) - float(camera_x))
