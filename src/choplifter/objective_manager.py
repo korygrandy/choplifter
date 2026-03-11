@@ -43,6 +43,7 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
     
 	tech_operating = bool(tech_state is not None and getattr(tech_state, "is_deployed", False))
 	tech_on_bus = bool(tech_state is not None and getattr(tech_state, "on_bus", False))
+	tech_state_name = str(getattr(tech_state, "state", "")) if tech_state is not None else ""
 	truck_active = bool(meal_truck_state is not None and getattr(meal_truck_state, "is_active", False))
 	truck_at_plane_lz = bool(meal_truck_state is not None and getattr(meal_truck_state, "at_plane_lz", False))
 	truck_extended = bool(
@@ -56,9 +57,17 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 	if waiting and elapsed >= float(objective_state.hostage_deadline_s):
 		objective_state.deadline_failed = True
 
-	if rescued:
+	total_target = 16
+	lower_rescued = int(getattr(getattr(mission, "stats", None), "saved", 0)) if mission is not None else 0
+	elevated_rescued = int(getattr(hostage_state, "rescued_hostages", 0)) if hostage_state is not None else 0
+	combined_rescued = lower_rescued + elevated_rescued
+
+	if rescued and combined_rescued >= total_target:
 		objective_state.mission_phase = "mission_complete"
-		objective_state.status_text = "Hostages rescued"
+		objective_state.status_text = "All civilians rescued"
+	elif rescued and tech_state_name == "waiting_at_lz":
+		objective_state.mission_phase = "awaiting_tech_reboard"
+		objective_state.status_text = "Pick up mission tech at tower LZ"
 	elif waiting and interrupted_transfers > 0 and not tech_operating and not tech_on_bus:
 		objective_state.mission_phase = "auto_reset"
 		objective_state.status_text = "Bus resetting to standby"

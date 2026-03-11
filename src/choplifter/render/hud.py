@@ -379,9 +379,14 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
 
     mission_id = str(getattr(mission, "mission_id", "")).lower()
     is_airport = mission_id in ("airport", "airport_special_ops", "airportspecialops", "mission2", "m2")
+    airport_target_total = 16
+    airport_elevated_rescued = 0
+    airport_combined_rescued = saved
     if is_airport:
         airport_hostage_state = getattr(mission, "airport_hostage_state", None)
         airport_meal_truck_state = getattr(mission, "airport_meal_truck_state", None)
+        airport_elevated_rescued = int(getattr(airport_hostage_state, "rescued_hostages", 0)) if airport_hostage_state is not None else 0
+        airport_combined_rescued = int(saved) + int(airport_elevated_rescued)
         if airport_hostage_state is not None and airport_meal_truck_state is not None:
             truck_x = float(getattr(airport_meal_truck_state, "x", 0.0))
             pickup_x = float(getattr(airport_hostage_state, "pickup_x", 1500.0))
@@ -449,8 +454,8 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
         screen,
         x=hud_x,
         y=hud_y + 114,
-        label="SAVED / TARGET",
-        value=f"{saved}/20",
+        label="AIRPORT RESCUE" if is_airport else "SAVED / TARGET",
+        value=f"{airport_combined_rescued}/{airport_target_total}" if is_airport else f"{saved}/20",
         icon_name="hud_saved",
         icon_kind="saved",
         label_font=small,
@@ -497,7 +502,13 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
         ]
     else:
         lines = [
-            f"Objective: Save 20 hostages (saved {saved}/20)",
+            (
+                f"Objective: Rescue all {airport_target_total} civilians "
+                f"(total {airport_combined_rescued}/{airport_target_total} | "
+                f"lower {saved} + elevated {airport_elevated_rescued})"
+                if is_airport
+                else f"Objective: Save 20 hostages (saved {saved}/20)"
+            ),
             f"Rescue flow: Open compound -> land -> doors (E) -> load {boarded}/16",
             "Unload flow: land at base flag -> doors (E)",
             f"LZ status: {rescue_ready} | Grounded: {grounded_state} | Doors: {doors_state}",

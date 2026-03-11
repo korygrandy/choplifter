@@ -100,6 +100,14 @@ def _update_hostages(
 
     lz_available = helicopter.grounded and helicopter.doors_open and boarded < capacity
 
+    # Airport special rule: lower-compound civilian rescue is enabled only while tech is on chopper.
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    if mission_id in ("airport", "airport_special_ops", "airportspecialops", "mission2", "m2"):
+        tech_state = getattr(mission, "mission_tech", None)
+        tech_on_chopper = bool(tech_state is not None and str(getattr(tech_state, "state", "")) == "on_chopper")
+        if not tech_on_chopper:
+            lz_available = False
+
     # Boarding radius tuned from playtest feedback and exposed via mission tuning.
     load_radius = max(30.0, float(getattr(mission.tuning, "hostage_boarding_radius", 58.0)))
     load_r2 = load_radius * load_radius

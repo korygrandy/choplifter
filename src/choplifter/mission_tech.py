@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 import pygame
 
@@ -37,6 +38,9 @@ class MissionTechState:
 	on_bus: bool = False  # True after tech transfers onto the bus
 	is_repairing: bool = False  # Currently unused in new design
 	repairs_completed: int = 0  # Currently unused in new design
+	lz_wait_x: float = 0.0
+	lz_wait_y: float = 0.0
+	disembark_started_s: float = 0.0
 
 
 def create_mission_tech_state() -> MissionTechState:
@@ -75,7 +79,8 @@ def update_mission_tech(
 	BOARDING_ANIMATION_DURATION = 0.4  # seconds
 	if tech_state.boarding_animation_state != "idle":
 		tech_state.boarding_animation_timer += dt_s
-		if tech_state.boarding_animation_timer >= BOARDING_ANIMATION_DURATION:
+		anim_limit = 0.9 if tech_state.boarding_animation_state == "disembarking" else BOARDING_ANIMATION_DURATION
+		if tech_state.boarding_animation_timer >= anim_limit:
 			tech_state.boarding_animation_state = "idle"
 			tech_state.boarding_animation_timer = 0.0
 
@@ -101,6 +106,28 @@ def update_mission_tech(
 			tech_state.is_deployed = False
 			tech_state.tech_x = heli_x
 			tech_state.tech_y = float(getattr(helicopter.pos, "y", tech_state.tech_y))
+			return tech_state
+
+	# LZ re-board behavior: after bus disembark, engineer waits near tower until picked up.
+	if tech_state.state == "waiting_at_lz" and helicopter is not None:
+		heli_x = float(getattr(helicopter.pos, "x", 0.0))
+		tech_x = float(getattr(tech_state, "tech_x", 0.0))
+		can_reboard_lz = bool(
+			getattr(helicopter, "grounded", False)
+			and getattr(helicopter, "doors_open", False)
+			and abs(heli_x - tech_x) <= 120.0
+		)
+		if can_reboard_lz:
+			tech_state.boarding_animation_state = "returning"
+			tech_state.boarding_animation_timer = 0.0
+			tech_state.state = "on_chopper"
+			tech_state.is_deployed = False
+			tech_state.on_bus = False
+			tech_state.tech_x = heli_x
+			tech_state.tech_y = float(getattr(helicopter.pos, "y", tech_state.tech_y))
+			if bus_state is not None and str(getattr(bus_state, "door_state", "closed")) == "open":
+				bus_state.door_state = "closing"
+				bus_state.door_animation_progress = 0.0
 			return tech_state
 	
 	# --- State: on_chopper ---
@@ -210,8 +237,70 @@ def update_mission_tech(
 		if bus_state is not None:
 			tech_state.tech_x = float(getattr(bus_state, "x", tech_state.tech_x))
 			tech_state.tech_y = float(getattr(bus_state, "y", tech_state.tech_y))
+		if hostage_state is not None:
+			rescued = int(getattr(hostage_state, "rescued_hostages", 0))
+			total_hostages = int(getattr(hostage_state, "total_hostages", 16))
+			if rescued >= total_hostages and bus_state is not None:
+				# Elevated platform extraction is complete: engineer exits bus and waits near tower edge.
+				bus_x = float(getattr(bus_state, "x", tech_state.tech_x))
+				bus_y = float(getattr(bus_state, "y", tech_state.tech_y))
+				stop_x = float(getattr(bus_state, "stop_x", 500.0))
+				tech_state.state = "waiting_at_lz"
+				tech_state.on_bus = False
+				tech_state.is_deployed = True
+				tech_state.disembark_started_s = tech_state.deploy_timer_s
+				tech_state.boarding_animation_state = "disembarking"
+				tech_state.boarding_animation_timer = 0.0
+				tech_state.boarding_start_x = bus_x
+				tech_state.boarding_start_y = bus_y
+				tech_state.lz_wait_x = stop_x - 80.0
+				tech_state.lz_wait_y = bus_y
+				tech_state.boarding_end_x = tech_state.lz_wait_x
+				tech_state.boarding_end_y = tech_state.lz_wait_y
+				if str(getattr(bus_state, "door_state", "closed")) == "closed":
+					bus_state.door_state = "opening"
+					bus_state.door_animation_progress = 0.0
+
+	# --- State: waiting_at_lz ---
+	elif tech_state.state == "waiting_at_lz":
+		tech_state.on_bus = False
+		tech_state.deploy_timer_s += dt_s
+		# Walk out from bus then wait at a fixed pickup point just outside tower rescue zone.
+		if tech_state.boarding_animation_state == "disembarking":
+			walk_duration = 0.9
+			p = min(1.0, tech_state.boarding_animation_timer / walk_duration)
+			tech_state.tech_x = float(tech_state.boarding_start_x) + (float(tech_state.lz_wait_x) - float(tech_state.boarding_start_x)) * p
+			tech_state.tech_y = float(tech_state.lz_wait_y)
+			if p >= 1.0:
+				tech_state.boarding_animation_state = "idle"
+		else:
+			tech_state.tech_x = float(getattr(tech_state, "lz_wait_x", tech_state.tech_x))
+			tech_state.tech_y = float(getattr(tech_state, "lz_wait_y", tech_state.tech_y))
 	
 	return tech_state
+
+
+def _draw_tech_stick_figure(target: pygame.Surface, x: int, y: int, *, t: float, walking: bool) -> None:
+	"""Draw a small green stick-figure engineer with optional walk cycle."""
+	pixel = 2
+	body = (96, 212, 112)
+	head = (72, 172, 92)
+	outline = (22, 52, 24)
+	cycle = math.sin(t * 9.0)
+	leg = 1 if (walking and cycle > 0.0) else -1
+
+	# Legs
+	pygame.draw.line(target, body, (x, y - 3), (x - leg * 2, y), 2)
+	pygame.draw.line(target, body, (x, y - 3), (x + leg * 2, y), 2)
+	# Torso
+	pygame.draw.line(target, body, (x, y - 8), (x, y - 3), 2)
+	# Arms
+	arm = -leg
+	pygame.draw.line(target, body, (x, y - 7), (x - arm * 2, y - 5), 2)
+	pygame.draw.line(target, body, (x, y - 7), (x + arm * 2, y - 5), 2)
+	# Head
+	pygame.draw.rect(target, head, pygame.Rect(x - pixel, y - 11, pixel * 2, pixel * 2))
+	pygame.draw.rect(target, outline, pygame.Rect(x - pixel, y - 11, pixel * 2, pixel * 2), 1)
 
 
 def draw_airport_mission_tech(
@@ -255,15 +344,12 @@ def draw_airport_mission_tech(
 		pygame.draw.rect(target, (60, 60, 20), pygame.Rect(screen_x - 6, screen_y, 10, 4), 1)
 		return
 	
-	# --- Draw tech sprite when deployed (on truck or in field) ---
+	# --- Draw tech sprite when deployed (on truck, bus, or waiting at LZ) ---
 	if tech_state.state != "on_chopper":
 		x = int(tech_state.tech_x - camera_x)
-		y = int(tech_state.tech_y - 16)
-		
-		# Tech sprite (small green rectangle representing engineer)
-		body = pygame.Rect(x - 6, y, 12, 14)
-		pygame.draw.rect(target, (120, 200, 120), body, border_radius=3)
-		pygame.draw.rect(target, (20, 60, 20), body, 1, border_radius=3)
+		y = int(tech_state.tech_y)
+		walking = str(getattr(tech_state, "boarding_animation_state", "")) in ("deploying", "returning", "disembarking")
+		_draw_tech_stick_figure(target, x, y - 2, t=float(getattr(tech_state, "deploy_timer_s", 0.0)), walking=walking)
 		
 		# Draw wrench indicator above truck/tech at y-60 while deployed.
 		if tech_state.state in ("deployed_to_truck", "driving_to_extraction", "extracting", "transferring"):
