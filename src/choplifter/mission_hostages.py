@@ -99,7 +99,6 @@ def _update_hostages(
     boarded = boarded_count_fn(mission)
 
     lz_available = helicopter.grounded and helicopter.doors_open and boarded < capacity
-
     # Airport special rule: lower-compound civilian rescue is enabled only while tech is on chopper.
     mission_id = str(getattr(mission, "mission_id", "")).lower()
     if mission_id in ("airport", "airport_special_ops", "airportspecialops", "mission2", "m2"):
