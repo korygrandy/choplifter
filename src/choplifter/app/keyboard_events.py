@@ -21,6 +21,9 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
         mode = "playing"
         audio.set_pause_menu_active(False)
         audio.play_pause_toggle()
+    elif mode == "select_chopper" and event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+        mode = "select_mission"
+        set_toast("Back to Mission Select")
     elif matches_key(event.key, controls.quit):
         # Always return a 9-tuple, using current values for unchanged fields
         return (
@@ -46,9 +49,6 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
             mode = "cutscene"
             set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
             reset_game()
-        elif event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
-            mode = "select_mission"
-            set_toast("Back to Mission Select")
     elif mode == "select_mission":
         if event.key in (pygame.K_LEFT, pygame.K_a):
             selected_mission_index = cycle_index(selected_mission_index, -1, len(mission_choices))

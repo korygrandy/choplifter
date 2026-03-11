@@ -3,10 +3,15 @@ from __future__ import annotations
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+from unittest.mock import Mock
 
 import pygame
 
-from src.choplifter.app.event_loop import handle_gamepad_pause_button
+from src.choplifter.app.event_loop import (
+    handle_gamepad_pause_button,
+    handle_mission_end_gamepad_navigation,
+    handle_mission_end_keyboard_navigation,
+)
 from src.choplifter.app.keyboard_events import handle_keyboard_event
 from src.choplifter.audio import AudioBank
 
@@ -67,6 +72,9 @@ class PauseAudioBehaviorTests(unittest.TestCase):
             pause=None,
             barak_mrad_deploy=None,
             barak_mrad_launch=None,
+            bus_accelerate=None,
+            bus_brakes=None,
+            bus_door=None,
         )
 
     def test_pause_menu_mutes_gameplay_buses_but_keeps_ui(self) -> None:
@@ -231,6 +239,153 @@ class PauseAudioBehaviorTests(unittest.TestCase):
             just_paused_with_start=False,
         )
         self.assertEqual((mode, just_paused, toggled, clear_quit), ("playing", False, True, True))
+
+    def test_select_chopper_escape_takes_back_over_quit_binding(self) -> None:
+        controls = SimpleNamespace(
+            quit=[pygame.K_ESCAPE],
+            restart=[],
+            toggle_debug=[],
+            cycle_facing=[],
+            reverse_flip=[],
+            doors=[],
+            flare=[],
+            fire=[],
+            tilt_left=[],
+            tilt_right=[],
+        )
+        audio = _RecordingAudio()
+        mission = SimpleNamespace(ended=False, crash_active=False)
+        helicopter = SimpleNamespace(skin_asset="chopper-one.png")
+
+        out = handle_keyboard_event(
+            pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE),
+            mode="select_chopper",
+            controls=controls,
+            mission=mission,
+            helicopter=helicopter,
+            audio=audio,
+            logger=None,
+            chopper_choices=[("chopper-one.png", "Classic")],
+            mission_choices=[("city", "City")],
+            pause_focus="choppers",
+            muted=False,
+            set_toast=lambda _msg: None,
+            reset_game=lambda: None,
+            apply_mission_preview=lambda: None,
+            skip_intro=lambda: None,
+            skip_mission_cutscene=lambda: None,
+            toggle_particles_wrapper=lambda: None,
+            toggle_flashes_wrapper=lambda: None,
+            toggle_screenshake_wrapper=lambda: None,
+            spawn_projectile_from_helicopter_logged=lambda *_args, **_kwargs: None,
+            try_start_flare_salvo=lambda *_args, **_kwargs: None,
+            toggle_doors_with_logging=lambda *_args, **_kwargs: None,
+            Facing=SimpleNamespace(FORWARD="forward"),
+            DebugSettings=lambda **kwargs: SimpleNamespace(**kwargs),
+            boarded_count=lambda *_args, **_kwargs: 0,
+            flares=SimpleNamespace(),
+            selected_mission_index=0,
+            selected_mission_id="city",
+            selected_chopper_index=0,
+            selected_chopper_asset="chopper-one.png",
+            debug=SimpleNamespace(show_overlay=False),
+            quit_confirm=False,
+        )
+
+        self.assertEqual(out[0], "select_mission")
+        self.assertFalse(out[2])
+
+    def test_mission_end_pause_keys_open_pause_menu(self) -> None:
+        handled, mode = handle_mission_end_keyboard_navigation(
+            key=pygame.K_ESCAPE,
+            mode="mission_end",
+            mission_ended=True,
+            set_toast=lambda _msg: None,
+        )
+        self.assertEqual((handled, mode), (True, "paused"))
+
+        handled, mode = handle_mission_end_keyboard_navigation(
+            key=pygame.K_PAUSE,
+            mode="mission_end",
+            mission_ended=True,
+            set_toast=lambda _msg: None,
+        )
+        self.assertEqual((handled, mode), (True, "paused"))
+
+    def test_mission_end_gamepad_start_opens_pause_menu(self) -> None:
+        handled, mode = handle_mission_end_gamepad_navigation(
+            button=7,
+            mode="mission_end",
+            set_toast=lambda _msg: None,
+        )
+        self.assertEqual((handled, mode), (True, "paused"))
+
+    def test_gamepad_start_pauses_from_mission_end_mode(self) -> None:
+        mode, just_paused, toggled, clear_quit = handle_gamepad_pause_button(
+            mode="mission_end",
+            start_down=True,
+            prev_btn_start_down=False,
+            b_down=False,
+            prev_btn_b_down=False,
+            just_paused_with_start=False,
+        )
+        self.assertEqual((mode, just_paused, toggled, clear_quit), ("paused", True, True, False))
+
+    def test_keyboard_fire_blocked_when_weapon_locked(self) -> None:
+        controls = SimpleNamespace(
+            quit=[],
+            restart=[],
+            toggle_debug=[],
+            cycle_facing=[],
+            reverse_flip=[],
+            doors=[],
+            flare=[],
+            fire=[pygame.K_SPACE],
+            tilt_left=[],
+            tilt_right=[],
+        )
+        audio = _RecordingAudio()
+        mission = SimpleNamespace(ended=False, crash_active=False)
+        helicopter = SimpleNamespace(skin_asset="chopper-one.png", facing="forward")
+        spawn_fire = Mock()
+
+        handle_keyboard_event(
+            pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE),
+            mode="playing",
+            controls=controls,
+            mission=mission,
+            helicopter=helicopter,
+            audio=audio,
+            logger=None,
+            chopper_choices=[("chopper-one.png", "Classic")],
+            mission_choices=[("city", "City")],
+            pause_focus="choppers",
+            muted=False,
+            set_toast=lambda _msg: None,
+            reset_game=lambda: None,
+            apply_mission_preview=lambda: None,
+            skip_intro=lambda: None,
+            skip_mission_cutscene=lambda: None,
+            toggle_particles_wrapper=lambda: None,
+            toggle_flashes_wrapper=lambda: None,
+            toggle_screenshake_wrapper=lambda: None,
+            spawn_projectile_from_helicopter_logged=spawn_fire,
+            try_start_flare_salvo=lambda *_args, **_kwargs: None,
+            toggle_doors_with_logging=lambda *_args, **_kwargs: None,
+            Facing=SimpleNamespace(FORWARD="forward"),
+            DebugSettings=lambda **kwargs: SimpleNamespace(**kwargs),
+            boarded_count=lambda *_args, **_kwargs: 0,
+            flares=SimpleNamespace(),
+            selected_mission_index=0,
+            selected_mission_id="airport",
+            selected_chopper_index=0,
+            selected_chopper_asset="chopper-one.png",
+            debug=SimpleNamespace(show_overlay=False),
+            quit_confirm=False,
+            helicopter_weapon_locked=True,
+        )
+
+        spawn_fire.assert_not_called()
 
 
 if __name__ == "__main__":

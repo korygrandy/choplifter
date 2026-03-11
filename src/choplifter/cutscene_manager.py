@@ -36,7 +36,7 @@ def update_airport_cutscene_state(cutscene_state, dt: float, *, meal_truck_state
 	):
 		cutscene_state.meal_truck_extend_triggered = True
 		cutscene_state.cue_timer_s = 4.0
-		cutscene_state.cue_text = "Plane breach reached: extraction window open"
+		cutscene_state.cue_text = "Plane breach reached. Extraction window open."
 
 	return cutscene_state
 
@@ -48,16 +48,4 @@ def draw_airport_cutscene_markers(target: pygame.Surface, cutscene_state, *, cam
 	x = int(float(pickup_x) - float(camera_x))
 	y = int(float(ground_y) - 60)
 	pygame.draw.polygon(target, (255, 215, 90), [(x, y), (x + 5, y + 10), (x + 12, y + 10), (x + 7, y + 16), (x + 9, y + 26), (x, y + 20), (x - 9, y + 26), (x - 7, y + 16), (x - 12, y + 10), (x - 5, y + 10)])
-
-	if float(getattr(cutscene_state, "cue_timer_s", 0.0)) <= 0.0:
-		return
-
-	panel = pygame.Rect(220, 46, 360, 24)
-	pygame.draw.rect(target, (22, 28, 34), panel, border_radius=5)
-	pygame.draw.rect(target, (88, 96, 110), panel, 1, border_radius=5)
-	try:
-		font = pygame.font.Font(None, 20)
-		surf = font.render(str(getattr(cutscene_state, "cue_text", "")), True, (242, 236, 220))
-		target.blit(surf, (panel.x + 8, panel.y + 5))
-	except Exception:
-		pass
+	# Text cues are intentionally handled by the centered objective strip to avoid duplicate HUD messaging.

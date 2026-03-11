@@ -76,6 +76,12 @@ def _damage_helicopter(
     if mission.ended or mission.crash_active:
         return
 
+    # Airport mission safety rule: inside the tower LZ the chopper is immune to all damage.
+    if str(getattr(mission, "mission_id", "")).lower() == "airport":
+        base = getattr(mission, "base", None)
+        if base is not None and bool(base.contains_point(helicopter.pos)):
+            return
+
     # Airport mission engineer remote-control mode: chopper is protected.
     if bool(getattr(mission, "engineer_remote_control_active", False)):
         return

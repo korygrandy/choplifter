@@ -73,28 +73,28 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 		objective_state.status_text = "Bus resetting to standby"
 	elif boarded:
 		objective_state.mission_phase = "escort_to_lz"
-		objective_state.status_text = "Escort bus to LZ"
+		objective_state.status_text = "Escort bus to tower LZ"
 	elif hostage_state is not None and str(getattr(hostage_state, "state", "")) == "transferring_to_bus":
 		objective_state.mission_phase = "transferring_to_bus"
-		objective_state.status_text = "Transferring civilians to bus"
+		objective_state.status_text = "Transfer civilians to bus"
 	elif truck_loaded:
 		objective_state.mission_phase = "truck_driving_to_bus"
-		objective_state.status_text = "Drive truck to bus transfer lane"
+		objective_state.status_text = "Drive meal truck to bus transfer lane"
 	elif truck_loading:
 		objective_state.mission_phase = "extracting_hostages"
-		objective_state.status_text = "Meal truck extracting civilians"
+		objective_state.status_text = "Load civilians onto meal truck"
 	elif truck_active and tech_operating:
 		objective_state.mission_phase = "truck_driving_to_bunker"
 		if truck_at_plane_lz and not truck_extended:
-			objective_state.status_text = "Extend lift at damaged plane"
+			objective_state.status_text = "Extend meal-truck lift at damaged plane"
 		else:
 			objective_state.status_text = "Drive meal truck to damaged plane"
 	elif waiting:
 		objective_state.mission_phase = "waiting_for_tech_deploy"
-		objective_state.status_text = "Deploy tech to meal truck"
+		objective_state.status_text = "Deploy mission tech to meal truck"
 	else:
 		objective_state.mission_phase = "waiting_for_tech_deploy"
-		objective_state.status_text = "Deploy tech to meal truck"
+		objective_state.status_text = "Deploy mission tech to meal truck"
 
 	return objective_state
 

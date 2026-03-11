@@ -10,7 +10,11 @@ def handle_mission_end_keyboard_navigation(*, key: int, mode: str, mission_ended
     if not (mode == "mission_end" or mission_ended):
         return False, mode
 
-    if key in (pygame.K_ESCAPE, pygame.K_PAUSE, pygame.K_RETURN, pygame.K_KP_ENTER):
+    if key in (pygame.K_ESCAPE, pygame.K_PAUSE):
+        set_toast("Mission ended: pause menu opened")
+        return True, "paused"
+
+    if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
         set_toast("Mission ended: returning to Mission Select")
         return True, "select_mission"
 
@@ -24,8 +28,8 @@ def handle_mission_end_gamepad_navigation(*, button: int, mode: str, set_toast: 
         return False, mode
 
     if button == 7:  # Start button
-        set_toast("Mission ended: returning to Mission Select")
-        return True, "select_mission"
+        set_toast("Mission ended: pause menu opened")
+        return True, "paused"
 
     return True, mode
 
@@ -64,6 +68,9 @@ def handle_gamepad_pause_button(
     b_edge = bool(b_down and not prev_btn_b_down)
 
     if mode == "playing" and start_edge:
+        return "paused", True, True, False
+
+    if mode == "mission_end" and start_edge:
         return "paused", True, True, False
 
     if mode == "paused":

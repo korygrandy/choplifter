@@ -78,6 +78,8 @@ from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapsho
 from .app.accessibility_toggles import toggle_particles, toggle_flashes, toggle_screenshake
 from .app.doors import toggle_doors_with_logging
 from .app.runtime_state import GameRuntimeState
+from .app.airport_runtime_flags import sync_airport_runtime_flags
+from .app.bus_door_flow import apply_airport_bus_door_transitions
 from .app.objective_overlay import get_mission_objective_overlay_duration
 from .app.game_update import (
     build_helicopter_input,
@@ -553,7 +555,12 @@ def run() -> None:
                     set_toast=set_toast,
                 )
                 if handled_mission_end:
+                    prev_mode = mode
                     mode = next_mode
+                    if prev_mode != mode and mode == "paused":
+                        runtime.pause_focus = "choppers"
+                        audio.play_pause_toggle()
+                        audio.set_pause_menu_active(True)
                     continue
 
                 handled_quit_confirm, keep_running, quit_confirm = handle_pause_quit_confirm_keydown(
@@ -682,7 +689,7 @@ def run() -> None:
                     selected_chopper_asset=selected_chopper_asset,
                     debug=debug,
                     quit_confirm=runtime.quit_confirm,
-                    helicopter_weapon_locked=bool(meal_truck_driver_mode),
+                    helicopter_weapon_locked=bool(meal_truck_driver_mode or bus_driver_mode),
                 )
             elif event.type == pygame.JOYBUTTONDOWN:
                 if logger:
@@ -695,7 +702,12 @@ def run() -> None:
                     set_toast=set_toast,
                 )
                 if handled_mission_end:
+                    prev_mode = mode
                     mode = next_mode
+                    if prev_mode != mode and mode == "paused":
+                        runtime.pause_focus = "choppers"
+                        audio.play_pause_toggle()
+                        audio.set_pause_menu_active(True)
                 elif mode == "playing":
                     if event.button == 2:  # X button: fire (or lift toggle in driver mode)
                         if logger:
@@ -705,6 +717,7 @@ def run() -> None:
                             meal_truck_lift_command_extended = not meal_truck_lift_command_extended
                         elif (
                             not getattr(mission, "crash_active", False)
+                            and not bool(bus_driver_mode)
                             and not bool(getattr(mission, "engineer_remote_control_active", False))
                         ):
                             spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
@@ -1095,6 +1108,7 @@ def run() -> None:
                 if paused.fire_weapon:
                     if (
                         not bool(meal_truck_driver_mode)
+                        and not bool(bus_driver_mode)
                         and not bool(getattr(mission, "engineer_remote_control_active", False))
                         and not bool(getattr(mission, "crash_active", False))
                     ):
@@ -1128,19 +1142,14 @@ def run() -> None:
             gp_lift_down=gp_lift_down,
         )
 
-        # Keep mission-level engineer state in sync for combat/AI gating.
-        if selected_mission_id == "airport":
-            engineer_off_chopper = bool(
-                airport_tech_state is not None
-                and str(getattr(airport_tech_state, "state", "on_chopper")) != "on_chopper"
-            )
-            mission.engineer_remote_control_active = bool(meal_truck_driver_mode)
-            mission.engineer_off_chopper = engineer_off_chopper
-            mission.barak_suppressed = engineer_off_chopper
-        else:
-            mission.engineer_remote_control_active = False
-            mission.engineer_off_chopper = False
-            mission.barak_suppressed = False
+        # Keep mission-level engineer/vehicle flags in sync for combat and AI gating.
+        sync_airport_runtime_flags(
+            mission=mission,
+            selected_mission_id=selected_mission_id,
+            airport_tech_state=airport_tech_state,
+            meal_truck_driver_mode=bool(meal_truck_driver_mode),
+            bus_driver_mode=bool(bus_driver_mode),
+        )
         
         # Build truck driver input (reuses tilt/lift controls: left=move left, right=move right, up=extend lift)
         truck_driver_input = TruckDriverInput(
@@ -1227,6 +1236,7 @@ def run() -> None:
                             tech_on_bus=bool(getattr(airport_tech_state, "on_bus", False)),
                             driver_input=bus_driver_input if bus_driver_mode else None,
                         )
+                    prev_hostage_state_name = str(getattr(airport_hostage_state, "state", "waiting"))
                     airport_hostage_state = update_airport_hostage_logic(
                         airport_hostage_state,
                         tick.dt,
@@ -1236,6 +1246,13 @@ def run() -> None:
                         audio=audio,
                         meal_truck_state=airport_meal_truck_state,
                         tech_state=airport_tech_state,
+                    )
+                    new_hostage_state_name = str(getattr(airport_hostage_state, "state", "waiting"))
+                    apply_airport_bus_door_transitions(
+                        bus_state=airport_bus_state,
+                        audio=audio,
+                        prev_hostage_state=prev_hostage_state_name,
+                        new_hostage_state=new_hostage_state_name,
                     )
                     prev_tech_state_name = str(getattr(airport_tech_state, "state", "on_chopper"))
                     airport_tech_state = update_mission_tech(

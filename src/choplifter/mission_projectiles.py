@@ -24,6 +24,24 @@ def _barak_should_apply_damage(*, grounded: bool, in_lz: bool) -> bool:
     return not (grounded and in_lz)
 
 
+def _barak_is_in_lz_zone(*, mission: MissionState, helicopter: Helicopter) -> bool:
+    """Return True when helicopter is inside either airport LZ or the mission base LZ."""
+    base = getattr(mission, "base", None)
+    if base is not None and bool(base.contains_point(helicopter.pos)):
+        return True
+
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    if mission_id not in ("airport", "airport_special_ops"):
+        return False
+
+    # Tower LZ band aligns with airport rescue/deboard zone around stop_x.
+    tower_stop_x = 500.0
+    bus_state = getattr(mission, "airport_bus_state", None)
+    if bus_state is not None:
+        tower_stop_x = float(getattr(bus_state, "stop_x", tower_stop_x))
+    return float(getattr(helicopter.pos, "x", 0.0)) <= tower_stop_x + 140.0
+
+
 def _barak_ground_impact_can_damage(*, grounded: bool, in_lz: bool, impact_hits_helicopter: bool) -> bool:
     """Grounded-outside-LZ fallback: near-ground missile impacts can still damage."""
     return bool(grounded and impact_hits_helicopter and (not in_lz))
@@ -38,6 +56,41 @@ def _barak_target_point(helicopter: Helicopter) -> Vec2:
     else:
         x_off = 10.0
     return Vec2(helicopter.pos.x + x_off, helicopter.pos.y + 2.0)
+
+
+def _barak_player_driving_vehicle(mission: MissionState) -> bool:
+    return bool(getattr(mission, "player_driving_vehicle", False))
+
+
+def _barak_bus_target_point(mission: MissionState) -> Vec2 | None:
+    bus_state = getattr(mission, "airport_bus_state", None)
+    if bus_state is None:
+        return None
+    if float(getattr(bus_state, "health", 0.0)) <= 0.0:
+        return None
+    return Vec2(float(getattr(bus_state, "x", 0.0)), float(getattr(bus_state, "y", 0.0)) - 10.0)
+
+
+def _barak_collision_prefers_bus(*, mission: MissionState, diverted_collision: bool) -> bool:
+    # Player expectation: missiles prioritize the helicopter unless the player is actively driving a vehicle.
+    return (not diverted_collision) and _barak_player_driving_vehicle(mission) and (_barak_bus_target_point(mission) is not None)
+
+
+def _hits_circle_or_swept(*, previous: Vec2, current: Vec2, center: Vec2, radius: float) -> bool:
+    """Return True when either endpoint or the movement segment intersects the circle."""
+    if _hits_circle(current, center, radius=radius) or _hits_circle(previous, center, radius=radius):
+        return True
+
+    dx = current.x - previous.x
+    dy = current.y - previous.y
+    seg_len2 = dx * dx + dy * dy
+    if seg_len2 <= 1e-6:
+        return False
+
+    t = ((center.x - previous.x) * dx + (center.y - previous.y) * dy) / seg_len2
+    t = clamp(t, 0.0, 1.0)
+    closest = Vec2(previous.x + dx * t, previous.y + dy * t)
+    return _hits_circle(closest, center, radius=radius)
 
 
 def _angle_diff(current: float, target: float) -> float:
@@ -266,6 +319,7 @@ def _update_projectiles(
         if p.kind is ProjectileKind.BOMB:
             p.vel.y += gravity * dt
 
+        prev_pos = Vec2(float(p.pos.x), float(p.pos.y))
         p.pos.x += p.vel.x * dt
         p.pos.y += p.vel.y * dt
 
@@ -401,23 +455,40 @@ def _update_projectiles(
                 )
                 diverted_collision = _barak_is_successfully_diverted(p)
                 hit_radius = 14.0 if diverted_collision else 22.0
+                barak_damage_target = "helicopter"
+                if _barak_collision_prefers_bus(mission=mission, diverted_collision=diverted_collision):
+                    bus_target = _barak_bus_target_point(mission)
+                    if bus_target is not None:
+                        barak_target = bus_target
+                        bus_state = getattr(mission, "airport_bus_state", None)
+                        bus_w = float(getattr(bus_state, "width", 64.0)) if bus_state is not None else 64.0
+                        hit_radius = max(24.0, bus_w * 0.35)
+                        barak_damage_target = "bus"
+                elif not diverted_collision:
+                    # While flying the helicopter, center hits on the airframe for overlap reliability.
+                    barak_target = Vec2(float(helicopter.pos.x), float(helicopter.pos.y))
+                    hit_radius = max(hit_radius, 28.0)
             else:
                 barak_target = helicopter.pos
                 hit_radius = 26.0
-            if _hits_circle(p.pos, barak_target, radius=hit_radius):
+            if _hits_circle_or_swept(previous=prev_pos, current=p.pos, center=barak_target, radius=hit_radius):
                 if getattr(p, "is_barak_missile", False):
-                    in_lz = bool(mission.base.contains_point(helicopter.pos))
-                    apply_damage = (not diverted_collision) and _barak_should_apply_damage(
-                        grounded=bool(helicopter.grounded),
-                        in_lz=in_lz,
-                    )
+                    in_lz = _barak_is_in_lz_zone(mission=mission, helicopter=helicopter)
+                    if barak_damage_target == "bus":
+                        apply_damage = not diverted_collision
+                    else:
+                        apply_damage = (not diverted_collision) and _barak_should_apply_damage(
+                            grounded=bool(helicopter.grounded),
+                            in_lz=in_lz,
+                        )
                     if logger is not None:
                         logger.debug(
-                            "BARAK_COLLISION: mode=direct_hit diverted=%s grounded=%s in_lz=%s apply_damage=%s target=(%.1f,%.1f)",
+                            "BARAK_COLLISION: mode=direct_hit diverted=%s grounded=%s in_lz=%s apply_damage=%s target=%s point=(%.1f,%.1f)",
                             diverted_collision,
                             bool(helicopter.grounded),
                             in_lz,
                             apply_damage,
+                            barak_damage_target,
                             barak_target.x,
                             barak_target.y,
                         )
@@ -426,7 +497,13 @@ def _update_projectiles(
                     mission.impact_sparks.emit_hit(barak_target, p.vel, strength=1.35)
                     mission.burning.add_site(barak_target, intensity=0.55)
                     if apply_damage:
-                        damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
+                        if barak_damage_target == "bus":
+                            bus_state = getattr(mission, "airport_bus_state", None)
+                            if bus_state is not None:
+                                health = float(getattr(bus_state, "health", 100.0))
+                                setattr(bus_state, "health", max(0.0, health - 18.0))
+                        else:
+                            damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
                 elif p.kind is ProjectileKind.ENEMY_ARTILLERY:
                     mission.stats.artillery_hits += 1
                     mission.impact_sparks.emit_hit(p.pos, p.vel, strength=1.25)
@@ -440,7 +517,7 @@ def _update_projectiles(
         # Ground collision.
         if p.pos.y >= heli.ground_y - 6.0:
             if getattr(p, "is_barak_missile", False):
-                in_lz = bool(mission.base.contains_point(helicopter.pos))
+                in_lz = _barak_is_in_lz_zone(mission=mission, helicopter=helicopter)
                 _barak_apply_last_chance_flare_override(
                     mission=mission,
                     missile=p,
@@ -452,22 +529,39 @@ def _update_projectiles(
                     helicopter=helicopter,
                 )
                 diverted_collision = _barak_is_successfully_diverted(p)
+                barak_damage_target = "helicopter"
+                if _barak_collision_prefers_bus(mission=mission, diverted_collision=diverted_collision):
+                    bus_target = _barak_bus_target_point(mission)
+                    if bus_target is not None:
+                        barak_target = bus_target
+                        barak_damage_target = "bus"
+                elif not diverted_collision:
+                    barak_target = Vec2(float(helicopter.pos.x), float(helicopter.pos.y))
                 near_ground_radius = 22.0 if diverted_collision else 36.0
-                near_ground_impact = _hits_circle(p.pos, barak_target, radius=near_ground_radius)
-                apply_damage = (not diverted_collision) and _barak_ground_impact_can_damage(
-                    grounded=bool(helicopter.grounded),
-                    in_lz=in_lz,
-                    impact_hits_helicopter=near_ground_impact,
+                near_ground_impact = _hits_circle_or_swept(
+                    previous=prev_pos,
+                    current=p.pos,
+                    center=barak_target,
+                    radius=near_ground_radius,
                 )
+                if barak_damage_target == "bus":
+                    apply_damage = (not diverted_collision) and near_ground_impact
+                else:
+                    apply_damage = (not diverted_collision) and _barak_ground_impact_can_damage(
+                        grounded=bool(helicopter.grounded),
+                        in_lz=in_lz,
+                        impact_hits_helicopter=near_ground_impact,
+                    )
                 impact_pos = barak_target if apply_damage else p.pos
                 if logger is not None:
                     logger.debug(
-                        "BARAK_COLLISION: mode=ground_impact diverted=%s grounded=%s in_lz=%s near=%s apply_damage=%s target=(%.1f,%.1f)",
+                        "BARAK_COLLISION: mode=ground_impact diverted=%s grounded=%s in_lz=%s near=%s apply_damage=%s target=%s point=(%.1f,%.1f)",
                         diverted_collision,
                         bool(helicopter.grounded),
                         in_lz,
                         near_ground_impact,
                         apply_damage,
+                        barak_damage_target,
                         barak_target.x,
                         barak_target.y,
                     )
@@ -476,7 +570,13 @@ def _update_projectiles(
                 mission.impact_sparks.emit_hit(impact_pos, p.vel, strength=1.20)
                 mission.burning.add_site(impact_pos, intensity=0.40)
                 if apply_damage:
-                    damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
+                    if barak_damage_target == "bus":
+                        bus_state = getattr(mission, "airport_bus_state", None)
+                        if bus_state is not None:
+                            health = float(getattr(bus_state, "health", 100.0))
+                            setattr(bus_state, "health", max(0.0, health - 18.0))
+                    else:
+                        damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
             elif p.kind is ProjectileKind.BOMB:
                 _bomb_explode(mission, p.pos, logger)
             p.alive = False

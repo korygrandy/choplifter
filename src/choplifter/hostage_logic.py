@@ -233,12 +233,11 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 
 	# Phase 3: auto-rescued when bus reaches the LZ stop point.
 	elif hostage_state.state == "boarded":
-		# Allow a wider arrival band so manual escort parking in the visible tower LZ still unloads.
+		# Allow deboarding as soon as the bus reaches the visible tower LZ band.
 		bus_x = float(getattr(bus_state, "x", 9999.0))
 		stop_x = float(getattr(bus_state, "stop_x", 500.0))
 		bus_at_lz = bus_x <= stop_x + 140.0
-		bus_stopped = not bool(getattr(bus_state, "is_moving", True))
-		if bus_at_lz and bus_stopped:
+		if bus_at_lz:
 			hostage_state.rescued_hostages = int(hostage_state.boarded_hostages)
 			hostage_state.boarded_hostages = 0
 			hostage_state.state = "rescued"

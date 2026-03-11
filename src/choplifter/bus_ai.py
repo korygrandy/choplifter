@@ -25,6 +25,7 @@ BUS_ACCEL_TIME_S: float = 1.4
 BUS_DECEL_DISTANCE_PX: float = 240.0
 BUS_STOP_X: float = 500.0
 BUS_CREEP_SPEED_PX_PER_SEC: float = 20.0
+BUS_DOOR_ANIMATION_DURATION: float = 0.3  # Duration for opening/closing animation
 
 
 def _clamp01(value: float) -> float:
@@ -102,6 +103,21 @@ class BusState:
     door_state: str = "closed"  # closed/opening/open/closing
     door_animation_progress: float = 0.0  # 0.0 to 1.0 over 0.3 seconds
     door_animation_duration: float = 0.3  # Animation duration in seconds
+    door_auto_close_timer_s: float = 0.0  # Optional hold-open timer (used for deboarding)
+    door_auto_close_armed: bool = False
+
+
+def _bus_door_open_blend(bus_state: BusState) -> float:
+    """Return 0..1 blend weight for the doors-open sprite."""
+    state = str(getattr(bus_state, "door_state", "closed"))
+    progress = _clamp01(float(getattr(bus_state, "door_animation_progress", 0.0)))
+    if state == "open":
+        return 1.0
+    if state == "opening":
+        return progress
+    if state == "closing":
+        return 1.0 - progress
+    return 0.0
 
 
 def create_bus_state(start_x: float = 1200, ground_y: float = 400) -> BusState:
@@ -118,6 +134,7 @@ def create_bus_state(start_x: float = 1200, ground_y: float = 400) -> BusState:
 def _run_bus_door_animation(bus_state: BusState, dt: float) -> None:
     """Advance the door open/close animation one tick."""
     door_state = getattr(bus_state, "door_state", "closed")
+    was_open_at_tick_start = door_state == "open"
     door_progress = getattr(bus_state, "door_animation_progress", 0.0)
     door_duration = getattr(bus_state, "door_animation_duration", BUS_DOOR_ANIMATION_DURATION)
     if door_state == "opening":
@@ -132,6 +149,13 @@ def _run_bus_door_animation(bus_state: BusState, dt: float) -> None:
             door_progress = 1.0
             bus_state.door_state = "closed"
         bus_state.door_animation_progress = door_progress
+
+    if bool(getattr(bus_state, "door_auto_close_armed", False)) and was_open_at_tick_start and str(getattr(bus_state, "door_state", "closed")) == "open":
+        hold = max(0.0, float(getattr(bus_state, "door_auto_close_timer_s", 0.0)) - float(dt))
+        bus_state.door_auto_close_timer_s = hold
+        if hold <= 0.0:
+            bus_state.door_auto_close_armed = False
+            close_bus_doors(bus_state)
 
 
 def update_bus_ai(bus_state: BusState, dt: float, audio=None, *, mission_phase: str = "waiting_for_tech_deploy", tech_on_bus: bool = False, driver_input=None) -> BusState:
@@ -269,10 +293,16 @@ def update_bus_ai(bus_state: BusState, dt: float, audio=None, *, mission_phase: 
     return bus_state
 
 
-def open_bus_doors(bus_state: BusState, *, audio=None) -> None:
+def open_bus_doors(bus_state: BusState, *, audio=None, auto_close_delay_s: float | None = None) -> None:
     """Trigger bus door opening animation."""
     current_state = getattr(bus_state, "door_state", "closed")
-    if current_state == "closed":
+    if auto_close_delay_s is not None:
+        bus_state.door_auto_close_timer_s = max(0.0, float(auto_close_delay_s))
+        bus_state.door_auto_close_armed = True
+    else:
+        bus_state.door_auto_close_timer_s = 0.0
+        bus_state.door_auto_close_armed = False
+    if current_state in ("closed", "closing"):
         bus_state.door_state = "opening"
         bus_state.door_animation_progress = 0.0
         if audio is not None and hasattr(audio, "play_bus_door"):
@@ -282,7 +312,9 @@ def open_bus_doors(bus_state: BusState, *, audio=None) -> None:
 def close_bus_doors(bus_state: BusState, *, audio=None) -> None:
     """Trigger bus door closing animation."""
     current_state = getattr(bus_state, "door_state", "closed")
-    if current_state == "open":
+    bus_state.door_auto_close_timer_s = 0.0
+    bus_state.door_auto_close_armed = False
+    if current_state in ("open", "opening"):
         bus_state.door_state = "closing"
         bus_state.door_animation_progress = 0.0
         if audio is not None and hasattr(audio, "play_bus_door"):
@@ -308,16 +340,26 @@ def draw_airport_bus(target: pygame.Surface, bus_state: BusState, camera_x: floa
     screen_x = int(bus_state.x - camera_x)
     screen_y = int(bus_state.y - bus_state.height)
     
-    # Select sprite based on door state (closed vs open/opening/closing)
-    door_state = getattr(bus_state, "door_state", "closed")
-    if door_state in ("open", "opening", "closing"):
-        sprite = _load_bus_sprite_doors_open()
-    else:  # closed
-        sprite = _load_bus_sprite()
-    
-    if sprite is not None:
-        # Render the selected bus sprite (front already points left)
-        target.blit(sprite, (screen_x, screen_y))
+    closed_sprite = _load_bus_sprite()
+    open_sprite = _load_bus_sprite_doors_open()
+    blend_open = _bus_door_open_blend(bus_state)
+
+    if closed_sprite is not None and open_sprite is not None:
+        # Cross-fade bus door sprites during opening/closing animation.
+        base = closed_sprite.copy()
+        if blend_open >= 0.999:
+            target.blit(open_sprite, (screen_x, screen_y))
+        elif blend_open <= 0.001:
+            target.blit(base, (screen_x, screen_y))
+        else:
+            over = open_sprite.copy()
+            over.set_alpha(int(255.0 * blend_open))
+            base.blit(over, (0, 0))
+            target.blit(base, (screen_x, screen_y))
+    elif closed_sprite is not None:
+        target.blit(closed_sprite, (screen_x, screen_y))
+    elif open_sprite is not None:
+        target.blit(open_sprite, (screen_x, screen_y))
     else:
         # Fallback: Draw bus body (blue rectangle with darker border)
         bus_rect = pygame.Rect(screen_x, screen_y, bus_state.width, bus_state.height)
@@ -400,4 +442,3 @@ def apply_airport_bus_friendly_fire(bus_state: BusState | None, mission, *, logg
         logger.info("AIRPORT_BUS_FRIENDLY_FIRE: hits=%d health=%.1f", hits, float(getattr(bus_state, "health", 0.0)))
 
     return hits
-BUS_DOOR_ANIMATION_DURATION: float = 0.3  # Duration for opening/closing animation

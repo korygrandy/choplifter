@@ -38,11 +38,27 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 
 - [ ] Re-verify failure paths: bus destroyed, all passengers lost, deadline expiration.
 
+### Immediate Bug Fixes (Priority Order)
+
+- [x] `P0` Barak missile overlap-hit bug: when chopper and bus overlap, missiles currently miss both targets.
+  - Expected rule: if player is controlling helicopter flight (not driving truck/bus), Barak missiles always prioritize chopper collision.
+  - If player is driving a ground vehicle, use normal target selection and allow bus hits.
+  - Add deterministic tests for overlap and non-overlap cases.
+
+- [x] `P1` Chopper select -> mission select navigation: `Esc` should return to mission select UI.
+  - Add keyboard regression test for this UI transition.
+
+- [x] `P1` End-game screen: pause button should open/toggle pause menu, including quit path.
+  - Verify keyboard and gamepad parity on end-game screen.
+
+- [x] `P2` Bus door visual polish: fade transition between `city-bus.png` and `city-bus-doors-open.png` on open/close.
+  - Add blend timing for opening and closing states (for example 0.2s-0.3s each).
+
 ### UX and Messaging
 
-- [ ] Consolidate player-critical mission prompts into the top-center objective strip (avoid split messaging with temporary cutscene cue text).
+- [x] Consolidate player-critical mission prompts into the top-center objective strip (avoid split messaging with temporary cutscene cue text).
 
-- [ ] Normalize wording/typos for airport mission cues and objective statuses.
+- [x] Normalize wording/typos for airport mission cues and objective statuses.
 
 - [ ] Keep airport objective phase text aligned with current flow (including mission tech reboard gate).
 
@@ -59,7 +75,7 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 
 ### Assets and Content
 
-- [ ] Create/integrate `city-bus-doors-open.png` (still listed as needed for finalized door visual state).
+- [x] Create/integrate `city-bus-doors-open.png` (integrated for finalized door visual state).
 
 - [ ] Complete remaining airport placeholder art/audio polish items as needed by playtest feedback.
 
