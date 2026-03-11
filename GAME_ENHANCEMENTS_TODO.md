@@ -309,7 +309,19 @@ Escort/Convoy: A ground vehicle (bus) moves across the screen. The player must h
 - [ ] Enemy retargeting (prioritize bus during escort phase)
 - [ ] Difficulty scaling based on passenger count
 
-**Phase 7: Polish & Assets (LOW PRIORITY)**
+**Phase 7: Barak MRAD Damage FX (MEDIUM PRIORITY)**
+- [ ] **Impact sparks on hit:** Emit `impact_sparks.emit_hit()` at the projectile impact point each time the Barak takes a bullet or bomb hit (identical visual to tank hit sparks)
+- [ ] **Stage 1 – damage smoke (≤50% health):** When `e.health` drops to or below 50% of `barak_health`, continuously emit a light smoke particle stream from the vehicle position (`burning.add_site(e.pos, intensity=0.35)` or a dedicated rolling-smoke emitter) — persists until destruction
+- [ ] **Stage 2 – heavy fire smoke (≤25% health):** When health drops to ≤25%, escalate smoke stream to heavier black/orange smoke (intensity ≈ 0.65); optionally add a small looping fire flicker render at the vehicle
+- [ ] **Destruction sequence:** On `e.health <= 0`:
+  - Emit large fire plume: `explosions.emit_fire_plume(e.pos, strength=1.2)`
+  - Emit explosion burst: `explosions.emit_explosion(e.pos, strength=1.0)`
+  - Emit heavy impact sparks: `impact_sparks.emit_hit(e.pos, vel=Vec2(0,-1), strength=1.8)`
+  - Add persistent high-intensity burn site: `burning.add_site(e.pos, intensity=1.0)` (already done — keep)
+  - Leave a tall rising smoke column: schedule a secondary `explosions.emit_fire_plume(e.pos, strength=0.55)` 0.6 s after destruction to simulate lingering plume
+- [ ] **Per-tick damage threshold check:** Add a helper `_apply_barak_damage_fx(mission, e)` called from `_update_enemies` each tick while Barak is alive and below 50% health — drives the continuous smoke effect without coupling it to the hit path
+
+**Phase 8: Polish & Assets (LOW PRIORITY)**
 - [ ] Bonus objectives (all passengers, no bus damage, time bonus)
 - [ ] Create/integrate cutscene assets
 - [ ] Sound effects for tech deployment, box extension, transfer

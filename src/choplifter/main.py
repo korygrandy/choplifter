@@ -307,6 +307,7 @@ def run() -> None:
         nonlocal prev_btn_rb_down, prev_btn_lb_down, prev_btn_back_down
         nonlocal city_objective_overlay_timer, airport_bus_state, airport_hostage_state, airport_enemy_state, airport_tech_state, airport_objective_state, airport_meal_truck_state, airport_cutscene_state
         nonlocal meal_truck_driver_mode, meal_truck_lift_command_extended
+        nonlocal bus_driver_mode
         # Stop chopper warning beeps on game reset
         audio.stop_chopper_warning_beeps()
         mission, helicopter, accumulator, prev_stats = reset_game(
@@ -336,7 +337,7 @@ def run() -> None:
         prev_btn_back_down = False
         meal_truck_driver_mode = False
         meal_truck_lift_command_extended = False
-        city_objective_overlay_timer = get_mission_objective_overlay_duration(mission_id=selected_mission_id)
+        bus_driver_mode = False
         
         # Initialize mission-specific state
         if selected_mission_id == "airport":
@@ -379,6 +380,7 @@ def run() -> None:
     # Track meal truck driver mode (overrides helicopter controls)
     meal_truck_driver_mode = False
     meal_truck_lift_command_extended = False
+    bus_driver_mode = False
     camera_x_smoothed = None
 
     def can_exit_meal_truck_driver_mode() -> bool:
@@ -390,6 +392,16 @@ def run() -> None:
         distance = abs(truck_x - heli_x)
         max_distance = 100.0  # One helicopter sprite width
         return distance <= max_distance
+
+    def can_enter_bus_driver_mode() -> bool:
+        """Tech must be on bus AND helicopter must be near it to re-board."""
+        if airport_bus_state is None or airport_tech_state is None:
+            return False
+        if not bool(getattr(airport_tech_state, "on_bus", False)):
+            return False
+        heli_x = float(getattr(helicopter.pos, "x", 0.0))
+        bus_x = float(getattr(airport_bus_state, "x", 0.0))
+        return abs(heli_x - bus_x) <= 200.0
     
     # Track previous mode to detect transitions
     prev_loop_mode = mode
@@ -553,6 +565,16 @@ def run() -> None:
                             airport_tech_state.boarding_end_x = float(getattr(airport_meal_truck_state, "x", 0.0))
                             airport_tech_state.boarding_end_y = ground_y
                         continue
+                    elif bus_driver_mode and airport_bus_state is not None:
+                        # E key exits bus driver mode (bus resumes auto-drive)
+                        bus_driver_mode = False
+                        airport_bus_state.driver_mode_active = False
+                        continue
+                    elif can_enter_bus_driver_mode() and airport_bus_state is not None:
+                        # Enter bus driver mode (player manually drives bus to LZ)
+                        bus_driver_mode = True
+                        airport_bus_state.driver_mode_active = True
+                        continue
                 
                 # Handle fire key for lift toggle in meal truck driver mode
                 fire_key_pressed = mode == "playing" and matches_key(event.key, controls.fire) and not getattr(mission, "crash_active", False)
@@ -677,6 +699,14 @@ def run() -> None:
                                         airport_tech_state.boarding_start_y = ground_y
                                         airport_tech_state.boarding_end_x = float(getattr(airport_meal_truck_state, "x", 0.0))
                                         airport_tech_state.boarding_end_y = ground_y
+                                elif bus_driver_mode and airport_bus_state is not None:
+                                    # A button exits bus driver mode (bus resumes auto-drive)
+                                    bus_driver_mode = False
+                                    airport_bus_state.driver_mode_active = False
+                                elif can_enter_bus_driver_mode() and airport_bus_state is not None:
+                                    # Enter bus driver mode (player manually drives bus to LZ)
+                                    bus_driver_mode = True
+                                    airport_bus_state.driver_mode_active = True
                                 else:
                                     # Normal doors toggle
                                     toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count, set_toast)
@@ -1073,6 +1103,21 @@ def run() -> None:
                 brake=False,
             )
 
+        # Build bus driver input (reuses tilt controls: left/right moves bus)
+        bus_driver_input = BusDriverInput(
+            move_left=(kb_tilt_left or gp_tilt_left) if mode == "playing" and bus_driver_mode else False,
+            move_right=(kb_tilt_right or gp_tilt_right) if mode == "playing" and bus_driver_mode else False,
+        )
+        # When in bus driver mode, disable helicopter controls too
+        if bus_driver_mode:
+            helicopter_input = HelicopterInput(
+                tilt_left=False,
+                tilt_right=False,
+                lift_up=False,
+                lift_down=False,
+                brake=False,
+            )
+
         # Fixed-timestep update.
         # Clamp accumulator to avoid spiral of death if the window stalls.
         if accumulator > 0.25:
@@ -1118,7 +1163,14 @@ def run() -> None:
                 # --- Airport Special Ops: update placeholder logic ---
                 if selected_mission_id == "airport":
                     if airport_bus_state is not None:
-                        airport_bus_state = update_bus_ai(airport_bus_state, tick.dt, audio=audio)
+                        airport_bus_state = update_bus_ai(
+                            airport_bus_state,
+                            tick.dt,
+                            audio=audio,
+                            mission_phase=str(getattr(airport_objective_state, "mission_phase", "waiting_for_tech_deploy")),
+                            tech_on_bus=bool(getattr(airport_tech_state, "on_bus", False)),
+                            driver_input=bus_driver_input if bus_driver_mode else None,
+                        )
                     airport_hostage_state = update_airport_hostage_logic(
                         airport_hostage_state,
                         tick.dt,
@@ -1148,6 +1200,11 @@ def run() -> None:
                         meal_truck_lift_command_extended = bool(
                             float(getattr(airport_meal_truck_state, "extension_progress", 0.0)) >= 0.5
                         )
+                    # When tech boards the bus, auto-exit truck driver mode
+                    if bool(getattr(airport_tech_state, "on_bus", False)) and meal_truck_driver_mode:
+                        meal_truck_driver_mode = False
+                        if airport_meal_truck_state is not None:
+                            airport_meal_truck_state.driver_mode_active = False
                     mission.mission_tech = airport_tech_state  # Store for rendering
                     airport_meal_truck_state = update_airport_meal_truck(
                         airport_meal_truck_state,
@@ -1254,6 +1311,12 @@ def run() -> None:
             and bool(getattr(airport_meal_truck_state, "is_active", False))
         ):
             camera_track_x = float(getattr(airport_meal_truck_state, "x", camera_track_x))
+        elif (
+            selected_mission_id == "airport"
+            and bool(bus_driver_mode)
+            and airport_bus_state is not None
+        ):
+            camera_track_x = float(getattr(airport_bus_state, "x", camera_track_x))
 
         camera_x_target = compute_camera_x(
             world_width=float(mission.world_width),
@@ -1261,11 +1324,11 @@ def run() -> None:
             helicopter_x=camera_track_x,
         )
 
-        # Smooth pan only while driving the meal truck to reduce abrupt camera shifts.
+        # Smooth pan only while driving the meal truck or bus to reduce abrupt camera shifts.
         if (
             selected_mission_id == "airport"
-            and bool(meal_truck_driver_mode)
-            and airport_meal_truck_state is not None
+            and (bool(meal_truck_driver_mode) or bool(bus_driver_mode))
+            and (airport_meal_truck_state is not None or airport_bus_state is not None)
         ):
             if camera_x_smoothed is None:
                 camera_x_smoothed = camera_x_target

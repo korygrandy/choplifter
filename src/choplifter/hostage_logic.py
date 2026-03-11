@@ -15,6 +15,8 @@ class AirportHostageState:
 	rescued_hostages: int = 0
 	meal_truck_loaded_hostages: int = 0
 	transferring_hostages: int = 0
+	transferred_so_far: int = 0   # live count incremented per passenger during transfer
+	transfer_rate_s: float = 0.5  # seconds between each passenger boarding the bus
 	interrupted_transfers: int = 0
 	pickup_x: float = 1232.0
 	pickup_radius_px: float = 28.0
@@ -78,40 +80,51 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 				audio.play_bus_door()
 
 	elif hostage_state.state == "truck_loading":
-		# Simulate short extraction/loading window at the plane breach.
+		# Board passengers one-by-one so elevated compound behavior matches ground compounds.
 		elapsed_since_start = float(getattr(mission, "elapsed_seconds", 0.0)) - float(hostage_state.boarding_started_s)
-		if elapsed_since_start >= 1.8:
-			hostage_state.meal_truck_loaded_hostages = int(hostage_state.total_hostages)
+		rate = max(0.2, float(getattr(hostage_state, "transfer_rate_s", 0.5)))
+		total = int(hostage_state.total_hostages)
+		loaded_now = min(total, int(elapsed_since_start / rate))
+		if loaded_now > int(hostage_state.meal_truck_loaded_hostages):
+			hostage_state.meal_truck_loaded_hostages = loaded_now
+		if int(hostage_state.meal_truck_loaded_hostages) >= total:
 			hostage_state.state = "truck_loaded"
 
-	# Phase 2: transfer from meal truck to bus near the bus lane while tech is still active.
+	# Phase 2: transfer from meal truck to bus.
+	# Trigger: truck in bus transfer LZ, box retracted, at least 1 passenger loaded.
+	# tech_operating is NOT required here — passengers stay on truck regardless of box state.
 	elif hostage_state.state == "truck_loaded":
 		if meal_truck_state is not None:
-			# Unboard requires retracted box and being inside rescue LZ (bus transfer zone).
 			near_bus = abs(float(getattr(meal_truck_state, "x", 0.0)) - float(bus_state.x)) <= float(hostage_state.helicopter_bus_radius_px)
-			if near_bus and tech_operating and truck_retracted:
+			has_passengers = int(hostage_state.meal_truck_loaded_hostages) >= 1
+			if near_bus and has_passengers and truck_retracted:
 				hostage_state.transferring_hostages = int(hostage_state.meal_truck_loaded_hostages)
+				hostage_state.transferred_so_far = 0
 				hostage_state.transfer_started_s = float(getattr(mission, "elapsed_seconds", 0.0))
 				hostage_state.state = "transferring_to_bus"
 				if audio is not None and hasattr(audio, "play_bus_door"):
 					audio.play_bus_door()
 
 	elif hostage_state.state == "transferring_to_bus":
+		# Tick one passenger onto the bus every transfer_rate_s seconds.
 		elapsed_since_transfer_start = float(getattr(mission, "elapsed_seconds", 0.0)) - float(getattr(hostage_state, "transfer_started_s", 0.0))
-		transfer_duration = max(0.4, float(getattr(hostage_state, "transfer_duration_s", 1.2)))
-		if elapsed_since_transfer_start >= transfer_duration:
-			hostage_state.boarded_hostages = int(hostage_state.transferring_hostages)
+		rate = max(0.2, float(getattr(hostage_state, "transfer_rate_s", 0.5)))
+		total = int(hostage_state.transferring_hostages)
+		new_count = min(total, int(elapsed_since_transfer_start / rate))
+		if new_count > int(hostage_state.transferred_so_far):
+			hostage_state.transferred_so_far = new_count
+			hostage_state.boarded_hostages = new_count  # live count drives bus display
+		if int(hostage_state.transferred_so_far) >= total:
+			hostage_state.boarded_hostages = total
 			hostage_state.meal_truck_loaded_hostages = 0
 			hostage_state.transferring_hostages = 0
 			hostage_state.state = "boarded"
 
-	# Phase 3: deboard at LZ when bus route is done.
+	# Phase 3: auto-rescued when bus reaches the LZ stop point.
 	elif hostage_state.state == "boarded":
+		bus_at_lz = float(getattr(bus_state, "x", 9999.0)) <= float(getattr(bus_state, "stop_x", 500.0)) + 10.0
 		bus_stopped = not bool(getattr(bus_state, "is_moving", True))
-		player_supporting = bool(getattr(helicopter, "grounded", False) and getattr(helicopter, "doors_open", False))
-		near_bus = abs(float(getattr(helicopter.pos, "x", 0.0)) - float(bus_state.x)) <= float(hostage_state.helicopter_bus_radius_px)
-
-		if bus_stopped and player_supporting and near_bus:
+		if bus_at_lz and bus_stopped:
 			hostage_state.rescued_hostages = int(hostage_state.boarded_hostages)
 			hostage_state.boarded_hostages = 0
 			hostage_state.state = "rescued"
@@ -255,8 +268,8 @@ def _draw_meal_truck_passengers(target: pygame.Surface, hostage_state, meal_truc
 		pygame.draw.circle(target, (25, 25, 25), (truck_x, text_y), 6, 1)
 
 
-def _draw_awaiting_passengers(target: pygame.Surface, hostage_state, *, camera_x: float, ground_y: float, mission_time: float) -> None:
-	"""Draw animated stick figures at the pickup location, awaiting boarding onto the meal truck."""
+def _draw_awaiting_passengers(target: pygame.Surface, hostage_state, *, camera_x: float, ground_y: float, meal_truck_state=None, mission_time: float) -> None:
+	"""Draw single-file passenger queue and active walker during elevated-truck boarding."""
 	if hostage_state is None:
 		return
 	
@@ -265,29 +278,39 @@ def _draw_awaiting_passengers(target: pygame.Surface, hostage_state, *, camera_x
 		return
 	
 	total_hostages = int(getattr(hostage_state, "total_hostages", 16))
+	loaded_hostages = int(getattr(hostage_state, "meal_truck_loaded_hostages", 0))
+	waiting_hostages = max(0, total_hostages - loaded_hostages)
+	if waiting_hostages <= 0:
+		return
+
+	rate = max(0.2, float(getattr(hostage_state, "transfer_rate_s", 0.5)))
+	boarding_started_s = float(getattr(hostage_state, "boarding_started_s", mission_time))
+	elapsed_since_start = max(0.0, mission_time - boarding_started_s)
+	current_step = elapsed_since_start / rate
+	step_phase = max(0.0, min(1.0, current_step - math.floor(current_step)))
 	pickup_x_world = float(getattr(hostage_state, "pickup_x", 1500.0))
 	
-	# Convert to screen coordinates
+	# Convert to screen coordinates.
 	pickup_x = int(pickup_x_world - float(camera_x))
-	pickup_y = int(float(ground_y))
-	
-	# Draw stick figures in a cluster at the jetway (4 per row, 12px spacing)
-	row_size = 4
-	spacing = 12
-	
-	for i in range(total_hostages):
-		row = i // row_size
-		col = i % row_size
-		
-		# Center the cluster around the pickup point
-		offset_x = (col - (row_size - 1) / 2.0) * spacing
-		offset_y = row * spacing
-		
-		x = int(pickup_x + offset_x)
-		y = int(pickup_y - offset_y)
-		
-		# Draw animated stick figure passenger
-		_draw_stick_figure_passenger(target, x, y, i, mission_time)
+	# Anchor boarding to the raised service platform when truck state is available.
+	if meal_truck_state is not None:
+		truck_top_y = float(getattr(meal_truck_state, "y", ground_y)) - float(getattr(meal_truck_state, "height", 28))
+		pickup_y = int(truck_top_y - 53.0 + 20.0)
+		truck_entry_x = int(float(getattr(meal_truck_state, "x", pickup_x_world)) - float(camera_x) + 18.0)
+	else:
+		pickup_y = int(float(ground_y))
+		truck_entry_x = pickup_x + 48
+
+	# Draw waiting passengers queued in single-file behind the active walker.
+	queue_spacing = 12
+	for i in range(max(0, waiting_hostages - 1)):
+		x = int(pickup_x - (i + 1) * queue_spacing)
+		y = int(pickup_y)
+		_draw_stick_figure_passenger(target, x, y, loaded_hostages + i + 1, mission_time)
+
+	# Draw one active passenger moving from queue to truck.
+	active_x = int(pickup_x + (truck_entry_x - pickup_x) * step_phase)
+	_draw_stick_figure_passenger(target, active_x, int(pickup_y), loaded_hostages, mission_time)
 
 
 def draw_airport_hostages(target: pygame.Surface, hostage_state, *, camera_x: float, ground_y: float, bus_state=None, meal_truck_state=None, mission_time: float = 0.0) -> None:
@@ -300,7 +323,14 @@ def draw_airport_hostages(target: pygame.Surface, hostage_state, *, camera_x: fl
 	
 	# State: truck_loading - Draw animated stick figures at pickup location
 	if hostage_state.state == "truck_loading":
-		_draw_awaiting_passengers(target, hostage_state, camera_x=camera_x, ground_y=ground_y, mission_time=mission_time)
+		_draw_awaiting_passengers(
+			target,
+			hostage_state,
+			camera_x=camera_x,
+			ground_y=ground_y,
+			meal_truck_state=meal_truck_state,
+			mission_time=mission_time,
+		)
 		
 		# Draw pulsing indicator at pickup location
 		x = int(float(hostage_state.pickup_x) - float(camera_x))
@@ -366,18 +396,18 @@ def draw_airport_hostages(target: pygame.Surface, hostage_state, *, camera_x: fl
 		truck_x = int(float(getattr(meal_truck_state, "x", 0.0)) - float(camera_x))
 		truck_y = int(float(getattr(meal_truck_state, "y", ground_y)))
 		transfer_started_s = float(getattr(hostage_state, "transfer_started_s", mission_time))
-		transfer_duration = max(0.4, float(getattr(hostage_state, "transfer_duration_s", 1.2)))
-		progress = (mission_time - transfer_started_s) / transfer_duration
-		progress = max(0.0, min(1.0, progress))
+		rate = max(0.2, float(getattr(hostage_state, "transfer_rate_s", 0.5)))
+		total = int(getattr(hostage_state, "transferring_hostages", 0))
+		elapsed = max(0.0, mission_time - transfer_started_s)
+		current_step = elapsed / rate
+		current_index = int(current_step)
+		phase = max(0.0, min(1.0, current_step - current_index))
 
-		# Render a subset of walkers marching from truck to bus while transfer is active.
-		walker_count = min(6, max(2, int(getattr(hostage_state, "transferring_hostages", 0)) // 3 + 1))
-		for i in range(walker_count):
-			phase = ((i * 0.17) % 0.7)
-			walker_t = max(0.0, min(1.0, progress - phase))
-			x = int(truck_x + (bus_x - truck_x) * walker_t)
-			y = int(truck_y - 2 - (i % 2) * 2)
-			_draw_stick_figure_passenger(target, x, y, i, mission_time)
+		# Render exactly one active walker for a true single-file unboarding transfer.
+		if current_index < total:
+			x = int(truck_x + (bus_x - truck_x) * phase)
+			y = int(truck_y - 2)
+			_draw_stick_figure_passenger(target, x, y, current_index, mission_time)
 
 		# Keep count indicators visible at both endpoints during movement.
 		_draw_meal_truck_passengers(target, hostage_state, meal_truck_state, camera_x=camera_x, mission_time=mission_time)

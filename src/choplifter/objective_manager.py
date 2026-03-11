@@ -11,8 +11,8 @@ import pygame
 class AirportObjectiveState:
 	hostage_deadline_s: float = 120.0
 	deadline_failed: bool = False
-	mission_phase: str = "reach_hostages"  # reach_hostages -> truck_extract -> truck_transfer -> escort_return -> complete
-	status_text: str = "Reach hostages"
+	mission_phase: str = "waiting_for_tech_deploy"
+	status_text: str = "Deploy tech to meal truck"
 
 
 def create_airport_objective_state(*, hostage_deadline_s: float = 120.0) -> AirportObjectiveState:
@@ -34,30 +34,50 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 	interrupted_transfers = int(getattr(hostage_state, "interrupted_transfers", 0)) if hostage_state is not None else 0
     
 	tech_operating = bool(tech_state is not None and getattr(tech_state, "is_deployed", False))
+	tech_on_bus = bool(tech_state is not None and getattr(tech_state, "on_bus", False))
 	truck_active = bool(meal_truck_state is not None and getattr(meal_truck_state, "is_active", False))
+	truck_at_plane_lz = bool(meal_truck_state is not None and getattr(meal_truck_state, "at_plane_lz", False))
+	truck_extended = bool(
+		meal_truck_state is not None
+		and (
+			float(getattr(meal_truck_state, "extension_progress", 0.0)) >= 0.92
+			or str(getattr(meal_truck_state, "box_state", "idle")) == "extended"
+		)
+	)
 
 	if waiting and elapsed >= float(objective_state.hostage_deadline_s):
 		objective_state.deadline_failed = True
 
 	if rescued:
-		objective_state.mission_phase = "complete"
+		objective_state.mission_phase = "mission_complete"
 		objective_state.status_text = "Hostages rescued"
+	elif waiting and interrupted_transfers > 0 and not tech_operating and not tech_on_bus:
+		objective_state.mission_phase = "auto_reset"
+		objective_state.status_text = "Bus resetting to standby"
 	elif boarded:
-		objective_state.mission_phase = "escort_return"
+		objective_state.mission_phase = "escort_to_lz"
 		objective_state.status_text = "Escort bus to LZ"
+	elif hostage_state is not None and str(getattr(hostage_state, "state", "")) == "transferring_to_bus":
+		objective_state.mission_phase = "transferring_to_bus"
+		objective_state.status_text = "Transferring civilians to bus"
 	elif truck_loaded:
-		objective_state.mission_phase = "truck_transfer"
-		objective_state.status_text = "Transfer civilians to bus"
-	elif truck_loading or (truck_active and tech_operating):
-		objective_state.mission_phase = "truck_extract"
+		objective_state.mission_phase = "truck_driving_to_bus"
+		objective_state.status_text = "Drive truck to bus transfer lane"
+	elif truck_loading:
+		objective_state.mission_phase = "extracting_hostages"
 		objective_state.status_text = "Meal truck extracting civilians"
-	elif waiting and interrupted_transfers > 0:
-		objective_state.mission_phase = "reach_hostages"
-		objective_state.status_text = "Tech recalled - extraction reset"
+	elif truck_active and tech_operating:
+		objective_state.mission_phase = "truck_driving_to_bunker"
+		if truck_at_plane_lz and not truck_extended:
+			objective_state.status_text = "Extend lift at damaged plane"
+		else:
+			objective_state.status_text = "Drive meal truck to damaged plane"
+	elif waiting:
+		objective_state.mission_phase = "waiting_for_tech_deploy"
+		objective_state.status_text = "Deploy tech to meal truck"
 	else:
-		objective_state.mission_phase = "reach_hostages"
-		remaining = max(0, int(objective_state.hostage_deadline_s - elapsed))
-		objective_state.status_text = f"Reach hostages ({remaining}s)"
+		objective_state.mission_phase = "waiting_for_tech_deploy"
+		objective_state.status_text = "Deploy tech to meal truck"
 
 	return objective_state
 
@@ -74,7 +94,7 @@ def draw_airport_objectives(target: pygame.Surface, objective_state, *, camera_x
 	color = (255, 215, 0)
 	if bool(getattr(objective_state, "deadline_failed", False)):
 		color = (225, 70, 70)
-	elif str(getattr(objective_state, "mission_phase", "")) == "complete":
+	elif str(getattr(objective_state, "mission_phase", "")) == "mission_complete":
 		color = (95, 215, 120)
 
 	pygame.draw.circle(target, color, (marker_x, marker_y), 6)
