@@ -43,8 +43,8 @@ def _tick_pending_barak_cookoff_bursts(mission: MissionState, dt: float) -> None
                 p = Projectile(
                     kind=ProjectileKind.ENEMY_ARTILLERY,
                     pos=launch_origin,
-                    vel=Vec2(0.0, -260.0),
-                    ttl=1.4,
+                    vel=Vec2(0.0, -340.0),
+                    ttl=1.2,
                     source=EnemyKind.BARAK_MRAD,
                     is_barak_missile=True,
                     missile_state="cookoff_spiral",
@@ -53,9 +53,9 @@ def _tick_pending_barak_cookoff_bursts(mission: MissionState, dt: float) -> None
                 p.barak_cookoff_missile = True
                 p.barak_cookoff_age_s = 0.0
                 p.barak_cookoff_origin_x = float(launch_origin.x)
-                p.barak_cookoff_spiral_amp_px = random.uniform(12.0, 18.0)
-                p.barak_cookoff_spiral_freq_hz = random.uniform(5.5, 7.5)
-                p.barak_cookoff_detonate_s = random.uniform(0.52, 0.68)
+                p.barak_cookoff_spiral_amp_px = random.uniform(10.0, 15.0)
+                p.barak_cookoff_spiral_freq_hz = random.uniform(6.5, 8.2)
+                p.barak_cookoff_detonate_s = random.uniform(0.34, 0.46)
                 p.barak_cookoff_side_sign = side_sign
                 mission.projectiles.append(p)
 
@@ -396,10 +396,10 @@ def _update_projectiles(
                 origin_x = float(getattr(p, "barak_cookoff_origin_x", p.pos.x))
                 p.pos.x = origin_x + math.sin(age * omega) * amp
                 lateral_v = math.cos(age * omega) * amp * omega
-                p.vel.y = min(-70.0, float(p.vel.y) + (220.0 * dt))
+                p.vel.y = min(-120.0, float(p.vel.y) + (320.0 * dt))
                 p.current_angle = math.atan2(float(p.vel.y), lateral_v)
 
-                detonate_s = float(getattr(p, "barak_cookoff_detonate_s", 0.58))
+                detonate_s = float(getattr(p, "barak_cookoff_detonate_s", 0.40))
                 if age >= detonate_s:
                     side_sign = 1.0 if float(getattr(p, "barak_cookoff_side_sign", 1.0)) >= 0.0 else -1.0
                     mission.explosions.emit_fire_plume(p.pos, strength=1.0)

@@ -95,7 +95,7 @@ class MissionTuning:
     barak_flare_near_miss_arm_radius_px: float = 54.0
     barak_flare_post_pass_explode_distance_px: float = 68.0
     barak_flare_last_chance_override_radius_px: float = 92.0
-    barak_destroy_second_burst_delay_s: float = 0.24
+    barak_destroy_second_burst_delay_s: float = 0.14
 
 
 @dataclass(frozen=True)
