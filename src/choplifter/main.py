@@ -26,6 +26,7 @@ from .rendering import (
     bg_asset_exists,
     draw_chopper_select_overlay,
     draw_damage_flash,
+    draw_explosion_particles,
     draw_flares,
     draw_helicopter_damage_fx,
     draw_impact_sparks,
@@ -1238,7 +1239,7 @@ def run() -> None:
                     tech_state_name = str(getattr(airport_tech_state, "state", "on_chopper"))
                     check_tech_lz_door_toast(mission, airport_tech_state, helicopter, set_toast)
                     engineer_just_boarded_truck = (
-                        prev_tech_state_name == "on_chopper" and tech_state_name != "on_chopper"
+                        prev_tech_state_name == "on_chopper" and tech_state_name == "deployed_to_truck"
                     )
                     if engineer_just_boarded_truck and airport_meal_truck_state is not None:
                         if not bool(getattr(mission, "_carjacked_mealtruck_played", False)):
@@ -1488,6 +1489,7 @@ def run() -> None:
                 )
             
             draw_flares(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
+            draw_explosion_particles(target, mission, camera_x=camera_x)
             draw_helicopter_damage_fx(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
             draw_helicopter(target, helicopter, camera_x=camera_x, boarded=boarded_count(mission))
             draw_impact_sparks(target, mission, camera_x=camera_x, enable_particles=particles_enabled)

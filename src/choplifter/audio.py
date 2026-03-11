@@ -292,6 +292,7 @@ class AudioBank:
     bus_door: pygame.mixer.Sound | None
     hang_on_yall: pygame.mixer.Sound | None
     carjacked_mealtruck: pygame.mixer.Sound | None
+    barak_explosion: pygame.mixer.Sound | None
 
     def play_barak_mrad_deploy(self) -> None:
         if self.barak_mrad_deploy is None:
@@ -306,6 +307,11 @@ class AudioBank:
         if self.barak_mrad_launch is None:
             return
         if self.mixer is not None:
+            # Prevent long deploy cue from masking the launch cue.
+            try:
+                pygame.mixer.Channel(DEDICATED_CH_BARAK_DEPLOY).stop()
+            except Exception:
+                pass
             self.mixer.play(self.barak_mrad_launch, bus="sfx", dedicated_channel=DEDICATED_CH_BARAK_LAUNCH)
         else:
             self.barak_mrad_launch.play()
@@ -569,6 +575,12 @@ class AudioBank:
             carjacked_mealtruck = _try_load_asset_sound(asset_dir / "carjacked-mealtruck.ogg")
             if carjacked_mealtruck is not None:
                 carjacked_mealtruck.set_volume(0.62)
+            barak_explosion = (
+                _try_load_asset_sound(asset_dir / "barak-explosion.ogg")
+                or _try_load_asset_sound(asset_dir / "barrak-explosion.ogg")
+            )
+            if barak_explosion is not None:
+                barak_explosion.set_volume(0.72)
             return AudioBank(
                 mixer=mixer,
                 shoot=shoot,
@@ -600,6 +612,7 @@ class AudioBank:
                 bus_door=bus_door,
                 hang_on_yall=hang_on_yall,
                 carjacked_mealtruck=carjacked_mealtruck,
+                barak_explosion=barak_explosion,
             )
         except Exception as e:
             print(f"[AudioBank] Failed to initialize: {e}")
@@ -634,6 +647,7 @@ class AudioBank:
                 bus_door=None,
                 hang_on_yall=None,
                 carjacked_mealtruck=None,
+                barak_explosion=None,
             )
             r2 = _sine_pcm16(freq_hz=988.0, duration_s=0.10, volume=0.22, sample_rate=sample_rate)
             rescue = pygame.mixer.Sound(buffer=_mix_pcm16([r1, r2], volume=0.85))
@@ -906,3 +920,6 @@ class AudioBank:
 
     def play_carjacked_mealtruck(self) -> None:
         self._play(self.carjacked_mealtruck, bus="sfx")
+
+    def play_barak_explosion(self) -> None:
+        self._play(self.barak_explosion, bus="sfx")
