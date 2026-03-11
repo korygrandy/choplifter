@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 import unittest
+import pytest
 
 from src.choplifter.mission_tech import MissionTechState, update_mission_tech
+
+
+pytestmark = pytest.mark.airport_smoke
 
 
 class MissionTechTransitionTests(unittest.TestCase):

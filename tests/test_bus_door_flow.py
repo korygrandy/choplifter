@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 import unittest
+import pytest
 
 from src.choplifter.app.bus_door_flow import apply_airport_bus_door_transitions
 from src.choplifter.bus_ai import BusState, update_bus_ai
+
+
+pytestmark = pytest.mark.airport_smoke
 
 
 class BusDoorFlowTests(unittest.TestCase):

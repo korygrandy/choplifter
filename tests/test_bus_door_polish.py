@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+import pytest
 
 from src.choplifter.bus_ai import (
     BusState,
@@ -9,6 +10,9 @@ from src.choplifter.bus_ai import (
     open_bus_doors,
     update_bus_ai,
 )
+
+
+pytestmark = pytest.mark.airport_smoke
 
 
 class BusDoorPolishTests(unittest.TestCase):

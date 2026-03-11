@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 import unittest
+import pytest
 
 from src.choplifter.objective_manager import update_airport_objectives
+
+
+pytestmark = pytest.mark.airport_smoke
 
 
 class AirportObjectiveFlowTests(unittest.TestCase):

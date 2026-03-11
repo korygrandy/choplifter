@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 import unittest
+import pytest
 
 from src.choplifter.enemy_spawns import AirportEnemyState, AirportSpawnEnemy, update_airport_enemy_spawns
+
+
+pytestmark = pytest.mark.airport_smoke
 
 
 class EnemySpawnEscortRiskTests(unittest.TestCase):

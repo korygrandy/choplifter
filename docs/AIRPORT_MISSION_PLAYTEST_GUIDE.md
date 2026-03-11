@@ -14,6 +14,12 @@ py run.py
 # Select "Airport Special Ops"
 ```
 
+Automated smoke suite:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_airport_smoke.ps1
+```
+
 ---
 
 ## Smoke Pass Command Card

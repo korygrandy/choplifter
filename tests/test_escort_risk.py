@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 import unittest
+import pytest
 
 from src.choplifter.app.escort_risk import (
     POST_RESPAWN_ESCORT_RISK_SECONDS,
@@ -10,6 +11,9 @@ from src.choplifter.app.escort_risk import (
     airport_escort_damage_multiplier,
     tick_post_respawn_escort_risk,
 )
+
+
+pytestmark = pytest.mark.airport_smoke
 
 
 class EscortRiskTests(unittest.TestCase):

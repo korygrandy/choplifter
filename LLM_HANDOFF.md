@@ -1,6 +1,6 @@
 # LLM Handoff (Current Engineering State)
 
-Last updated: 2026-03-10
+Last updated: 2026-03-11
 
 This file is the canonical engineering handoff for future AI/dev sessions.
 
@@ -96,6 +96,40 @@ Current script behavior (`scripts/build_windows_exe.ps1`):
   - `./.venv/Scripts/python.exe -c "from src.choplifter.main import run; print('import-ok')"`
 - Run game:
   - `& .\.venv\Scripts\python.exe .\run.py`
+
+### Automated Airport Smoke Workflow
+
+- Smoke suite marker is registered in `pytest.ini` as `airport_smoke`.
+- One-command runner script: `scripts/run_airport_smoke.ps1`.
+- Playtest guide and smoke report template: `docs/AIRPORT_MISSION_PLAYTEST_GUIDE.md`.
+
+Primary command:
+
+- `powershell -ExecutionPolicy Bypass -File .\scripts\run_airport_smoke.ps1`
+
+Optional verbose command:
+
+- `powershell -ExecutionPolicy Bypass -File .\scripts\run_airport_smoke.ps1 -VerboseOutput`
+
+Direct pytest equivalent:
+
+- `.\.venv\Scripts\python.exe -m pytest -q -m airport_smoke`
+
+Expected behavior:
+
+- Runs the curated airport mission smoke subset only.
+- Prints `Airport smoke suite passed.` on success.
+- Returns non-zero exit code on failure (CI-friendly gating).
+
+Current baseline (as of this handoff update):
+
+- `29 passed, 75 deselected`.
+
+Recommended usage per cycle:
+
+1. Run automated smoke suite before manual playtest.
+2. If green, run 10-minute manual smoke in `docs/AIRPORT_MISSION_PLAYTEST_GUIDE.md`.
+3. Submit smoke-pass report using the command card template.
 
 ## Current Work: Airport Special Ops Mission
 

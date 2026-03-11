@@ -23,11 +23,28 @@ The current branch includes a major mission/main refactor, weather and FX system
 1. Install dependencies into the project venv:
    - `./.venv/Scripts/python.exe -m pip install -r requirements.txt`
 2. Run the game:
-  - `& .\.venv\Scripts\python.exe .\run.py`
+
+- `& .\.venv\Scripts\python.exe .\run.py`
 
 Notes:
+
 - If you activate first (`./.venv/Scripts/Activate.ps1`), then `python run.py` works.
 - Avoid `py run.py` unless you intentionally want your global Python.
+
+## QA Validation
+
+Automated airport smoke suite (fast regression gate):
+
+- `powershell -ExecutionPolicy Bypass -File .\scripts\run_airport_smoke.ps1`
+
+Direct pytest equivalent:
+
+- `.\.venv\Scripts\python.exe -m pytest -q -m airport_smoke`
+
+Manual follow-up:
+
+- Run the `10-Minute Smoke Pass` in `docs/AIRPORT_MISSION_PLAYTEST_GUIDE.md`
+- Submit the smoke report using the command card template in `docs/AIRPORT_MISSION_PLAYTEST_GUIDE.md`
 
 ## Controls
 
@@ -45,6 +62,7 @@ Notes:
 - Thermal mode: `T`
 
 Debug-related:
+
 - Toggle debug weather mode: `F3`
 - Cycle weather while debug mode is on: `F5` / `F6`
 - Toggle overlay via configurable control mapping (default `F1`)
@@ -63,6 +81,7 @@ Debug-related:
 - D-pad: optional discrete input/menu navigation
 
 Airport mission interaction notes:
+
 - `E` / `A` near meal truck: deploy/return engineer and toggle truck driver mode.
 - `Space` / `X` while driving meal truck: toggle lift extension command.
 - `E` / `A` near bus (when tech is on bus): toggle bus driver mode.
@@ -92,10 +111,12 @@ Use the included script:
   - `powershell -ExecutionPolicy Bypass -File .\scripts\build_windows_exe.ps1 -Mode onefile`
 
 Outputs:
+
 - `pyinstaller-dist/Choplifter/Choplifter.exe` (onedir)
 - `pyinstaller-dist/Choplifter.exe` (onefile)
 
 Current packaging behavior:
+
 - Assets are staged through an explicit runtime manifest at `pyinstaller-build/asset-staging` before PyInstaller runs.
 - Included extensions: `.png`, `.jpg`, `.jpeg`, `.wav`, `.ogg`, `.avi`, `.mpg`, `.json`.
 - Non-runtime source assets (for example `.xcf`) are excluded from staged output.
@@ -106,9 +127,11 @@ Current packaging behavior:
 Current onefile size is primarily driven by media payload and ffmpeg/runtime dependencies.
 
 Latest measured onefile baseline:
+
 - `pyinstaller-dist/Choplifter.exe`: about `318.34 MB`
 
 Largest contributors are typically:
+
 - `src/choplifter/assets/intro.mpg`
 - `src/choplifter/assets/hostage-rescue-cutscene.mpg`
 - Bundled `imageio-ffmpeg` binary
@@ -133,3 +156,4 @@ Without LFS pull, intro/cutscene assets may be missing.
 - `docs/WINDOWS_EXE_BUILD.md`: packaging and signing
 - `docs/WEB_BUILD.md`: browser build notes
 - `docs/EXECUTIVE_SUMMARY.md`: product-level summary
+- `docs/AIRPORT_MISSION_PLAYTEST_GUIDE.md`: airport full matrix + smoke pass command card

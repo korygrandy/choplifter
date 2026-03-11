@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 import unittest
+import pytest
 
 from src.choplifter.helicopter import Facing
 from src.choplifter.mission_projectiles import (
@@ -13,6 +14,9 @@ from src.choplifter.mission_projectiles import (
     _barak_target_point,
 )
 from src.choplifter.math2d import Vec2
+
+
+pytestmark = pytest.mark.airport_smoke
 
 
 class BarakGroundedCollisionTests(unittest.TestCase):

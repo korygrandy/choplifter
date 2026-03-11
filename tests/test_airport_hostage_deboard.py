@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 import unittest
+import pytest
 
 from src.choplifter.hostage_logic import AirportHostageState, update_airport_hostage_logic
+
+
+pytestmark = pytest.mark.airport_smoke
 
 
 class AirportHostageDeboardTests(unittest.TestCase):

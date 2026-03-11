@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 import unittest
+import pytest
 
 from src.choplifter.game_types import HostageState
 from src.choplifter.mission_hostages import _update_hostages
 from src.choplifter.settings import HelicopterSettings
+
+
+pytestmark = pytest.mark.airport_smoke
 
 
 def _hostage(*, x: float, y: float) -> SimpleNamespace:
