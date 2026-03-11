@@ -16,6 +16,32 @@ py run.py
 
 ---
 
+## Smoke Pass Command Card
+
+Capture these fields for every smoke pass run:
+
+- `Input device`: keyboard / gamepad / mixed
+- `Objective text`: exact strip text at each phase gate
+- `Bus health`: start, first escort impact, post-respawn impact window
+- `Crash count`: before and after escort crash validation
+- `Passenger count`: visible `xN` during transfer/deboard
+- `Result`: `PASS` or `FAIL`
+
+Use this compact report template:
+
+```text
+Airport Smoke Report
+- Input: <keyboard|gamepad|mixed>
+- Objective checkpoints: <text sequence or mismatch>
+- Bus health samples: <values>
+- Crash count: <before -> after>
+- Passenger xN checks: <observed>
+- Result: <PASS|FAIL>
+- Notes: <optional>
+```
+
+---
+
 ## Airport Gameplay Truth
 
 Use this as the acceptance baseline:
@@ -36,6 +62,27 @@ Use this as the acceptance baseline:
 - Driver modes lock helicopter weapons (gun + flare).
 - Crash/respawn keeps mission continuity and applies temporary escort-risk tuning.
 - Mission ends only when combined rescued reaches `16`.
+
+---
+
+## 10-Minute Smoke Pass
+
+Run this before the full matrix to catch high-impact regressions quickly.
+
+| # | Action | Expected Result |
+|---|--------|-----------------|
+| S1 | Start `Airport Special Ops` and deploy tech to meal truck | Tech leaves chopper and truck flow starts |
+| S2 | Reach transfer and confirm bus door open/close cycle | Transfer starts and bus door state does not get stuck |
+| S3 | Enter then exit bus driver mode once | Bus control handoff works; chopper weapons are locked while driving |
+| S4 | Let bus reach tower LZ and verify tech reboard prompt | Objective shows tech pickup prompt at tower LZ |
+| S5 | Reboard tech (grounded + doors open) | Objective advances to lower-rescue continuation (if total < `16`) |
+| S6 | Force one chopper crash during active escort | Bus keeps moving; post-respawn escort-risk window is observable |
+| S7 | Complete one lower rescue action (or verify prior saved count) | Combined rescue progression still updates correctly |
+
+Smoke pass result:
+
+- `PASS`: all S1-S7 behave as expected.
+- `FAIL`: any blocker/soft-lock/objective mismatch; run full matrix and file issue with phase details.
 
 ---
 

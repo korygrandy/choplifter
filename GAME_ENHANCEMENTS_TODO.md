@@ -32,6 +32,8 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 
 - [ ] Run full airport playtest matrix in `docs/AIRPORT_MISSION_PLAYTEST_GUIDE.md`.
 
+- [ ] Submit smoke-pass report each cycle using the command card in `docs/AIRPORT_MISSION_PLAYTEST_GUIDE.md`.
+
 - [ ] Validate no soft-locks across: tech deploy -> elevated extraction -> transfer -> bus LZ -> tech reboard -> lower rescue continuation.
 
 - [ ] Verify keyboard and gamepad parity for door interactions and mission progression.
@@ -61,6 +63,10 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 - [x] Normalize wording/typos for airport mission cues and objective statuses.
 
 - [x] Keep airport objective phase text aligned with current flow (including mission tech reboard gate).
+
+### Onboarding and Tutorial
+
+- [ ] Create a `Ground School` interactive walkthrough tutorial + overlay that guides players through gameplay and controls in sequenced steps.
 
 ### Test Coverage
 
