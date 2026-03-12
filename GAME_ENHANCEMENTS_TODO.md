@@ -50,6 +50,8 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 - Playing fixed-step iteration + airport per-tick update wiring were moved out of `main.py` into `src/choplifter/app/fixed_step_iteration.py` via `run_playing_fixed_step_iteration(...)`.
 - Post-fixed-step phase (toast tick, mode transition, frame prep/render, display flip, context persist) was moved out of `main.py` into `src/choplifter/app/post_fixed_step_phase.py` via `run_post_fixed_step_phase(...)`.
 - Accumulator-driven fixed-step loop control was moved out of `main.py` into `src/choplifter/app/fixed_step_loop.py` via `run_fixed_step_loop(...)`.
+- Mission preview/reset wrapper bodies were moved out of `main.py` into `src/choplifter/app/setup_wrappers.py` via `apply_mission_preview_to_context(...)` and `reset_game_to_context(...)`.
+- Startup initialization and initial menu/runtime setup were moved out of `main.py` into `src/choplifter/app/run_bootstrap.py` via `initialize_run_bootstrap(...)`.
 
 ### Gameplay Validation (Highest Priority)
 

@@ -240,6 +240,20 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced inline `while accumulator >= tick.dt` loop with one helper call and result assignment.
 - **Goal:** reduce core loop control-flow noise in `main.py` while preserving fixed-step semantics and runtime state updates.
 
+### Preview/reset setup-wrapper extraction
+
+- **New module:** `src/choplifter/app/setup_wrappers.py`
+  - Added `apply_mission_preview_to_context(...)` and `reset_game_to_context(...)` to centralize heavy context/runtime mutation logic previously in `main.py` wrapper bodies.
+- **Main loop change (`main.py`):** reduced `apply_mission_preview_wrapper()` and `reset_game_wrapper()` to thin delegators plus `context_swapped = True`.
+- **Goal:** shrink `main.py` setup/reset wrapper complexity while preserving wrapper call signatures used by event/gamepad paths.
+
+### Startup bootstrap extraction
+
+- **New module:** `src/choplifter/app/run_bootstrap.py`
+  - Added `initialize_run_bootstrap(...)` and `RunBootstrapState` to centralize startup system initialization and initial menu/runtime state wiring.
+- **Main loop change (`main.py`):** replaced large startup/setup block with one bootstrap helper call and field assignment.
+- **Goal:** reduce `run()` bootstrap noise in `main.py` and keep startup orchestration behind a dedicated boundary.
+
 ### City Siege satellite SFX timing fix
 
 - **Problem:** `satellite-reallocating.ogg` could fire at City mission launch trigger time (before intro cutscene completed) on gamepad flow.

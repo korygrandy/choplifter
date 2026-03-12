@@ -1,110 +1,56 @@
 from .game_types import EnemyKind
 from .barak_mrad import BARAK_STATE_DEPLOY
 
-from pathlib import Path
-import random
 import pygame
 
-from .audio import AudioBank
 from .audio_extra import play_satellite_reallocating
-from .accessibility import load_accessibility
-from .controls import load_controls
-from .debug_overlay import DebugOverlay
-from .game_logging import create_session_logger
-from .helicopter import Facing, Helicopter, update_helicopter
-from . import haptics
+from .helicopter import Facing, update_helicopter
 from .mission import update_mission
-from .mission_ending import _end_mission
-from .mission_configs import get_mission_config_by_id
 from .mission_helpers import boarded_count
 from .mission_hostages import hostage_crush_check_logged
 from .mission_player_fire import spawn_projectile_from_helicopter_logged
-from .mission_state import MissionState
-from .rendering import (
-    bg_asset_exists,
-    draw_chopper_select_overlay,
-    draw_damage_flash,
-    draw_enemy_damage_fx,
-    draw_explosion_particles,
-    draw_flares,
-    draw_helicopter_damage_fx,
-    draw_impact_sparks,
-    draw_ground,
-    draw_helicopter,
-    draw_hud,
-    draw_mission,
-    draw_mission_select_overlay,
-    draw_sky,
-    draw_toast,
-)
 # --- Airport Special Ops mission modules ---
-from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, PhysicsSettings, WindowSettings
-from .sky_smoke import SkySmokeSystem
-from .fx.rain import RainSystem
-from .fx.fog import FogSystem
-from .fx.dust_storm import DustStormSystem
-from .fx.wind_dust_clouds import WindBlownDustCloudSystem
-from .fx.lightning import LightningSystem
-from .fx.storm_clouds import StormCloudSystem
+from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, WindowSettings
 from .physics_config import load_physics_settings
-from .math2d import Vec2
 from .app.cutscenes import (
-    init_intro_cutscene,
-    draw_intro,
-    update_intro,
     skip_intro,
     start_mission_intro_or_playing,
     start_mission_cutscene,
-    draw_mission_cutscene,
-    update_mission_cutscene,
     skip_mission_cutscene,
 )
-from .app.state import CutsceneState, IntroCutsceneState, MissionCutsceneState
 from .app.input import build_skip_hint
-from .app.feedback import ScreenShakeState, rough_landing_feedback, update_screenshake_target
-from .app.flares import FlareState, reset_flares, try_start_flare_salvo, update_flares
-from .app.gamepads import init_connected_joysticks, handle_joy_device_added, handle_joy_device_removed
-from .app.toast import ToastState
-from .app.ui_constants import MISSION_END_RETURN_DELAY_S, PAUSED_MENU_HINT
-from .app.gamepad_button_state import GamepadButtonState
+from .app.feedback import rough_landing_feedback, update_screenshake_target
+from .app.flares import reset_flares, try_start_flare_salvo, update_flares
+from .app.ui_constants import MISSION_END_RETURN_DELAY_S
 from .app.session import create_mission_and_helicopter
 from .app.flow import apply_mission_preview, reset_game
 from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapshot
 from .app.accessibility_toggles import toggle_particles, toggle_flashes, toggle_screenshake
-from .app.doors import check_airport_truck_retract_toast, check_tech_lz_door_toast, toggle_doors_with_logging
-from .app.runtime_state import GameRuntimeState
+from .app.doors import toggle_doors_with_logging
 from .app.main_loop_context import MainLoopContext
 from .app.airport_runtime_flags import sync_airport_runtime_flags
-from .app.bus_door_flow import apply_airport_bus_door_transitions
 from .app.fixed_step_preamble import prepare_fixed_step_preamble
 from .app.frame_inputs import read_frame_input_snapshot
 from .app.gamepad_frame_flow import process_active_gamepad_frame
 from .app.post_fixed_step_phase import run_post_fixed_step_phase
+from .app.run_bootstrap import initialize_run_bootstrap
+from .app.setup_wrappers import apply_mission_preview_to_context, reset_game_to_context
 from .app.loop_mode_adjustments import apply_post_input_mode_adjustments
 from .app.weapon_lock import chopper_weapons_locked
 from .app.airport_session import configure_airport_runtime_for_mission, create_empty_airport_runtime
-from .app.airport_render import draw_airport_world_overlays
-from .app.main_loop_context_sync import load_frame_locals_from_context, store_frame_locals_to_context
-from .app.objective_overlay import get_mission_objective_overlay_duration
-from .app.vehicle_driver_modes import handle_airport_driver_mode_doors
+from .app.main_loop_context_sync import load_frame_locals_from_context
 from .sprite_preloader import preload_mission_sprites
 from .game_logging import set_console_log_debug
 from .app.game_update import (
     build_helicopter_input,
 )
 from .app.fixed_step_loop import run_fixed_step_loop
-from .app.mode_update import apply_mode_transition_effects, resolve_post_frame_mode_transitions
 from .app.frame_update import (
     advance_weather_runtime,
-    prepare_frame_render_state,
     apply_vip_overlay_update,
     apply_weather_runtime_update,
-    apply_camera_update,
-    update_camera_tracking,
     update_vip_overlay_state,
-    update_weather_effects,
 )
-from .app.frame_render import render_mode_frame_from_runtime
 from .app.event_loop import (
     process_pygame_events,
 )
@@ -131,105 +77,39 @@ def run() -> None:
     heli_settings = HelicopterSettings()
     debug = DebugSettings()
 
-    pygame.init()
-    logger = create_session_logger()
-
-    # Window icon (taskbar/alt-tab). This does not change the .exe file icon.
-    try:
-        module_dir = Path(__file__).resolve().parent
-        icon_path = module_dir / "assets" / "chopper-one.png"
-        icon = pygame.image.load(str(icon_path))
-        try:
-            icon = pygame.transform.smoothscale(icon, (32, 32))
-        except Exception:
-            pass
-        pygame.display.set_icon(icon)
-        logger.info("WINDOW_ICON: %s", icon_path.as_posix())
-    except Exception as e:
-        logger.info("WINDOW_ICON: failed (%s)", type(e).__name__)
-
-    controls = load_controls(logger=logger)
-    accessibility = load_accessibility(logger=logger)
-    haptics.set_enabled(accessibility.rumble_enabled)
-    audio = AudioBank.try_create()
-    logger.info("Controls: SPACE fire | F flare | E doors (grounded) | TAB facing | R reverse | F1 debug")
-    logger.info("Rescue: open compound, land near hostages, E doors to load; land at base and E to unload")
-    logger.info("Gamepad: Left stick tilt | Triggers lift | A doors | X fire | Y reverse | B flare | Back facing | D-pad optional")
-
-    # Gamepad detection (connect/disconnect notifications).
-    pygame.joystick.init()
-    joysticks: dict[int, pygame.joystick.Joystick] = {}
-
-    # Cinematic feedback (screenshake + audio duck).
-    screenshake = ScreenShakeState()
-    toast = ToastState()
-    gamepad_buttons = GamepadButtonState()
-
-    def set_toast(message: str) -> None:
-        toast.set(message)
-
-    joysticks = init_connected_joysticks(logger=logger, set_toast=set_toast)
-
-    particles_enabled = accessibility.particles_enabled
-    flashes_enabled = accessibility.flashes_enabled
-    screenshake_enabled = accessibility.screenshake_enabled
-
-    flags = 0
-    if window.vsync:
-        # VSYNC is honored on some platforms/drivers.
-        flags |= pygame.SCALED
-
-    screen = pygame.display.set_mode((window.width, window.height), flags)
-    pygame.display.set_caption(window.title)
-
-    # Optional video intro asset (falls back to the in-engine title card if missing/unavailable).
-    module_dir = Path(__file__).resolve().parent
-    assets_dir = module_dir / "assets"
-    cutscenes = CutsceneState(intro=IntroCutsceneState(), mission=MissionCutsceneState())
-    init_intro_cutscene(cutscenes.intro, assets_dir=assets_dir, logger=logger)
-
-    # Hostage rescue cutscene config/lookup now in app.cutscene_config
-
-    clock = pygame.time.Clock()
-    overlay = DebugOverlay()
-
-    sky_smoke = SkySmokeSystem()
-
-    # --- Weather/particle systems ---
-    rain = RainSystem()
-    fog = FogSystem()
-    dust = DustStormSystem()
-    lightning = LightningSystem(area_width=window.width, area_height=window.height)
-    storm_clouds = StormCloudSystem(window.width, window.height)
-
-    # Pre-game mission selection overlay.
-    mission_choices: list[tuple[str, str]] = [
-        ("city", "City Center Seige"),
-        ("airport", "Airport Special Ops"),
-        ("worship", "Worship Center Warfare"),
-    ]
-    selected_mission_index = 0
-    selected_mission_id = mission_choices[selected_mission_index][0]
-
-    # Pre-game chopper selection overlay.
-    chopper_choices: list[tuple[str, str]] = [
-        ("chopper-one.png", "Classic"),
-        ("chopper-two-orange.png", "Orange"),
-        ("chopper-three-green.png", "Green"),
-        ("chopper-four-blue.png", "Blue"),
-        ("chopper-five-desert.png", "Desert"),
-    ]
-    selected_chopper_index = 0
-    selected_chopper_asset = chopper_choices[selected_chopper_index][0]
-
-    # Intro cutscene plays on every launch.
-    mode: str = "intro"  # intro | select_mission | select_chopper | playing | paused | cutscene | mission_end
-    runtime = GameRuntimeState()
-    runtime.prev_loop_mode = mode
-    runtime.weather_mode = random.choice(debug_weather_modes)
-    runtime.weather_duration = random.uniform(18, 40)
-
-    flares = FlareState()
+    bootstrap = initialize_run_bootstrap(window=window, debug_weather_modes=debug_weather_modes)
+    logger = bootstrap.logger
+    controls = bootstrap.controls
+    accessibility = bootstrap.accessibility
+    audio = bootstrap.audio
+    joysticks = bootstrap.joysticks
+    screenshake = bootstrap.screenshake
+    toast = bootstrap.toast
+    gamepad_buttons = bootstrap.gamepad_buttons
+    set_toast = bootstrap.set_toast
+    particles_enabled = bootstrap.particles_enabled
+    flashes_enabled = bootstrap.flashes_enabled
+    screenshake_enabled = bootstrap.screenshake_enabled
+    screen = bootstrap.screen
+    assets_dir = bootstrap.assets_dir
+    cutscenes = bootstrap.cutscenes
+    clock = bootstrap.clock
+    overlay = bootstrap.overlay
+    sky_smoke = bootstrap.sky_smoke
+    rain = bootstrap.rain
+    fog = bootstrap.fog
+    dust = bootstrap.dust
+    lightning = bootstrap.lightning
+    storm_clouds = bootstrap.storm_clouds
+    mission_choices = bootstrap.mission_choices
+    selected_mission_index = bootstrap.selected_mission_index
+    selected_mission_id = bootstrap.selected_mission_id
+    chopper_choices = bootstrap.chopper_choices
+    selected_chopper_index = bootstrap.selected_chopper_index
+    selected_chopper_asset = bootstrap.selected_chopper_asset
+    mode = bootstrap.mode
+    runtime = bootstrap.runtime
+    flares = bootstrap.flares
 
 
 
@@ -266,71 +146,44 @@ def run() -> None:
 
     def apply_mission_preview_wrapper() -> None:
         nonlocal context_swapped
-        preview_mission, preview_helicopter, preview_accumulator, preview_prev_stats = apply_mission_preview(
-            create_mission_and_helicopter,
-            heli_settings,
-            selected_mission_id,
-            selected_chopper_asset,
-            take_mission_stats_snapshot,
-            boarded_count,
-            sky_smoke,
-            audio,
-            set_toast,
-            loop_ctx.mission,
+        apply_mission_preview_to_context(
+            loop_ctx=loop_ctx,
+            runtime=runtime,
+            create_mission_and_helicopter_fn=create_mission_and_helicopter,
+            heli_settings=heli_settings,
+            selected_mission_id=selected_mission_id,
+            selected_chopper_asset=selected_chopper_asset,
+            take_mission_stats_snapshot_fn=take_mission_stats_snapshot,
+            boarded_count_fn=boarded_count,
+            sky_smoke=sky_smoke,
+            audio=audio,
+            set_toast=set_toast,
+            apply_mission_preview_fn=apply_mission_preview,
+            logger=logger,
         )
-        loop_ctx.mission = preview_mission
-        loop_ctx.helicopter = preview_helicopter
-        loop_ctx.accumulator = preview_accumulator
-        loop_ctx.prev_stats = preview_prev_stats
-        loop_ctx.mission.sentiment = float(loop_ctx.campaign_sentiment)
-        loop_ctx.mission.audio = audio
-        runtime.mission_end_return_seconds = 0.0
-        audio.log_audio_channel_snapshot(tag="mission_preview", logger=logger)
         context_swapped = True
 
     def reset_game_wrapper() -> None:
         nonlocal context_swapped
-        # Stop chopper warning beeps on game reset
-        audio.stop_chopper_warning_beeps()
-        next_mission, next_helicopter, next_accumulator, next_prev_stats = reset_game(
-            create_mission_and_helicopter,
-            heli_settings,
-            selected_mission_id,
-            selected_chopper_asset,
-            take_mission_stats_snapshot,
-            boarded_count,
-            sky_smoke,
-            audio,
-            reset_flares,
-            logger,
-            flares,
-        )
-        loop_ctx.mission = next_mission
-        loop_ctx.helicopter = next_helicopter
-        loop_ctx.accumulator = next_accumulator
-        loop_ctx.prev_stats = next_prev_stats
-        runtime.mission_end_return_seconds = 0.0
-        loop_ctx.mission.sentiment = float(loop_ctx.campaign_sentiment)
-        loop_ctx.mission.audio = audio
-        audio.log_audio_channel_snapshot(tag="restart", logger=logger)
-        gamepad_buttons.reset()
-        runtime.city_objective_overlay_timer = 0.0
-        runtime.vip_kia_overlay_timer = 0.0
-        runtime.vip_kia_overlay_shown = False
-        runtime.meal_truck_driver_mode = False
-        runtime.meal_truck_lift_command_extended = False
-        runtime.bus_driver_mode = False
-        
-        # Initialize mission-specific airport runtime state for setup/reset paths.
-        loop_ctx.airport_runtime = configure_airport_runtime_for_mission(
+        reset_game_to_context(
+            loop_ctx=loop_ctx,
+            runtime=runtime,
+            create_mission_and_helicopter_fn=create_mission_and_helicopter,
+            heli_settings=heli_settings,
             selected_mission_id=selected_mission_id,
-            mission=loop_ctx.mission,
-            ground_y=heli_settings.ground_y,
-            previous_runtime=loop_ctx.airport_runtime,
-            hostage_deadline_s=120.0,
+            selected_chopper_asset=selected_chopper_asset,
+            take_mission_stats_snapshot_fn=take_mission_stats_snapshot,
+            boarded_count_fn=boarded_count,
+            sky_smoke=sky_smoke,
+            audio=audio,
+            reset_flares_fn=reset_flares,
+            logger=logger,
+            flares=flares,
+            reset_game_fn=reset_game,
+            gamepad_buttons=gamepad_buttons,
+            configure_airport_runtime_for_mission_fn=configure_airport_runtime_for_mission,
+            preload_mission_sprites_fn=preload_mission_sprites,
         )
-
-        preload_mission_sprites(selected_mission_id, selected_chopper_asset)
         context_swapped = True
 
     def toggle_particles_wrapper() -> None:
