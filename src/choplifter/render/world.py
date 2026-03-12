@@ -962,6 +962,8 @@ def _draw_engineer_wrench_indicator(screen: pygame.Surface, mission: MissionStat
 
 def _draw_projectiles(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
     for p in mission.projectiles:
+        if not bool(getattr(p, "alive", False)):
+            continue
         x = int(p.pos.x - camera_x)
         y = int(p.pos.y)
         # Barak MRAD missile: draw as a large missile with flame and smoke, rotated by current_angle

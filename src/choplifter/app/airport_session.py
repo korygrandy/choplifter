@@ -129,3 +129,26 @@ def initialize_airport_runtime(
         meal_truck_spawn_x=meal_truck_spawn_x,
         total_rescue_target=total_rescue_target,
     )
+
+
+def configure_airport_runtime_for_mission(
+    *,
+    selected_mission_id: str,
+    mission: object,
+    ground_y: float,
+    previous_runtime: AirportRuntimeState | None = None,
+    hostage_deadline_s: float = 120.0,
+) -> AirportRuntimeState:
+    """Return mission-appropriate airport runtime state for setup/reset paths."""
+    normalized_mission_id = str(selected_mission_id or "").strip().lower()
+    if normalized_mission_id != "airport":
+        return create_empty_airport_runtime()
+
+    base_runtime = previous_runtime or create_empty_airport_runtime()
+    return initialize_airport_runtime(
+        mission=mission,
+        ground_y=ground_y,
+        total_rescue_target=base_runtime.total_rescue_target,
+        meal_truck_spawn_x=base_runtime.meal_truck_spawn_x,
+        hostage_deadline_s=hostage_deadline_s,
+    )

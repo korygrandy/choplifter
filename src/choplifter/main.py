@@ -78,12 +78,12 @@ from .app.runtime_state import GameRuntimeState
 from .app.airport_runtime_flags import sync_airport_runtime_flags
 from .app.bus_door_flow import apply_airport_bus_door_transitions
 from .app.weapon_lock import chopper_weapons_locked
-from .app.airport_session import create_empty_airport_runtime, initialize_airport_runtime
+from .app.airport_session import configure_airport_runtime_for_mission, create_empty_airport_runtime
+from .app.airport_update import apply_airport_playing_tick_update
 from .app.objective_overlay import get_mission_objective_overlay_duration
 from .app.vehicle_driver_modes import handle_airport_driver_mode_doors
 from .sprite_preloader import preload_mission_sprites
 from .game_logging import set_console_log_debug
-from .app.airport_tick import update_airport_mission_tick
 from .app.game_update import (
     build_helicopter_input,
     run_playing_fixed_step,
@@ -241,16 +241,13 @@ def run() -> None:
     prev_stats: MissionStatsSnapshot = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
 
     # --- Airport Special Ops mission: placeholder entity state ---
-    airport_runtime = create_empty_airport_runtime()
-
-    if selected_mission_id == "airport":
-        airport_runtime = initialize_airport_runtime(
-            mission=mission,
-            ground_y=heli_settings.ground_y,
-            total_rescue_target=airport_runtime.total_rescue_target,
-            meal_truck_spawn_x=airport_runtime.meal_truck_spawn_x,
-            hostage_deadline_s=120.0,
-        )
+    airport_runtime = configure_airport_runtime_for_mission(
+        selected_mission_id=selected_mission_id,
+        mission=mission,
+        ground_y=heli_settings.ground_y,
+        previous_runtime=create_empty_airport_runtime(),
+        hostage_deadline_s=120.0,
+    )
 
     def apply_mission_preview_wrapper() -> None:
         nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
@@ -301,17 +298,14 @@ def run() -> None:
         runtime.meal_truck_lift_command_extended = False
         runtime.bus_driver_mode = False
         
-        # Initialize mission-specific state
-        if selected_mission_id == "airport":
-            airport_runtime = initialize_airport_runtime(
-                mission=mission,
-                ground_y=heli_settings.ground_y,
-                total_rescue_target=airport_runtime.total_rescue_target,
-                meal_truck_spawn_x=airport_runtime.meal_truck_spawn_x,
-                hostage_deadline_s=120.0,
-            )
-        else:
-            airport_runtime = create_empty_airport_runtime()
+        # Initialize mission-specific airport runtime state for setup/reset paths.
+        airport_runtime = configure_airport_runtime_for_mission(
+            selected_mission_id=selected_mission_id,
+            mission=mission,
+            ground_y=heli_settings.ground_y,
+            previous_runtime=airport_runtime,
+            hostage_deadline_s=120.0,
+        )
 
         preload_mission_sprites(selected_mission_id, selected_chopper_asset)
 
@@ -804,15 +798,9 @@ def run() -> None:
                 
                 # --- Airport Special Ops: update per-tick logic ---
                 if selected_mission_id == "airport":
-                    _airport_tick = update_airport_mission_tick(
-                        bus_state=airport_runtime.bus_state,
-                        hostage_state=airport_runtime.hostage_state,
-                        tech_state=airport_runtime.tech_state,
-                        meal_truck_state=airport_runtime.meal_truck_state,
-                        enemy_state=airport_runtime.enemy_state,
-                        objective_state=airport_runtime.objective_state,
-                        cutscene_state=airport_runtime.cutscene_state,
-                        dt=tick.dt,
+                    airport_update = apply_airport_playing_tick_update(
+                        airport_runtime=airport_runtime,
+                        tick_dt=tick.dt,
                         audio=audio,
                         helicopter=helicopter,
                         mission=mission,
@@ -824,17 +812,9 @@ def run() -> None:
                         meal_truck_lift_command_extended=runtime.meal_truck_lift_command_extended,
                         set_toast=set_toast,
                         logger=logger,
-                        airport_total_rescue_target=airport_runtime.total_rescue_target,
                     )
-                    airport_runtime.bus_state = _airport_tick.bus_state
-                    airport_runtime.hostage_state = _airport_tick.hostage_state
-                    airport_runtime.tech_state = _airport_tick.tech_state
-                    airport_runtime.meal_truck_state = _airport_tick.meal_truck_state
-                    airport_runtime.enemy_state = _airport_tick.enemy_state
-                    airport_runtime.objective_state = _airport_tick.objective_state
-                    airport_runtime.cutscene_state = _airport_tick.cutscene_state
-                    runtime.meal_truck_driver_mode = _airport_tick.meal_truck_driver_mode
-                    runtime.meal_truck_lift_command_extended = _airport_tick.meal_truck_lift_command_extended
+                    runtime.meal_truck_driver_mode = airport_update.meal_truck_driver_mode
+                    runtime.meal_truck_lift_command_extended = airport_update.meal_truck_lift_command_extended
                 
                 if playing_step.continue_fixed_loop:
                     continue
