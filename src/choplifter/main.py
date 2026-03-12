@@ -92,7 +92,7 @@ from .game_logging import set_console_log_debug
 from .app.game_update import (
     build_helicopter_input,
 )
-from .app.fixed_step_iteration import run_playing_fixed_step_iteration
+from .app.fixed_step_loop import run_fixed_step_loop
 from .app.mode_update import apply_mode_transition_effects, resolve_post_frame_mode_transitions
 from .app.frame_update import (
     advance_weather_runtime,
@@ -561,56 +561,50 @@ def run() -> None:
         helicopter_input = fixed_step_preamble.helicopter_input
         truck_driver_input = fixed_step_preamble.truck_driver_input
         bus_driver_input = fixed_step_preamble.bus_driver_input
-
-
-        while accumulator >= tick.dt:
-            step_iteration = run_playing_fixed_step_iteration(
-                mode=mode,
-                mission=mission,
-                helicopter=helicopter,
-                helicopter_input=helicopter_input,
-                tick_dt=tick.dt,
-                physics=physics,
-                heli_settings=heli_settings,
-                audio=audio,
-                flares=flares,
-                screenshake=screenshake,
-                screenshake_enabled=screenshake_enabled,
-                logger=logger,
-                prev_stats=prev_stats,
-                boarded_count=boarded_count,
-                set_toast=set_toast,
-                mission_end_delay_s=MISSION_END_RETURN_DELAY_S,
-                campaign_sentiment=campaign_sentiment,
-                mission_end_return_seconds=runtime.mission_end_return_seconds,
-                doors_open_before_cutscene=runtime.doors_open_before_cutscene,
-                mission_cutscene_state=cutscenes.mission,
-                assets_dir=assets_dir,
-                update_flares_fn=update_flares,
-                update_helicopter_fn=update_helicopter,
-                hostage_crush_check_fn=hostage_crush_check_logged,
-                rough_landing_feedback_fn=rough_landing_feedback,
-                update_mission_fn=update_mission,
-                start_mission_cutscene_fn=start_mission_cutscene,
-                selected_mission_id=selected_mission_id,
-                airport_runtime=airport_runtime,
-                bus_driver_input=bus_driver_input,
-                bus_driver_mode=runtime.bus_driver_mode,
-                truck_driver_input=truck_driver_input,
-                meal_truck_driver_mode=runtime.meal_truck_driver_mode,
-                meal_truck_lift_command_extended=runtime.meal_truck_lift_command_extended,
-            )
-            mode = step_iteration.mode
-            campaign_sentiment = step_iteration.campaign_sentiment
-            runtime.mission_end_return_seconds = step_iteration.mission_end_return_seconds
-            runtime.doors_open_before_cutscene = step_iteration.doors_open_before_cutscene
-            runtime.meal_truck_driver_mode = step_iteration.meal_truck_driver_mode
-            runtime.meal_truck_lift_command_extended = step_iteration.meal_truck_lift_command_extended
-
-            if step_iteration.continue_fixed_loop:
-                    continue
-
-            accumulator -= tick.dt
+        fixed_step_loop = run_fixed_step_loop(
+            mode=mode,
+            accumulator=accumulator,
+            tick_dt=tick.dt,
+            mission=mission,
+            helicopter=helicopter,
+            helicopter_input=helicopter_input,
+            physics=physics,
+            heli_settings=heli_settings,
+            audio=audio,
+            flares=flares,
+            screenshake=screenshake,
+            screenshake_enabled=screenshake_enabled,
+            logger=logger,
+            prev_stats=prev_stats,
+            boarded_count=boarded_count,
+            set_toast=set_toast,
+            mission_end_delay_s=MISSION_END_RETURN_DELAY_S,
+            campaign_sentiment=campaign_sentiment,
+            mission_end_return_seconds=runtime.mission_end_return_seconds,
+            doors_open_before_cutscene=runtime.doors_open_before_cutscene,
+            mission_cutscene_state=cutscenes.mission,
+            assets_dir=assets_dir,
+            update_flares_fn=update_flares,
+            update_helicopter_fn=update_helicopter,
+            hostage_crush_check_fn=hostage_crush_check_logged,
+            rough_landing_feedback_fn=rough_landing_feedback,
+            update_mission_fn=update_mission,
+            start_mission_cutscene_fn=start_mission_cutscene,
+            selected_mission_id=selected_mission_id,
+            airport_runtime=airport_runtime,
+            bus_driver_input=bus_driver_input,
+            bus_driver_mode=runtime.bus_driver_mode,
+            truck_driver_input=truck_driver_input,
+            meal_truck_driver_mode=runtime.meal_truck_driver_mode,
+            meal_truck_lift_command_extended=runtime.meal_truck_lift_command_extended,
+        )
+        mode = fixed_step_loop.mode
+        accumulator = fixed_step_loop.accumulator
+        campaign_sentiment = fixed_step_loop.campaign_sentiment
+        runtime.mission_end_return_seconds = fixed_step_loop.mission_end_return_seconds
+        runtime.doors_open_before_cutscene = fixed_step_loop.doors_open_before_cutscene
+        runtime.meal_truck_driver_mode = fixed_step_loop.meal_truck_driver_mode
+        runtime.meal_truck_lift_command_extended = fixed_step_loop.meal_truck_lift_command_extended
 
         mode = run_post_fixed_step_phase(
             mode=mode,

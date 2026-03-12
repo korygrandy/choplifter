@@ -233,6 +233,13 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced inline post-fixed-step phase block with one helper call returning next mode.
 - **Goal:** keep `main.py` focused on high-level loop orchestration by moving late-frame rendering/transition plumbing behind a dedicated boundary.
 
+### Fixed-step loop driver extraction
+
+- **New module:** `src/choplifter/app/fixed_step_loop.py`
+  - Added `run_fixed_step_loop(...)` and `FixedStepLoopResult` to own the accumulator-driven fixed-step loop and per-step state threading.
+- **Main loop change (`main.py`):** replaced inline `while accumulator >= tick.dt` loop with one helper call and result assignment.
+- **Goal:** reduce core loop control-flow noise in `main.py` while preserving fixed-step semantics and runtime state updates.
+
 ### City Siege satellite SFX timing fix
 
 - **Problem:** `satellite-reallocating.ogg` could fire at City mission launch trigger time (before intro cutscene completed) on gamepad flow.
