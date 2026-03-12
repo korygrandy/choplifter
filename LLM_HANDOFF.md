@@ -268,6 +268,13 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced inline mission/session setup block with one context-initialization helper call.
 - **Goal:** reduce pre-loop setup noise in `run()` and keep mission-start state assembly in the existing session helper module.
 
+### Frame preamble extraction
+
+- **Updated module:** `src/choplifter/app/frame_update.py`
+  - Added `run_frame_preamble(...)` and `FramePreambleResult` to own per-frame VIP overlay update, weather runtime advancement/application, and skip-hint generation.
+- **Main loop change (`main.py`):** replaced the inline VIP/weather/skip-hint block at the top of the frame loop with one helper call.
+- **Goal:** keep the main loop focused on event/input/fixed-step orchestration rather than frame-start bookkeeping.
+
 ### City Siege satellite SFX timing fix
 
 - **Problem:** `satellite-reallocating.ogg` could fire at City mission launch trigger time (before intro cutscene completed) on gamepad flow.

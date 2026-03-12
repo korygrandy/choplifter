@@ -54,6 +54,7 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 - Startup initialization and initial menu/runtime setup were moved out of `main.py` into `src/choplifter/app/run_bootstrap.py` via `initialize_run_bootstrap(...)`.
 - Final app-exit cleanup was moved out of `main.py` into `src/choplifter/app/run_shutdown.py` via `finalize_run_shutdown(...)`.
 - Initial mission/session context assembly was moved out of `main.py` into `src/choplifter/app/session.py` via `initialize_main_loop_context(...)`.
+- Frame-start VIP/weather bookkeeping and skip-hint generation were moved out of `main.py` into `src/choplifter/app/frame_update.py` via `run_frame_preamble(...)`.
 
 ### Gameplay Validation (Highest Priority)
 

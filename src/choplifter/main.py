@@ -46,10 +46,7 @@ from .app.game_update import (
 )
 from .app.fixed_step_loop import run_fixed_step_loop
 from .app.frame_update import (
-    advance_weather_runtime,
-    apply_vip_overlay_update,
-    apply_weather_runtime_update,
-    update_vip_overlay_state,
+    run_frame_preamble,
 )
 from .app.event_loop import (
     process_pygame_events,
@@ -187,21 +184,11 @@ def run() -> None:
         accumulator += frame_dt
         context_swapped = False
 
-        vip_overlay_state = update_vip_overlay_state(
+        frame_preamble = run_frame_preamble(
             mission=mission,
-            vip_kia_overlay_timer=runtime.vip_kia_overlay_timer,
-            vip_kia_overlay_shown=runtime.vip_kia_overlay_shown,
-        )
-        apply_vip_overlay_update(runtime=runtime, vip_overlay_state=vip_overlay_state)
-
-        weather_runtime = advance_weather_runtime(
-            debug_mode=runtime.debug_mode,
-            debug_weather_modes=debug_weather_modes,
+            runtime=runtime,
             frame_dt=frame_dt,
-            weather_mode=runtime.weather_mode,
-            weather_timer=runtime.weather_timer,
-            weather_duration=runtime.weather_duration,
-            hud_disabled_timer=runtime.hud_disabled_timer,
+            debug_weather_modes=debug_weather_modes,
             rain=rain,
             fog=fog,
             dust=dust,
@@ -209,14 +196,11 @@ def run() -> None:
             helicopter=helicopter,
             heli_settings=heli_settings,
             window=window,
-        )
-        apply_weather_runtime_update(
-            runtime=runtime,
-            weather_runtime=weather_runtime,
+            joysticks=joysticks,
             set_toast=set_toast,
+            build_skip_hint_fn=build_skip_hint,
         )
-
-        skip_hint = build_skip_hint(joysticks)
+        skip_hint = frame_preamble.skip_hint
 
         event_dispatch = process_pygame_events(
             running=running,

@@ -19,6 +19,11 @@ class VipOverlayStateResult:
     vip_kia_overlay_shown: bool
 
 
+@dataclass
+class FramePreambleResult:
+    skip_hint: str
+
+
 def advance_weather_runtime(
     *,
     debug_mode: bool,
@@ -113,6 +118,56 @@ def apply_weather_runtime_update(
     runtime.hud_disabled_timer = weather_runtime.hud_disabled_timer
     if weather_runtime.lightning_disabled_hud:
         set_toast("⚡ ELECTRONIC WARFARE: HUD/Targeting disabled!")
+
+
+def run_frame_preamble(
+    *,
+    mission: object,
+    runtime: object,
+    frame_dt: float,
+    debug_weather_modes: list[str],
+    rain: object,
+    fog: object,
+    dust: object,
+    lightning: object,
+    helicopter: object,
+    heli_settings: object,
+    window: object,
+    joysticks: object,
+    set_toast: object,
+    build_skip_hint_fn: object,
+) -> FramePreambleResult:
+    """Apply per-frame overlay and weather bookkeeping before input/event handling."""
+    vip_overlay_state = update_vip_overlay_state(
+        mission=mission,
+        vip_kia_overlay_timer=runtime.vip_kia_overlay_timer,
+        vip_kia_overlay_shown=runtime.vip_kia_overlay_shown,
+    )
+    apply_vip_overlay_update(runtime=runtime, vip_overlay_state=vip_overlay_state)
+
+    weather_runtime = advance_weather_runtime(
+        debug_mode=runtime.debug_mode,
+        debug_weather_modes=debug_weather_modes,
+        frame_dt=frame_dt,
+        weather_mode=runtime.weather_mode,
+        weather_timer=runtime.weather_timer,
+        weather_duration=runtime.weather_duration,
+        hud_disabled_timer=runtime.hud_disabled_timer,
+        rain=rain,
+        fog=fog,
+        dust=dust,
+        lightning=lightning,
+        helicopter=helicopter,
+        heli_settings=heli_settings,
+        window=window,
+    )
+    apply_weather_runtime_update(
+        runtime=runtime,
+        weather_runtime=weather_runtime,
+        set_toast=set_toast,
+    )
+
+    return FramePreambleResult(skip_hint=build_skip_hint_fn(joysticks))
 
 
 def update_weather_effects(
