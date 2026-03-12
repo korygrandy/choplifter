@@ -226,3 +226,9 @@ def update_camera_tracking(
         camera_x=camera_x,
         camera_x_smoothed=camera_x_smoothed,
     )
+
+
+def apply_camera_update(*, runtime: object, camera_update: CameraUpdateResult) -> float:
+    """Persist camera smoothing state and return current camera x for rendering."""
+    runtime.camera_x_smoothed = camera_update.camera_x_smoothed
+    return float(camera_update.camera_x)

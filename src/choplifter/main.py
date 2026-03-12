@@ -91,10 +91,11 @@ from .app.game_update import (
     build_helicopter_input,
     run_playing_fixed_step,
 )
-from .app.mode_update import resolve_post_frame_mode_transitions
+from .app.mode_update import apply_mode_transition_effects, resolve_post_frame_mode_transitions
 from .app.frame_update import (
     advance_weather_runtime,
     apply_weather_runtime_update,
+    apply_camera_update,
     update_camera_tracking,
     update_vip_overlay_state,
     update_weather_effects,
@@ -878,16 +879,14 @@ def run() -> None:
         )
         mode = mode_transition.mode
         runtime.mission_end_return_seconds = mode_transition.mission_end_return_seconds
-
-        if mode_transition.restore_doors_after_cutscene:
-            # Restore doors state after cutscene and log.
-            prev_state = helicopter.doors_open
-            helicopter.doors_open = runtime.doors_open_before_cutscene
-            logger.info(f"DOORS: restored after cutscene | was_open={prev_state} | restored_open={helicopter.doors_open}")
-            audio.log_audio_channel_snapshot(tag="cutscene_exit", logger=logger)
-
-        if mode_transition.mission_end_auto_returned:
-            set_toast("Mission ended: returning to Mission Select")
+        apply_mode_transition_effects(
+            mode_transition=mode_transition,
+            runtime=runtime,
+            helicopter=helicopter,
+            logger=logger,
+            audio=audio,
+            set_toast=set_toast,
+        )
 
         update_weather_effects(
             particles_enabled=particles_enabled,
@@ -919,8 +918,7 @@ def run() -> None:
             world_width=float(mission.world_width),
             view_width=float(screen.get_width()),
         )
-        camera_x = camera_update.camera_x
-        runtime.camera_x_smoothed = camera_update.camera_x_smoothed
+        camera_x = apply_camera_update(runtime=runtime, camera_update=camera_update)
 
         # Update audio (ducking is applied via bus volumes).
         audio.set_cinematic_ducked(mode == "cutscene", factor=0.5)

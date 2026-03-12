@@ -139,6 +139,14 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced inline weather-runtime assignment/toast block with one helper call.
 - **Goal:** reduce per-frame orchestration noise in `main.py` and keep weather runtime side effects in the frame-update boundary.
 
+### Mode/camera apply extraction
+
+- **Module updates:**
+  - `src/choplifter/app/mode_update.py`: added `apply_mode_transition_effects(...)`.
+  - `src/choplifter/app/frame_update.py`: added `apply_camera_update(...)`.
+- **Main loop change (`main.py`):** replaced inline mode-transition side-effect block and camera result assignment block with helper calls.
+- **Goal:** keep `main.py` orchestration focused while consolidating side-effect application logic in module boundaries.
+
 ### Validation status (session 3)
 
 - Import smoke: PASS (`from src.choplifter.main import run`)
