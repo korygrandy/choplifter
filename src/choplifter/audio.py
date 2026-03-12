@@ -81,6 +81,7 @@ def _try_load_asset_sound(path: Path) -> pygame.mixer.Sound | None:
 BusName = Literal["sfx", "ui", "music"]
 
 # Dedicated channels reserved outside bus pools for persistent/key sounds.
+DEDICATED_CH_WARNING_BEEPS = 7
 DEDICATED_CH_FLYING_LOOP = 14
 DEDICATED_CH_BARAK_DEPLOY = 16
 DEDICATED_CH_BARAK_LAUNCH = 17
@@ -113,7 +114,8 @@ class AudioMixer:
         pygame.mixer.set_num_channels(total_channels)
         # Keep 14/16/17 reserved for dedicated persistent/key sounds.
         bus_layout = {
-            "sfx": list(range(0, 8)),
+            # Keep channel 7 reserved for low-health warning beeps.
+            "sfx": list(range(0, 7)) + [15],
             "ui": list(range(8, 10)),
             "music": list(range(10, 14)),
         }
@@ -194,9 +196,9 @@ class AudioBank:
         try:
             if self.mixer is not None:
                 # Stop dedicated channel 7 (used for warning beeps)
-                pygame.mixer.Channel(7).stop()
+                pygame.mixer.Channel(DEDICATED_CH_WARNING_BEEPS).stop()
             elif self.chopper_warning_beeps is not None:
-                pygame.mixer.Channel(7).stop()
+                pygame.mixer.Channel(DEDICATED_CH_WARNING_BEEPS).stop()
         except Exception:
             pass
 
@@ -254,7 +256,7 @@ class AudioBank:
         if self.mixer is not None:
             self.mixer.play(self.chopper_warning_beeps, bus="sfx", dedicated_channel=7)
         elif self.chopper_warning_beeps is not None:
-            pygame.mixer.Channel(7).play(self.chopper_warning_beeps)
+            pygame.mixer.Channel(DEDICATED_CH_WARNING_BEEPS).play(self.chopper_warning_beeps)
     # Ducking state variables (for audio ducking/fading)
     _duck_remaining_s: float = field(default=0.0, init=False, repr=False)
     _duck_total_s: float = field(default=0.0, init=False, repr=False)
@@ -742,7 +744,7 @@ class AudioBank:
                 pygame.mixer.Channel(DEDICATED_CH_FLYING_LOOP).set_volume(music_vol)
                 pygame.mixer.Channel(DEDICATED_CH_BARAK_DEPLOY).set_volume(sfx_vol)
                 pygame.mixer.Channel(DEDICATED_CH_BARAK_LAUNCH).set_volume(sfx_vol)
-                pygame.mixer.Channel(7).set_volume(sfx_vol)  # warning beeps
+                pygame.mixer.Channel(DEDICATED_CH_WARNING_BEEPS).set_volume(sfx_vol)
             except Exception:
                 pass
             return

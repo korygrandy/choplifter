@@ -1025,6 +1025,17 @@ def run() -> None:
 
         pygame.display.flip()
 
+    # Ensure all mixer channels are silenced before quitting the app.
+    try:
+        if audio is not None and hasattr(audio, "stop_persistent_channels"):
+            audio.stop_persistent_channels()
+        if pygame.mixer.get_init():
+            pygame.mixer.stop()
+            pygame.mixer.music.stop()
+            pygame.mixer.quit()
+    except Exception:
+        pass
+
     pygame.quit()
 
 
