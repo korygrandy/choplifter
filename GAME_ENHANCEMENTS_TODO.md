@@ -40,6 +40,7 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 - Gamepad snapshot and previous menu-axis sync moved out of `main.py` into `src/choplifter/app/gamepad_state_sync.py`.
 - Post-input mode adjustment logic (cutscene fallback + deferred city satellite SFX trigger) moved out of `main.py` into `src/choplifter/app/loop_mode_adjustments.py`.
 - VIP overlay state assignment and frame render preparation blocks moved out of `main.py` into helpers in `src/choplifter/app/frame_update.py`.
+- Shared world render branch orchestration moved out of `main.py` into `src/choplifter/app/frame_render.py` via `render_world_branch(...)` while preserving draw order.
 
 ### Gameplay Validation (Highest Priority)
 

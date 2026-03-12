@@ -103,7 +103,7 @@ from .app.frame_update import (
     update_vip_overlay_state,
     update_weather_effects,
 )
-from .app.frame_render import draw_mode_overlays, draw_playing_hud_and_overlays, draw_weather_particles, render_frame_post_fx
+from .app.frame_render import render_world_branch, render_frame_post_fx
 from .app.event_loop import (
     handle_global_debug_keydown,
     handle_gamepad_pause_flow,
@@ -920,88 +920,54 @@ def run() -> None:
 
 
         else:
-            # Background above the horizon.
-            draw_sky(
-                target,
-                heli_settings.ground_y,
-                bg_asset=getattr(mission, "bg_asset", "mission1-bg.jpg"),
-                dt=frame_dt,
-                enable_fade=(mode == "select_mission"),
-            )
-            draw_weather_particles(
+            runtime.vip_kia_overlay_timer, runtime.city_objective_overlay_timer = render_world_branch(
+                mode=mode,
                 target=target,
+                screen=screen,
+                mission=mission,
+                helicopter=helicopter,
+                camera_x=camera_x,
+                frame_dt=frame_dt,
+                selected_mission_id=selected_mission_id,
                 particles_enabled=particles_enabled,
                 weather_mode=runtime.weather_mode,
+                ground_y=float(heli_settings.ground_y),
                 sky_smoke=sky_smoke,
                 rain=rain,
                 fog=fog,
                 dust=dust,
                 storm_clouds=storm_clouds,
                 lightning=lightning,
-                ground_y=float(heli_settings.ground_y),
+                airport_runtime=airport_runtime,
+                hud_disabled_timer=runtime.hud_disabled_timer,
+                vip_kia_overlay_timer=runtime.vip_kia_overlay_timer,
+                city_objective_overlay_timer=runtime.city_objective_overlay_timer,
+                meal_truck_driver_mode=runtime.meal_truck_driver_mode,
+                debug_mode=runtime.debug_mode,
+                mission_choices=mission_choices,
+                selected_mission_index=selected_mission_index,
+                chopper_choices=chopper_choices,
+                selected_chopper_index=selected_chopper_index,
+                pause_focus=runtime.pause_focus,
+                muted=runtime.muted,
+                quit_confirm=runtime.quit_confirm,
+                paused_hint=PAUSED_MENU_HINT,
+                draw_sky_fn=draw_sky,
+                draw_ground_fn=draw_ground,
+                draw_mission_fn=draw_mission,
+                draw_airport_world_overlays_fn=draw_airport_world_overlays,
+                draw_flares_fn=draw_flares,
+                draw_explosion_particles_fn=draw_explosion_particles,
+                draw_enemy_damage_fx_fn=draw_enemy_damage_fx,
+                draw_helicopter_damage_fx_fn=draw_helicopter_damage_fx,
+                draw_helicopter_fn=draw_helicopter,
+                draw_impact_sparks_fn=draw_impact_sparks,
+                boarded_count_fn=boarded_count,
+                draw_hud_fn=draw_hud,
+                draw_mission_select_overlay_fn=draw_mission_select_overlay,
+                draw_chopper_select_overlay_fn=draw_chopper_select_overlay,
+                draw_mission_end_overlay_fn=draw_mission_end_overlay,
             )
-            draw_ground(target, heli_settings.ground_y)
-            draw_mission(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
-            
-            # --- Airport Special Ops: placeholder rendering (drawn on top of normal mission entities) ---
-            if selected_mission_id == "airport":
-                draw_airport_world_overlays(
-                    target=target,
-                    camera_x=camera_x,
-                    helicopter=helicopter,
-                    mission=mission,
-                    heli_ground_y=heli_settings.ground_y,
-                    airport_bus_state=airport_runtime.bus_state,
-                    airport_hostage_state=airport_runtime.hostage_state,
-                    airport_enemy_state=airport_runtime.enemy_state,
-                    airport_tech_state=airport_runtime.tech_state,
-                    airport_objective_state=airport_runtime.objective_state,
-                    airport_meal_truck_state=airport_runtime.meal_truck_state,
-                    airport_cutscene_state=airport_runtime.cutscene_state,
-                )
-            
-            draw_flares(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
-            draw_explosion_particles(target, mission, camera_x=camera_x)
-            draw_enemy_damage_fx(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
-            draw_helicopter_damage_fx(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
-            draw_helicopter(target, helicopter, camera_x=camera_x, boarded=boarded_count(mission))
-            draw_impact_sparks(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
-            # Draw black clouds above chopper for extra difficulty (rendered last, above chopper)
-            if runtime.weather_mode == "storm":
-                storm_clouds.draw(target, layer='black')
-            # HUD/targeting disabled by lightning
-            if mode == "playing":
-                runtime.vip_kia_overlay_timer, runtime.city_objective_overlay_timer = draw_playing_hud_and_overlays(
-                    target=target,
-                    screen=screen,
-                    mission=mission,
-                    helicopter=helicopter,
-                    hud_disabled_timer=runtime.hud_disabled_timer,
-                    vip_kia_overlay_timer=runtime.vip_kia_overlay_timer,
-                    city_objective_overlay_timer=runtime.city_objective_overlay_timer,
-                    frame_dt=frame_dt,
-                    draw_hud_fn=draw_hud,
-                    driver_mode_active=runtime.meal_truck_driver_mode,
-                    debug_mode=runtime.debug_mode,
-                )
-            else:
-                draw_mode_overlays(
-                    mode=mode,
-                    target=target,
-                    mission_choices=mission_choices,
-                    selected_mission_index=selected_mission_index,
-                    chopper_choices=chopper_choices,
-                    selected_chopper_index=selected_chopper_index,
-                    pause_focus=runtime.pause_focus,
-                    muted=runtime.muted,
-                    quit_confirm=runtime.quit_confirm,
-                    paused_hint=PAUSED_MENU_HINT,
-                    draw_mission_select_overlay_fn=draw_mission_select_overlay,
-                    draw_chopper_select_overlay_fn=draw_chopper_select_overlay,
-                )
-
-            # Keep mission-end debrief above all world/weather/chopper layers.
-            draw_mission_end_overlay(target, mission)
 
             render_frame_post_fx(
                 mode=mode,

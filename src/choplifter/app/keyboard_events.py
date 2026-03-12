@@ -45,7 +45,7 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
             selected_chopper_index = cycle_index(selected_chopper_index, 1, len(chopper_choices))
             selected_chopper_asset = chopper_choices[selected_chopper_index][0]
             audio.play_menu_select()
-        elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+        elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
             mode = "cutscene"
             set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
             reset_game()
@@ -60,7 +60,7 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
             selected_mission_id = mission_choices[selected_mission_index][0]
             audio.play_menu_select()
             apply_mission_preview()
-        elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+        elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
             mode = "select_chopper"
             set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")
     elif mode == "paused":
@@ -90,7 +90,7 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
             selected_chopper_asset = chopper_choices[selected_chopper_index][0]
             helicopter.skin_asset = selected_chopper_asset
             audio.play_menu_select()
-        elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+        elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
             if pause_focus == "restart_mission":
                 reset_game()
                 mode = "playing"

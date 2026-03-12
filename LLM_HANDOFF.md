@@ -161,6 +161,13 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced inline block for weather/camera/audio/screenshake preparation with one helper call.
 - **Goal:** keep late-frame orchestration in `main.py` compact while preserving behavior through a single preparation boundary.
 
+### World render branch extraction
+
+- **Module update:** `src/choplifter/app/frame_render.py`
+  - Added `render_world_branch(...)` to centralize the shared non-intro/non-cutscene world render path, including world layers, airport overlays, storm black-cloud layer, HUD/mode overlays, and mission-end overlay ordering.
+- **Main loop change (`main.py`):** replaced the large inline world render branch with one helper call returning updated overlay timers.
+- **Goal:** reduce render orchestration complexity in `main.py` while preserving draw order and overlay timing behavior.
+
 ### City Siege satellite SFX timing fix
 
 - **Problem:** `satellite-reallocating.ogg` could fire at City mission launch trigger time (before intro cutscene completed) on gamepad flow.
