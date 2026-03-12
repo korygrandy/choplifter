@@ -168,6 +168,13 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced the large inline world render branch with one helper call returning updated overlay timers.
 - **Goal:** reduce render orchestration complexity in `main.py` while preserving draw order and overlay timing behavior.
 
+### Mode-frame render dispatch extraction
+
+- **Module update:** `src/choplifter/app/frame_render.py`
+  - Added `render_mode_frame(...)` to centralize render-path dispatch for `intro`, `cutscene`, and world-mode rendering while preserving prior post-FX behavior boundaries.
+- **Main loop change (`main.py`):** replaced inline `if intro / elif cutscene / else world+postfx` render branch with one helper call that returns updated overlay timers.
+- **Goal:** keep `main.py` focused on loop orchestration and reduce conditional render branching in the main loop body.
+
 ### City Siege satellite SFX timing fix
 
 - **Problem:** `satellite-reallocating.ogg` could fire at City mission launch trigger time (before intro cutscene completed) on gamepad flow.

@@ -16,7 +16,7 @@ def draw_chopper_select_overlay(
     selected_index: int,
     *,
     title: str = "Select a Chopper",
-    hint: str = "Left/Right (or D-pad) to choose • Enter/A to start",
+    hint: str = "Left/Right (or D-pad) to choose • Enter/Numpad Enter/A to start",
     show_restart: bool = False,
     restart_selected: bool = False,
     show_restart_game: bool = False,
@@ -210,7 +210,7 @@ def draw_mission_select_overlay(
     selected_index: int,
     *,
     title: str = "Select a Mission",
-    hint: str = "Left/Right (or D-pad) to choose • Enter/A to continue",
+    hint: str = "Left/Right (or D-pad) to choose • Enter/Numpad Enter/A to continue",
 ) -> None:
     """Draw a simple mission selection overlay.
 
