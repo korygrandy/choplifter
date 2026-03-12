@@ -1,6 +1,6 @@
 # LLM Handoff (Current Engineering State)
 
-Last updated: 2026-03-11 (session 2)
+Last updated: 2026-03-12 (session 3)
 
 This file is the canonical engineering handoff for future AI/dev sessions.
 
@@ -89,6 +89,27 @@ Current script behavior (`scripts/build_windows_exe.ps1`):
 2. Add optional "lite media" packaging mode if distribution size needs major further reduction.
 3. Convert heavy WAV effects to OGG where acceptable.
 4. Keep the explicit asset-manifest staging approach and update docs when include rules change.
+
+## Recent Changes (Session 3 — 2026-03-12)
+
+All items below were implemented and validated with import smoke, `tests/test_pause_audio_behavior.py`, and airport smoke suite.
+
+### Main loop context synchronization stabilization
+
+- **Problem:** follow-on context refactor introduced state overwrite timing regressions (mission-state bleed, occasional frozen chopper movement, and airport artifact contamination).
+- **Fix (`main.py`):**
+  - Reordered wrapper-to-local synchronization so context reads happen after input handlers.
+  - Added a `context_swapped` guard so frame-local values are only refreshed from context when reset/preview wrappers actually replaced mission/session objects.
+  - Prevented stale accumulator rollback that starved fixed-step simulation.
+
+### Driver input orchestration extraction
+
+- **New module:** `src/choplifter/app/driver_inputs.py`
+  - Added `build_driver_inputs(...)` and `DriverInputBuildResult` to centralize:
+    - truck/bus driver input derivation from keyboard/gamepad tilt state
+    - helicopter control gating while driving meal truck or bus
+- **Main loop change (`main.py`):** replaced duplicated inline vehicle input/gating block with one helper call.
+- **Goal:** keep `main.py` focused on orchestration and reduce error-prone duplicated state logic.
 
 ## Recent Changes (Session 2 — 2026-03-11)
 

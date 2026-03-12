@@ -28,6 +28,12 @@ Use `LLM_HANDOFF.md` as the canonical implementation snapshot. Treat the section
 
 This is the active Airport Special Ops checklist. If an item here conflicts with legacy notes below, this section wins.
 
+### Engineering Status (2026-03-12)
+
+- Main-loop context refactor was stabilized after sync-order and stale-accumulator rollback fixes in `src/choplifter/main.py`.
+- Airport mission bleed/artifact contamination caused by context overwrite timing has been addressed.
+- Vehicle input/gating orchestration moved out of `main.py` into `src/choplifter/app/driver_inputs.py` as part of continued modularization.
+
 ### Gameplay Validation (Highest Priority)
 
 - [ ] Run full airport playtest matrix in `docs/AIRPORT_MISSION_PLAYTEST_GUIDE.md`.

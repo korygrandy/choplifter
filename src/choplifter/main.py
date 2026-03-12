@@ -11,7 +11,7 @@ from .accessibility import load_accessibility
 from .controls import load_controls, pressed
 from .debug_overlay import DebugOverlay
 from .game_logging import create_session_logger
-from .helicopter import Facing, Helicopter, HelicopterInput, update_helicopter
+from .helicopter import Facing, Helicopter, update_helicopter
 from . import haptics
 from .mission import update_mission
 from .mission_ending import _end_mission
@@ -38,8 +38,6 @@ from .rendering import (
     draw_toast,
 )
 # --- Airport Special Ops mission modules ---
-from .bus_ai import BusDriverInput
-from .vehicle_assets import TruckDriverInput
 from .settings import DebugSettings, FixedTickSettings, HelicopterSettings, PhysicsSettings, WindowSettings
 from .sky_smoke import SkySmokeSystem
 from .fx.rain import RainSystem
@@ -78,6 +76,7 @@ from .app.runtime_state import GameRuntimeState
 from .app.main_loop_context import MainLoopContext
 from .app.airport_runtime_flags import sync_airport_runtime_flags
 from .app.bus_door_flow import apply_airport_bus_door_transitions
+from .app.driver_inputs import build_driver_inputs
 from .app.weapon_lock import chopper_weapons_locked
 from .app.airport_session import configure_airport_runtime_for_mission, create_empty_airport_runtime
 from .app.airport_render import draw_airport_world_overlays
@@ -757,37 +756,20 @@ def run() -> None:
             bus_driver_mode=bool(runtime.bus_driver_mode),
         )
         
-        # Build truck driver input (reuses tilt/lift controls: left=move left, right=move right, up=extend lift)
-        truck_driver_input = TruckDriverInput(
-            move_left=(kb_tilt_left or gp_tilt_left) if mode == "playing" and runtime.meal_truck_driver_mode else False,
-            move_right=(kb_tilt_right or gp_tilt_right) if mode == "playing" and runtime.meal_truck_driver_mode else False,
-            extend_lift=runtime.meal_truck_lift_command_extended if mode == "playing" and runtime.meal_truck_driver_mode else False,
+        driver_inputs = build_driver_inputs(
+            mode=mode,
+            helicopter_input=helicopter_input,
+            kb_tilt_left=kb_tilt_left,
+            kb_tilt_right=kb_tilt_right,
+            gp_tilt_left=gp_tilt_left,
+            gp_tilt_right=gp_tilt_right,
+            meal_truck_driver_mode=runtime.meal_truck_driver_mode,
+            meal_truck_lift_command_extended=runtime.meal_truck_lift_command_extended,
+            bus_driver_mode=runtime.bus_driver_mode,
         )
-        
-        # When in driver mode, disable helicopter controls
-        if runtime.meal_truck_driver_mode:
-            helicopter_input = HelicopterInput(
-                tilt_left=False,
-                tilt_right=False,
-                lift_up=False,
-                lift_down=False,
-                brake=False,
-            )
-
-        # Build bus driver input (reuses tilt controls: left/right moves bus)
-        bus_driver_input = BusDriverInput(
-            move_left=(kb_tilt_left or gp_tilt_left) if mode == "playing" and runtime.bus_driver_mode else False,
-            move_right=(kb_tilt_right or gp_tilt_right) if mode == "playing" and runtime.bus_driver_mode else False,
-        )
-        # When in bus driver mode, disable helicopter controls too
-        if runtime.bus_driver_mode:
-            helicopter_input = HelicopterInput(
-                tilt_left=False,
-                tilt_right=False,
-                lift_up=False,
-                lift_down=False,
-                brake=False,
-            )
+        helicopter_input = driver_inputs.helicopter_input
+        truck_driver_input = driver_inputs.truck_driver_input
+        bus_driver_input = driver_inputs.bus_driver_input
 
         # Fixed-timestep update.
         # Clamp accumulator to avoid spiral of death if the window stalls.
