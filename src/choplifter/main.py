@@ -79,20 +79,20 @@ from .app.bus_door_flow import apply_airport_bus_door_transitions
 from .app.fixed_step_preamble import prepare_fixed_step_preamble
 from .app.frame_inputs import read_frame_input_snapshot
 from .app.gamepad_frame_flow import process_active_gamepad_frame
+from .app.post_fixed_step_phase import run_post_fixed_step_phase
 from .app.loop_mode_adjustments import apply_post_input_mode_adjustments
 from .app.weapon_lock import chopper_weapons_locked
 from .app.airport_session import configure_airport_runtime_for_mission, create_empty_airport_runtime
 from .app.airport_render import draw_airport_world_overlays
 from .app.main_loop_context_sync import load_frame_locals_from_context, store_frame_locals_to_context
-from .app.airport_update import AirportRuntimeContext, apply_airport_playing_tick_update
 from .app.objective_overlay import get_mission_objective_overlay_duration
 from .app.vehicle_driver_modes import handle_airport_driver_mode_doors
 from .sprite_preloader import preload_mission_sprites
 from .game_logging import set_console_log_debug
 from .app.game_update import (
     build_helicopter_input,
-    run_playing_fixed_step,
 )
+from .app.fixed_step_iteration import run_playing_fixed_step_iteration
 from .app.mode_update import apply_mode_transition_effects, resolve_post_frame_mode_transitions
 from .app.frame_update import (
     advance_weather_runtime,
@@ -564,99 +564,64 @@ def run() -> None:
 
 
         while accumulator >= tick.dt:
-            if mode == "playing":
-                playing_step = run_playing_fixed_step(
-                    mode=mode,
-                    mission=mission,
-                    helicopter=helicopter,
-                    helicopter_input=helicopter_input,
-                    tick_dt=tick.dt,
-                    physics=physics,
-                    heli_settings=heli_settings,
-                    audio=audio,
-                    flares=flares,
-                    screenshake=screenshake,
-                    screenshake_enabled=screenshake_enabled,
-                    logger=logger,
-                    prev_stats=prev_stats,
-                    boarded_count=boarded_count,
-                    set_toast=set_toast,
-                    mission_end_delay_s=MISSION_END_RETURN_DELAY_S,
-                    campaign_sentiment=campaign_sentiment,
-                    mission_end_return_seconds=runtime.mission_end_return_seconds,
-                    doors_open_before_cutscene=runtime.doors_open_before_cutscene,
-                    mission_cutscene_state=cutscenes.mission,
-                    assets_dir=assets_dir,
-                    update_flares_fn=update_flares,
-                    update_helicopter_fn=update_helicopter,
-                    hostage_crush_check_fn=hostage_crush_check_logged,
-                    rough_landing_feedback_fn=rough_landing_feedback,
-                    update_mission_fn=update_mission,
-                    start_mission_cutscene_fn=start_mission_cutscene,
-                )
-                mode = playing_step.next_mode
-                campaign_sentiment = playing_step.campaign_sentiment
-                runtime.mission_end_return_seconds = playing_step.mission_end_return_seconds
-                runtime.doors_open_before_cutscene = playing_step.doors_open_before_cutscene
-                
-                # --- Airport Special Ops: update per-tick logic ---
-                if selected_mission_id == "airport":
-                    airport_update = apply_airport_playing_tick_update(
-                        context=AirportRuntimeContext(
-                            airport_runtime=airport_runtime,
-                            bus_driver_input=bus_driver_input,
-                            bus_driver_mode=runtime.bus_driver_mode,
-                            truck_driver_input=truck_driver_input,
-                            meal_truck_driver_mode=runtime.meal_truck_driver_mode,
-                            meal_truck_lift_command_extended=runtime.meal_truck_lift_command_extended,
-                        ),
-                        tick_dt=tick.dt,
-                        audio=audio,
-                        helicopter=helicopter,
-                        mission=mission,
-                        heli_settings=heli_settings,
-                        set_toast=set_toast,
-                        logger=logger,
-                    )
-                    runtime.meal_truck_driver_mode = airport_update.meal_truck_driver_mode
-                    runtime.meal_truck_lift_command_extended = airport_update.meal_truck_lift_command_extended
-                
-                if playing_step.continue_fixed_loop:
+            step_iteration = run_playing_fixed_step_iteration(
+                mode=mode,
+                mission=mission,
+                helicopter=helicopter,
+                helicopter_input=helicopter_input,
+                tick_dt=tick.dt,
+                physics=physics,
+                heli_settings=heli_settings,
+                audio=audio,
+                flares=flares,
+                screenshake=screenshake,
+                screenshake_enabled=screenshake_enabled,
+                logger=logger,
+                prev_stats=prev_stats,
+                boarded_count=boarded_count,
+                set_toast=set_toast,
+                mission_end_delay_s=MISSION_END_RETURN_DELAY_S,
+                campaign_sentiment=campaign_sentiment,
+                mission_end_return_seconds=runtime.mission_end_return_seconds,
+                doors_open_before_cutscene=runtime.doors_open_before_cutscene,
+                mission_cutscene_state=cutscenes.mission,
+                assets_dir=assets_dir,
+                update_flares_fn=update_flares,
+                update_helicopter_fn=update_helicopter,
+                hostage_crush_check_fn=hostage_crush_check_logged,
+                rough_landing_feedback_fn=rough_landing_feedback,
+                update_mission_fn=update_mission,
+                start_mission_cutscene_fn=start_mission_cutscene,
+                selected_mission_id=selected_mission_id,
+                airport_runtime=airport_runtime,
+                bus_driver_input=bus_driver_input,
+                bus_driver_mode=runtime.bus_driver_mode,
+                truck_driver_input=truck_driver_input,
+                meal_truck_driver_mode=runtime.meal_truck_driver_mode,
+                meal_truck_lift_command_extended=runtime.meal_truck_lift_command_extended,
+            )
+            mode = step_iteration.mode
+            campaign_sentiment = step_iteration.campaign_sentiment
+            runtime.mission_end_return_seconds = step_iteration.mission_end_return_seconds
+            runtime.doors_open_before_cutscene = step_iteration.doors_open_before_cutscene
+            runtime.meal_truck_driver_mode = step_iteration.meal_truck_driver_mode
+            runtime.meal_truck_lift_command_extended = step_iteration.meal_truck_lift_command_extended
+
+            if step_iteration.continue_fixed_loop:
                     continue
 
             accumulator -= tick.dt
 
-        toast.update(frame_dt)
-
-        intro_finished = bool(mode == "intro" and update_intro(cutscenes.intro, frame_dt))
-        cutscene_finished = bool(mode == "cutscene" and update_mission_cutscene(cutscenes.mission, frame_dt))
-
-        mode_transition = resolve_post_frame_mode_transitions(
-            mode=mode,
-            frame_dt=frame_dt,
-            mission_end_return_seconds=runtime.mission_end_return_seconds,
-            intro_finished=intro_finished,
-            cutscene_finished=cutscene_finished,
-        )
-        mode = mode_transition.mode
-        runtime.mission_end_return_seconds = mode_transition.mission_end_return_seconds
-        apply_mode_transition_effects(
-            mode_transition=mode_transition,
-            runtime=runtime,
-            helicopter=helicopter,
-            logger=logger,
-            audio=audio,
-            set_toast=set_toast,
-        )
-
-        frame_prep = prepare_frame_render_state(
-            particles_enabled=particles_enabled,
+        mode = run_post_fixed_step_phase(
             mode=mode,
             frame_dt=frame_dt,
             runtime=runtime,
-            selected_mission_id=selected_mission_id,
+            toast=toast,
+            cutscenes=cutscenes,
             mission=mission,
             helicopter=helicopter,
+            selected_mission_id=selected_mission_id,
+            particles_enabled=particles_enabled,
             heli_settings=heli_settings,
             airport_runtime=airport_runtime,
             screenshake=screenshake,
@@ -671,77 +636,22 @@ def run() -> None:
             screen=screen,
             window=window,
             update_screenshake_target_fn=update_screenshake_target,
-        )
-        camera_x = frame_prep.camera_x
-        target = frame_prep.target
-        shake_x = frame_prep.shake_x
-        shake_y = frame_prep.shake_y
-        runtime.vip_kia_overlay_timer, runtime.city_objective_overlay_timer = render_mode_frame_from_runtime(
-            mode=mode,
-            target=target,
-            screen=screen,
             skip_hint=skip_hint,
-            cutscenes=cutscenes,
-            mission=mission,
-            helicopter=helicopter,
-            camera_x=camera_x,
-            frame_dt=frame_dt,
-            selected_mission_id=selected_mission_id,
-            particles_enabled=particles_enabled,
-            sky_smoke=sky_smoke,
-            rain=rain,
-            fog=fog,
-            dust=dust,
-            storm_clouds=storm_clouds,
-            lightning=lightning,
-            runtime=runtime,
-            heli_settings=heli_settings,
-            airport_runtime=airport_runtime,
             mission_choices=mission_choices,
             selected_mission_index=selected_mission_index,
             chopper_choices=chopper_choices,
             selected_chopper_index=selected_chopper_index,
-            paused_hint=PAUSED_MENU_HINT,
             debug_show_overlay=bool(debug.show_overlay),
-            toast_message=str(toast.message or ""),
             flashes_enabled=bool(flashes_enabled),
             overlay=overlay,
             fps=float(clock.get_fps()),
-            draw_intro_fn=draw_intro,
-            draw_mission_cutscene_fn=draw_mission_cutscene,
-            draw_sky_fn=draw_sky,
-            draw_ground_fn=draw_ground,
-            draw_mission_fn=draw_mission,
-            draw_airport_world_overlays_fn=draw_airport_world_overlays,
-            draw_flares_fn=draw_flares,
-            draw_explosion_particles_fn=draw_explosion_particles,
-            draw_enemy_damage_fx_fn=draw_enemy_damage_fx,
-            draw_helicopter_damage_fx_fn=draw_helicopter_damage_fx,
-            draw_helicopter_fn=draw_helicopter,
-            draw_impact_sparks_fn=draw_impact_sparks,
-            boarded_count_fn=boarded_count,
-            draw_hud_fn=draw_hud,
-            draw_mission_select_overlay_fn=draw_mission_select_overlay,
-            draw_chopper_select_overlay_fn=draw_chopper_select_overlay,
-            draw_mission_end_overlay_fn=draw_mission_end_overlay,
-            shake_x=shake_x,
-            shake_y=shake_y,
             draw_debug_overlay_fn=draw_debug_overlay,
-            draw_toast_fn=draw_toast,
-            draw_damage_flash_fn=draw_damage_flash,
-        )
-
-        pygame.display.flip()
-
-        # Persist frame-local updates to shared loop context.
-        store_frame_locals_to_context(
+            set_toast=set_toast,
+            logger=logger,
             loop_ctx=loop_ctx,
-            mission=mission,
-            helicopter=helicopter,
             accumulator=accumulator,
             prev_stats=prev_stats,
             campaign_sentiment=campaign_sentiment,
-            airport_runtime=airport_runtime,
         )
 
     # Ensure all mixer channels are silenced before quitting the app.

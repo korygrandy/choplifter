@@ -215,6 +215,24 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced inline context-reload/input-build/accumulator-clamp block with one helper call and result assignment.
 - **Goal:** reduce fixed-step setup orchestration noise in `main.py` while preserving execution order and behavior.
 
+### Playing fixed-step iteration extraction
+
+- **New module:** `src/choplifter/app/fixed_step_iteration.py`
+  - Added `run_playing_fixed_step_iteration(...)` and `PlayingFixedStepIterationResult` to encapsulate one fixed-step playing iteration plus airport per-tick update wiring.
+- **Main loop change (`main.py`):** replaced inline `run_playing_fixed_step(...)` + airport tick-update branch with one helper call and result assignment.
+- **Goal:** reduce fixed-step inner-loop complexity in `main.py` while preserving update order, mission-end routing, and airport runtime synchronization.
+
+### Post-fixed-step phase extraction
+
+- **New module:** `src/choplifter/app/post_fixed_step_phase.py`
+  - Added `run_post_fixed_step_phase(...)` to centralize the per-frame post-fixed-step phase:
+    - toast tick and intro/cutscene completion checks
+    - post-frame mode transition resolution + side effects
+    - frame prep and mode-frame rendering
+    - display present + frame-local context persistence
+- **Main loop change (`main.py`):** replaced inline post-fixed-step phase block with one helper call returning next mode.
+- **Goal:** keep `main.py` focused on high-level loop orchestration by moving late-frame rendering/transition plumbing behind a dedicated boundary.
+
 ### City Siege satellite SFX timing fix
 
 - **Problem:** `satellite-reallocating.ogg` could fire at City mission launch trigger time (before intro cutscene completed) on gamepad flow.
