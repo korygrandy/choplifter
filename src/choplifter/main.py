@@ -75,12 +75,13 @@ from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapsho
 from .app.accessibility_toggles import toggle_particles, toggle_flashes, toggle_screenshake
 from .app.doors import check_airport_truck_retract_toast, check_tech_lz_door_toast, toggle_doors_with_logging
 from .app.runtime_state import GameRuntimeState
+from .app.main_loop_context import MainLoopContext
 from .app.airport_runtime_flags import sync_airport_runtime_flags
 from .app.bus_door_flow import apply_airport_bus_door_transitions
 from .app.weapon_lock import chopper_weapons_locked
 from .app.airport_session import configure_airport_runtime_for_mission, create_empty_airport_runtime
 from .app.airport_render import draw_airport_world_overlays
-from .app.airport_update import apply_airport_playing_tick_update
+from .app.airport_update import AirportRuntimeContext, apply_airport_playing_tick_update
 from .app.objective_overlay import get_mission_objective_overlay_duration
 from .app.vehicle_driver_modes import handle_airport_driver_mode_doors
 from .sprite_preloader import preload_mission_sprites
@@ -249,10 +250,19 @@ def run() -> None:
         previous_runtime=create_empty_airport_runtime(),
         hostage_deadline_s=120.0,
     )
+    loop_ctx = MainLoopContext(
+        mission=mission,
+        helicopter=helicopter,
+        accumulator=0.0,
+        prev_stats=prev_stats,
+        campaign_sentiment=campaign_sentiment,
+        airport_runtime=airport_runtime,
+    )
+    context_swapped = False
 
     def apply_mission_preview_wrapper() -> None:
-        nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
-        mission, helicopter, accumulator, prev_stats = apply_mission_preview(
+        nonlocal context_swapped
+        preview_mission, preview_helicopter, preview_accumulator, preview_prev_stats = apply_mission_preview(
             create_mission_and_helicopter,
             heli_settings,
             selected_mission_id,
@@ -262,19 +272,23 @@ def run() -> None:
             sky_smoke,
             audio,
             set_toast,
-            mission,
+            loop_ctx.mission,
         )
-        mission.sentiment = float(campaign_sentiment)
-        mission.audio = audio
+        loop_ctx.mission = preview_mission
+        loop_ctx.helicopter = preview_helicopter
+        loop_ctx.accumulator = preview_accumulator
+        loop_ctx.prev_stats = preview_prev_stats
+        loop_ctx.mission.sentiment = float(loop_ctx.campaign_sentiment)
+        loop_ctx.mission.audio = audio
         runtime.mission_end_return_seconds = 0.0
         audio.log_audio_channel_snapshot(tag="mission_preview", logger=logger)
+        context_swapped = True
 
     def reset_game_wrapper() -> None:
-        nonlocal helicopter, mission, accumulator, prev_stats, campaign_sentiment
-        nonlocal airport_runtime
+        nonlocal context_swapped
         # Stop chopper warning beeps on game reset
         audio.stop_chopper_warning_beeps()
-        mission, helicopter, accumulator, prev_stats = reset_game(
+        next_mission, next_helicopter, next_accumulator, next_prev_stats = reset_game(
             create_mission_and_helicopter,
             heli_settings,
             selected_mission_id,
@@ -287,9 +301,13 @@ def run() -> None:
             logger,
             flares,
         )
+        loop_ctx.mission = next_mission
+        loop_ctx.helicopter = next_helicopter
+        loop_ctx.accumulator = next_accumulator
+        loop_ctx.prev_stats = next_prev_stats
         runtime.mission_end_return_seconds = 0.0
-        mission.sentiment = float(campaign_sentiment)
-        mission.audio = audio
+        loop_ctx.mission.sentiment = float(loop_ctx.campaign_sentiment)
+        loop_ctx.mission.audio = audio
         audio.log_audio_channel_snapshot(tag="restart", logger=logger)
         gamepad_buttons.reset()
         runtime.city_objective_overlay_timer = 0.0
@@ -300,15 +318,16 @@ def run() -> None:
         runtime.bus_driver_mode = False
         
         # Initialize mission-specific airport runtime state for setup/reset paths.
-        airport_runtime = configure_airport_runtime_for_mission(
+        loop_ctx.airport_runtime = configure_airport_runtime_for_mission(
             selected_mission_id=selected_mission_id,
-            mission=mission,
+            mission=loop_ctx.mission,
             ground_y=heli_settings.ground_y,
-            previous_runtime=airport_runtime,
+            previous_runtime=loop_ctx.airport_runtime,
             hostage_deadline_s=120.0,
         )
 
         preload_mission_sprites(selected_mission_id, selected_chopper_asset)
+        context_swapped = True
 
     def toggle_particles_wrapper() -> None:
         nonlocal particles_enabled
@@ -323,11 +342,17 @@ def run() -> None:
         screenshake_enabled = toggle_screenshake(screenshake_enabled, set_toast)
 
     running = True
-    accumulator = 0.0
+    mission = loop_ctx.mission
+    helicopter = loop_ctx.helicopter
+    accumulator = loop_ctx.accumulator
+    prev_stats = loop_ctx.prev_stats
+    campaign_sentiment = loop_ctx.campaign_sentiment
+    airport_runtime = loop_ctx.airport_runtime
     
     while running:
         frame_dt = clock.tick(120) / 1000.0
         accumulator += frame_dt
+        context_swapped = False
 
         vip_overlay_state = update_vip_overlay_state(
             mission=mission,
@@ -701,6 +726,15 @@ def run() -> None:
             runtime.prev_menu_dir = menu_dir
             runtime.prev_menu_vert = menu_vert
 
+        if context_swapped:
+            # Wrappers can swap mission/helicopter/session objects during keyboard/gamepad handling.
+            mission = loop_ctx.mission
+            helicopter = loop_ctx.helicopter
+            accumulator = loop_ctx.accumulator
+            prev_stats = loop_ctx.prev_stats
+            campaign_sentiment = loop_ctx.campaign_sentiment
+            airport_runtime = loop_ctx.airport_runtime
+
         helicopter_input = build_helicopter_input(
             mode=mode,
             kb_tilt_left=kb_tilt_left,
@@ -800,17 +834,19 @@ def run() -> None:
                 # --- Airport Special Ops: update per-tick logic ---
                 if selected_mission_id == "airport":
                     airport_update = apply_airport_playing_tick_update(
-                        airport_runtime=airport_runtime,
+                        context=AirportRuntimeContext(
+                            airport_runtime=airport_runtime,
+                            bus_driver_input=bus_driver_input,
+                            bus_driver_mode=runtime.bus_driver_mode,
+                            truck_driver_input=truck_driver_input,
+                            meal_truck_driver_mode=runtime.meal_truck_driver_mode,
+                            meal_truck_lift_command_extended=runtime.meal_truck_lift_command_extended,
+                        ),
                         tick_dt=tick.dt,
                         audio=audio,
                         helicopter=helicopter,
                         mission=mission,
                         heli_settings=heli_settings,
-                        bus_driver_input=bus_driver_input,
-                        bus_driver_mode=runtime.bus_driver_mode,
-                        truck_driver_input=truck_driver_input,
-                        meal_truck_driver_mode=runtime.meal_truck_driver_mode,
-                        meal_truck_lift_command_extended=runtime.meal_truck_lift_command_extended,
                         set_toast=set_toast,
                         logger=logger,
                     )
@@ -1005,6 +1041,14 @@ def run() -> None:
             )
 
         pygame.display.flip()
+
+        # Persist frame-local updates to shared loop context.
+        loop_ctx.mission = mission
+        loop_ctx.helicopter = helicopter
+        loop_ctx.accumulator = accumulator
+        loop_ctx.prev_stats = prev_stats
+        loop_ctx.campaign_sentiment = campaign_sentiment
+        loop_ctx.airport_runtime = airport_runtime
 
     # Ensure all mixer channels are silenced before quitting the app.
     try:

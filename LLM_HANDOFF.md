@@ -394,7 +394,7 @@ Purpose: keep `src/choplifter/main.py` functional as the game orchestrator witho
 2. `P0` DONE: Airport per-tick update pipeline extracted into `app/airport_update.py` (bus, hostages, tech, truck, enemies, objectives, cutscene state).
 3. `P1` DONE: Airport render orchestration hooks extracted into `app/airport_render.py`.
 4. `P1` DONE: Airport imports in `main.py` use explicit module imports (no wildcard airport imports remain).
-5. `P2` NEXT: Add an internal `MainLoopContext`/`AirportRuntimeContext` structure to reduce long `nonlocal` variable lists.
+5. `P2` DONE: Added internal `MainLoopContext`/`AirportRuntimeContext` structures to reduce long mutable state threading and wrapper `nonlocal` rebinding.
 
 ### Governance Rules
 
