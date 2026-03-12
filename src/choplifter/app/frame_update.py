@@ -187,38 +187,14 @@ def update_weather_effects(
     screen: object,
     window: object,
 ) -> None:
-    """Advance visual-only sky/weather systems for the current frame."""
+    """Advance visual-only weather layers that are not simulated in frame preamble."""
     if not particles_enabled or mode in ("intro", "cutscene"):
         return
 
     sky_smoke.update(frame_dt, width=screen.get_width(), horizon_y=int(getattr(heli_settings, "ground_y", 0.0)))
-    if weather_mode == "rain":
-        rain.update(frame_dt, area_width=getattr(window, "width", 0), area_height=getattr(window, "height", 0))
-    if weather_mode == "fog":
-        fog.update(frame_dt, area_width=getattr(window, "width", 0), area_height=getattr(window, "height", 0))
-    if weather_mode == "dust":
-        dust.update(
-            frame_dt,
-            heli_pos=getattr(helicopter, "pos", None),
-            heli_vel=getattr(helicopter, "vel", None),
-            ground_y=getattr(heli_settings, "ground_y", 0.0),
-        )
+
     if weather_mode == "storm":
         storm_clouds.update(frame_dt)
-        rain.update(frame_dt, area_width=getattr(window, "width", 0), area_height=getattr(window, "height", 0))
-        fog.update(frame_dt, area_width=getattr(window, "width", 0), area_height=getattr(window, "height", 0))
-        dust.update(
-            frame_dt,
-            heli_pos=getattr(helicopter, "pos", None),
-            heli_vel=getattr(helicopter, "vel", None),
-            ground_y=getattr(heli_settings, "ground_y", 0.0),
-        )
-        heli_pos = getattr(helicopter, "pos", None)
-        lightning.update(
-            frame_dt,
-            helicopter_x=float(getattr(heli_pos, "x", 0.0)),
-            helicopter_y=float(getattr(heli_pos, "y", 0.0)),
-        )
 
 
 def compute_camera_x(*, world_width: float, view_width: float, helicopter_x: float) -> float:

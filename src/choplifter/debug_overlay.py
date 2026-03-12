@@ -14,7 +14,14 @@ class DebugOverlay:
         pygame.font.init()
         self._font = pygame.font.SysFont("consolas", 18)
 
-    def draw(self, screen: pygame.Surface, helicopter: Helicopter, mission: MissionState, fps: float) -> None:
+    def draw(
+        self,
+        screen: pygame.Surface,
+        helicopter: Helicopter,
+        mission: MissionState,
+        fps: float,
+        perf_counters: object | None = None,
+    ) -> None:
         boarded = boarded_count(mission)
         compound_states = " ".join(
             f"{max(0, int(c.health))}{'O' if c.is_open else 'S'}" for c in mission.compounds
@@ -74,6 +81,35 @@ class DebugOverlay:
             barak_pose_line,
             f"compounds: {compound_states}",
         ]
+
+        if isinstance(perf_counters, dict) and perf_counters:
+            lines.extend(
+                [
+                    "perf(ms):",
+                    (
+                        "  frame="
+                        f"{float(perf_counters.get('frame_total_ms', 0.0)):0.2f} "
+                        "preamble="
+                        f"{float(perf_counters.get('frame_preamble_ms', 0.0)):0.2f} "
+                        "event="
+                        f"{float(perf_counters.get('event_dispatch_ms', 0.0)):0.2f}"
+                    ),
+                    (
+                        "  input="
+                        f"{float(perf_counters.get('input_phase_ms', 0.0)):0.2f} "
+                        "fixed="
+                        f"{float(perf_counters.get('fixed_step_ms', 0.0)):0.2f} "
+                        "post="
+                        f"{float(perf_counters.get('post_phase_ms', 0.0)):0.2f}"
+                    ),
+                    (
+                        "  prep="
+                        f"{float(perf_counters.get('frame_prep_ms', 0.0)):0.2f} "
+                        "render="
+                        f"{float(perf_counters.get('render_present_ms', 0.0)):0.2f}"
+                    ),
+                ]
+            )
 
         x, y = 12, 10
         padding = 4

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import field
 
 
 @dataclass
@@ -30,3 +31,6 @@ class GameRuntimeState:
     vip_kia_overlay_timer: float = 0.0
     vip_kia_overlay_shown: bool = False
     city_objective_overlay_timer: float = 0.0
+    perf_frame_prep_ms: float = 0.0
+    perf_render_present_ms: float = 0.0
+    perf_overlay: dict[str, float] = field(default_factory=dict)

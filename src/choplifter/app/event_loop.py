@@ -6,6 +6,7 @@ from typing import Any, Callable, Sequence
 
 from ..controls import matches_key
 from .gamepad_pause_flow import handle_gamepad_pause_flow
+from .gamepads import handle_joy_device_added, handle_joy_device_removed
 from .joybutton_events import handle_joybuttondown_event
 from .keydown_preflight import KeydownPreflightResult, handle_keydown_preflight
 from .keyboard_events import handle_keyboard_event
@@ -73,6 +74,7 @@ class KeydownEventResult:
 def handle_keydown_event(
     event: pygame.event.Event,
     *,
+    runtime: object,
     mode: str,
     mission: object,
     controls: Any,
@@ -155,6 +157,8 @@ def handle_keydown_event(
     next_debug_weather_index = keydown_preflight.debug_weather_index
     if keydown_preflight.handled:
         running = keydown_preflight.running
+        runtime.debug_mode = bool(next_debug_mode)
+        runtime.debug_weather_index = int(next_debug_weather_index)
         set_console_log_debug(next_debug_mode)
         if keydown_preflight.selected_weather_mode is not None:
             set_debug_weather_mode(keydown_preflight.selected_weather_mode)
@@ -345,6 +349,7 @@ def process_pygame_events(
         if event.type == pygame.KEYDOWN:
             keydown_result = handle_keydown_event(
                 event,
+                runtime=runtime,
                 mode=next_mode,
                 mission=mission,
                 controls=controls,

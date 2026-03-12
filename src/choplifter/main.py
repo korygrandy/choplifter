@@ -2,6 +2,7 @@ from .game_types import EnemyKind
 from .barak_mrad import BARAK_STATE_DEPLOY
 
 import pygame
+import time
 
 from .audio_extra import play_satellite_reallocating
 from .helicopter import Facing, update_helicopter
@@ -175,15 +176,24 @@ def run() -> None:
         screenshake_enabled = toggle_screenshake(screenshake_enabled, set_toast)
 
     running = True
+    perf_alpha = 0.2
+    perf_ema: dict[str, float] = {}
+
+    def _perf_update(name: str, value_ms: float) -> None:
+        prev = perf_ema.get(name, float(value_ms))
+        perf_ema[name] = prev + (float(value_ms) - prev) * perf_alpha
+
     mission, helicopter, accumulator, prev_stats, campaign_sentiment, airport_runtime = load_frame_locals_from_context(
         loop_ctx=loop_ctx
     )
     
     while running:
+        frame_started = time.perf_counter()
         frame_dt = clock.tick(120) / 1000.0
         accumulator += frame_dt
         context_swapped = False
 
+        preamble_started = time.perf_counter()
         frame_preamble = run_frame_preamble(
             mission=mission,
             runtime=runtime,
@@ -200,8 +210,10 @@ def run() -> None:
             set_toast=set_toast,
             build_skip_hint_fn=build_skip_hint,
         )
+        frame_preamble_ms = (time.perf_counter() - preamble_started) * 1000.0
         skip_hint = frame_preamble.skip_hint
 
+        event_dispatch_started = time.perf_counter()
         event_dispatch = process_pygame_events(
             running=running,
             mode=mode,
@@ -245,6 +257,7 @@ def run() -> None:
             joysticks=joysticks,
             gamepad_buttons=gamepad_buttons,
         )
+        event_dispatch_ms = (time.perf_counter() - event_dispatch_started) * 1000.0
         running = event_dispatch.running
         mode = event_dispatch.mode
         selected_mission_index = event_dispatch.selected_mission_index
@@ -253,6 +266,7 @@ def run() -> None:
         selected_chopper_asset = event_dispatch.selected_chopper_asset
         debug = event_dispatch.debug
 
+        input_phase_started = time.perf_counter()
         mode = apply_post_input_mode_adjustments(
             mode=mode,
             selected_mission_id=selected_mission_id,
@@ -343,7 +357,9 @@ def run() -> None:
             gp_tilt_right = gamepad_frame.gp_tilt_right
             gp_lift_up = gamepad_frame.gp_lift_up
             gp_lift_down = gamepad_frame.gp_lift_down
+        input_phase_ms = (time.perf_counter() - input_phase_started) * 1000.0
 
+        fixed_step_started = time.perf_counter()
         fixed_step_preamble = prepare_fixed_step_preamble(
             context_swapped=context_swapped,
             loop_ctx=loop_ctx,
@@ -421,7 +437,9 @@ def run() -> None:
         runtime.doors_open_before_cutscene = fixed_step_loop.doors_open_before_cutscene
         runtime.meal_truck_driver_mode = fixed_step_loop.meal_truck_driver_mode
         runtime.meal_truck_lift_command_extended = fixed_step_loop.meal_truck_lift_command_extended
+        fixed_step_ms = (time.perf_counter() - fixed_step_started) * 1000.0
 
+        post_phase_started = time.perf_counter()
         mode = run_post_fixed_step_phase(
             mode=mode,
             frame_dt=frame_dt,
@@ -463,6 +481,18 @@ def run() -> None:
             prev_stats=prev_stats,
             campaign_sentiment=campaign_sentiment,
         )
+        post_phase_ms = (time.perf_counter() - post_phase_started) * 1000.0
+        frame_total_ms = (time.perf_counter() - frame_started) * 1000.0
+
+        _perf_update("frame_total_ms", frame_total_ms)
+        _perf_update("frame_preamble_ms", frame_preamble_ms)
+        _perf_update("event_dispatch_ms", event_dispatch_ms)
+        _perf_update("input_phase_ms", input_phase_ms)
+        _perf_update("fixed_step_ms", fixed_step_ms)
+        _perf_update("post_phase_ms", post_phase_ms)
+        _perf_update("frame_prep_ms", float(getattr(runtime, "perf_frame_prep_ms", 0.0)))
+        _perf_update("render_present_ms", float(getattr(runtime, "perf_render_present_ms", 0.0)))
+        runtime.perf_overlay = dict(perf_ema)
 
     finalize_run_shutdown(audio=audio)
 

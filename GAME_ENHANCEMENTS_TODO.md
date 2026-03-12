@@ -55,6 +55,9 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 - Final app-exit cleanup was moved out of `main.py` into `src/choplifter/app/run_shutdown.py` via `finalize_run_shutdown(...)`.
 - Initial mission/session context assembly was moved out of `main.py` into `src/choplifter/app/session.py` via `initialize_main_loop_context(...)`.
 - Frame-start VIP/weather bookkeeping and skip-hint generation were moved out of `main.py` into `src/choplifter/app/frame_update.py` via `run_frame_preamble(...)`.
+- Joypad startup regression (`NameError` on `handle_joy_device_added`) was fixed by restoring missing imports in `src/choplifter/app/event_loop.py`.
+- P0 perf work completed: duplicate rain/fog/dust/lightning simulation was removed from render-prep path so weather sim runs once per frame.
+- P0 perf work completed: frame-phase timing instrumentation + debug perf counters were added (main-loop EMA + debug overlay display).
 
 ### Gameplay Validation (Highest Priority)
 
@@ -67,6 +70,91 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 - [ ] Verify keyboard and gamepad parity for door interactions and mission progression.
 
 - [ ] Re-verify failure paths: bus destroyed, all passengers lost, deadline expiration.
+
+### Performance Refactor Backlog (CPU/GPU)
+
+- [x] `P0` Remove duplicate weather simulation updates per frame.
+  - Current risk: weather systems are advanced in both frame preamble and frame render preparation.
+  - Scope:
+    - Keep weather simulation in one phase only (preferred: frame preamble / gameplay-time path).
+    - Convert later phase to render-only consumption of already-updated weather state.
+  - Targets:
+    - `src/choplifter/app/frame_update.py`
+    - `src/choplifter/app/post_fixed_step_phase.py`
+  - Done criteria:
+    - Rain/fog/dust/lightning each update at most once per frame in normal gameplay loop.
+    - No weather behavior regressions in airport smoke and visual sanity check.
+
+- [x] `P0` Add frame-phase timing instrumentation and lightweight perf HUD counters.
+  - Scope:
+    - Track ms per phase: event dispatch, input/gamepad, fixed-step, frame preamble, render prep, draw/present.
+    - Log moving averages and expose in debug overlay only.
+  - Targets:
+    - `src/choplifter/main.py`
+    - `src/choplifter/debug_overlay.py`
+    - `src/choplifter/app/post_fixed_step_phase.py`
+  - Done criteria:
+    - Debug overlay shows stable rolling averages.
+    - Baseline profile captured and attached to handoff notes.
+
+- [ ] `P1` Cache transformed helicopter/vehicle sprites (flip/rotate) with bounded memory.
+  - Scope:
+    - Add quantized-angle cache for rotated helicopter sprites.
+    - Cache facing variants for frequently flipped vehicle assets.
+    - Use LRU or size cap to avoid unbounded growth.
+  - Targets:
+    - `src/choplifter/render/helicopter.py`
+    - `src/choplifter/vehicle_assets.py`
+  - Done criteria:
+    - Significant reduction in per-frame `pygame.transform.rotate/flip` calls.
+    - No visual drift/artifact across facing and roll transitions.
+
+- [ ] `P1` Reduce per-frame temporary surface allocations in hot render paths.
+  - Scope:
+    - Reuse alpha panels/overlays where dimensions are stable.
+    - Replace repeated `pygame.Surface(...)` construction with cached buffers.
+  - Targets:
+    - `src/choplifter/render/hud.py`
+    - `src/choplifter/render/overlays.py`
+    - `src/choplifter/render/particles.py`
+    - `src/choplifter/debug_overlay.py`
+  - Done criteria:
+    - Fewer transient allocations in profile snapshots.
+    - No UI layering or alpha-blend regressions.
+
+- [ ] `P1` Add draw culling for off-screen entities/effects before expensive composition.
+  - Scope:
+    - Introduce shared viewport visibility helper.
+    - Skip transform/composite work when object bounds are outside camera view + padding.
+  - Targets:
+    - `src/choplifter/render/world.py`
+    - `src/choplifter/app/frame_render.py`
+  - Done criteria:
+    - Reduced draw-call count in dense scenes.
+    - No pop-in for fast-moving entities at screen edges.
+
+- [ ] `P2` Add adaptive particle quality budget tied to frame time.
+  - Scope:
+    - Lower spawn/update density when moving-average frame time exceeds budget.
+    - Restore full quality automatically when frame time recovers.
+  - Targets:
+    - `src/choplifter/mission_particles.py`
+    - `src/choplifter/render/particles.py`
+    - `src/choplifter/sky_smoke.py`
+  - Done criteria:
+    - Noticeably smoother frame pacing under heavy effects.
+    - Effect readability preserved at reduced quality.
+
+- [ ] `P2` Split cosmetic-only update cadence from gameplay-critical updates.
+  - Scope:
+    - Keep mission/physics logic on fixed-step.
+    - Optionally throttle non-critical cosmetic updates (selected weather layers, decorative overlays).
+  - Targets:
+    - `src/choplifter/app/frame_update.py`
+    - `src/choplifter/fx/storm_clouds.py`
+  - Done criteria:
+    - Lower CPU time in heavy scenes without changing gameplay outcomes.
+    - Deterministic mission behavior maintained.
 
 ### Airport Pivot: Dual Elevated Compounds (Risk-First)
 

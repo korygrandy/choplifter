@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import pygame
 
 from .airport_render import draw_airport_world_overlays
@@ -95,6 +96,7 @@ def run_post_fixed_step_phase(
         set_toast=set_toast,
     )
 
+    frame_prep_started = time.perf_counter()
     frame_prep = prepare_frame_render_state(
         particles_enabled=particles_enabled,
         mode=mode,
@@ -118,11 +120,13 @@ def run_post_fixed_step_phase(
         window=window,
         update_screenshake_target_fn=update_screenshake_target_fn,
     )
+    runtime.perf_frame_prep_ms = (time.perf_counter() - frame_prep_started) * 1000.0
     camera_x = frame_prep.camera_x
     target = frame_prep.target
     shake_x = frame_prep.shake_x
     shake_y = frame_prep.shake_y
 
+    render_present_started = time.perf_counter()
     runtime.vip_kia_overlay_timer, runtime.city_objective_overlay_timer = render_mode_frame_from_runtime(
         mode=mode,
         target=target,
@@ -179,6 +183,7 @@ def run_post_fixed_step_phase(
     )
 
     pygame.display.flip()
+    runtime.perf_render_present_ms = (time.perf_counter() - render_present_started) * 1000.0
 
     store_frame_locals_to_context(
         loop_ctx=loop_ctx,

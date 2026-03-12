@@ -275,6 +275,41 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced the inline VIP/weather/skip-hint block at the top of the frame loop with one helper call.
 - **Goal:** keep the main loop focused on event/input/fixed-step orchestration rather than frame-start bookkeeping.
 
+### Joypad startup regression fix (NameError)
+
+- **Problem:** startup/event-loop crash on joystick device events: `NameError: handle_joy_device_added is not defined`.
+- **Fix:** restored missing joy-device imports in `src/choplifter/app/event_loop.py`.
+- **Validation:** event-loop handler globals include both `handle_joy_device_added` and `handle_joy_device_removed`; import smoke passes.
+
+### P0 perf: duplicate weather simulation elimination
+
+- **Change:** removed duplicate rain/fog/dust/lightning simulation from render-prep path so those systems advance once per frame.
+- **Module:** `src/choplifter/app/frame_update.py`
+- **Detail:** `update_weather_effects(...)` now advances only visual-only layers that are not part of gameplay weather simulation.
+
+### P0 perf: frame-phase timing instrumentation
+
+- **Change:** added lightweight moving-average timing counters for frame phases and exposed them in debug overlay.
+- **Modules:**
+  - `src/choplifter/main.py` (phase timers + EMA aggregation)
+  - `src/choplifter/app/post_fixed_step_phase.py` (frame-prep and render/present timings)
+  - `src/choplifter/app/runtime_state.py` (perf runtime fields)
+  - `src/choplifter/debug_overlay.py` + `src/choplifter/app/frame_render.py` (perf counter display path)
+
+### Manual visual sanity checklist (P0 weather/perf)
+
+- **Status:** pending manual in-game verification.
+- **Run setup:** launch game, enable debug overlay, run each weather mode for ~30-60s (`clear`, `rain`, `fog`, `dust`, `storm`).
+- **Checkpoints:**
+  - Weather motion pacing looks stable (no doubled-speed rain/fog/dust/strikes).
+  - Storm clouds still animate smoothly and lightning strike cadence looks believable.
+  - No visual hitching during mode transitions (`select_chopper -> cutscene -> playing`).
+  - Debug perf counters appear only with overlay enabled and update continuously.
+  - No UI overlap/regression from added perf rows in debug panel.
+- **Observation log template:**
+  - `mode=<weather> | visual=<ok/minor issue/major issue> | perf_frame_ms=<value> | notes=<short note>`
+  - `mode=storm | visual=<...> | prep_ms=<value> render_ms=<value> | lightning cadence=<ok/not ok>`
+
 ### City Siege satellite SFX timing fix
 
 - **Problem:** `satellite-reallocating.ogg` could fire at City mission launch trigger time (before intro cutscene completed) on gamepad flow.

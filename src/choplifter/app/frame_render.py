@@ -356,6 +356,7 @@ def render_frame_post_fx(
     mission: object,
     overlay: object,
     fps: float,
+    perf_counters: object,
     draw_debug_overlay_fn: object,
     draw_toast_fn: object,
     draw_damage_flash_fn: object,
@@ -369,7 +370,13 @@ def render_frame_post_fx(
         draw_damage_flash_fn(target, helicopter)
 
     if debug_show_overlay and mode == "playing":
-        overlay.draw(target, helicopter, mission, fps)
+        overlay.draw(
+            target,
+            helicopter,
+            mission,
+            fps,
+            perf_counters=perf_counters,
+        )
 
     if target is not screen:
         screen.fill((0, 0, 0))
@@ -435,6 +442,7 @@ def render_mode_frame(
     flashes_enabled: bool,
     overlay: object,
     fps: float,
+    perf_counters: object,
     draw_debug_overlay_fn: object,
     draw_toast_fn: object,
     draw_damage_flash_fn: object,
@@ -514,6 +522,7 @@ def render_mode_frame(
         mission=mission,
         overlay=overlay,
         fps=fps,
+        perf_counters=perf_counters,
         draw_debug_overlay_fn=draw_debug_overlay_fn,
         draw_toast_fn=draw_toast_fn,
         draw_damage_flash_fn=draw_damage_flash_fn,
@@ -636,6 +645,7 @@ def render_mode_frame_from_runtime(
         flashes_enabled=flashes_enabled,
         overlay=overlay,
         fps=fps,
+        perf_counters=getattr(runtime, "perf_overlay", None),
         draw_debug_overlay_fn=draw_debug_overlay_fn,
         draw_toast_fn=draw_toast_fn,
         draw_damage_flash_fn=draw_damage_flash_fn,
