@@ -26,6 +26,7 @@ class GameRuntimeState:
     weather_duration: float = 0.0
     hud_disabled_timer: float = 0.0
     prev_loop_mode: str = "intro"
+    city_satellite_sfx_pending: bool = False
     vip_kia_overlay_timer: float = 0.0
     vip_kia_overlay_shown: bool = False
     city_objective_overlay_timer: float = 0.0

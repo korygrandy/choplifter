@@ -35,6 +35,7 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 - Vehicle input/gating orchestration moved out of `main.py` into `src/choplifter/app/driver_inputs.py` as part of continued modularization.
 - Keyboard/gamepad event-result state assignment boilerplate moved out of `main.py` into `src/choplifter/app/loop_state_updates.py`.
 - Main-loop context load/store code moved out of `main.py` into `src/choplifter/app/main_loop_context_sync.py`.
+- Weather runtime assignment/toast application moved out of `main.py` into `src/choplifter/app/frame_update.py` via `apply_weather_runtime_update(...)`.
 
 ### Gameplay Validation (Highest Priority)
 

@@ -92,7 +92,13 @@ from .app.game_update import (
     run_playing_fixed_step,
 )
 from .app.mode_update import resolve_post_frame_mode_transitions
-from .app.frame_update import advance_weather_runtime, update_vip_overlay_state, update_weather_effects, update_camera_tracking
+from .app.frame_update import (
+    advance_weather_runtime,
+    apply_weather_runtime_update,
+    update_camera_tracking,
+    update_vip_overlay_state,
+    update_weather_effects,
+)
 from .app.frame_render import draw_mode_overlays, draw_playing_hud_and_overlays, draw_weather_particles, render_frame_post_fx
 from .app.event_loop import (
     handle_global_debug_keydown,
@@ -376,12 +382,11 @@ def run() -> None:
             heli_settings=heli_settings,
             window=window,
         )
-        runtime.weather_mode = weather_runtime.weather_mode
-        runtime.weather_timer = weather_runtime.weather_timer
-        runtime.weather_duration = weather_runtime.weather_duration
-        runtime.hud_disabled_timer = weather_runtime.hud_disabled_timer
-        if weather_runtime.lightning_disabled_hud:
-            set_toast("⚡ ELECTRONIC WARFARE: HUD/Targeting disabled!")
+        apply_weather_runtime_update(
+            runtime=runtime,
+            weather_runtime=weather_runtime,
+            set_toast=set_toast,
+        )
 
         skip_hint = build_skip_hint(joysticks)
 
@@ -518,6 +523,14 @@ def run() -> None:
                 logger=logger,
                 mission_id=selected_mission_id,
             )
+
+        # Defer city satellite SFX until gameplay actually begins.
+        if runtime.prev_loop_mode == "select_chopper" and mode in ("cutscene", "playing") and selected_mission_id == "city":
+            runtime.city_satellite_sfx_pending = True
+
+        if runtime.city_satellite_sfx_pending and mode == "playing":
+            play_satellite_reallocating()
+            runtime.city_satellite_sfx_pending = False
         
         # Update previous mode for next iteration
         runtime.prev_loop_mode = mode

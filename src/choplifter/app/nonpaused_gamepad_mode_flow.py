@@ -93,8 +93,6 @@ def handle_nonpaused_gamepad_mode_flow(
         audio.play_menu_select()
     if gamepad_mode.chopper_confirmed:
         set_toast(f"Chopper selected: {chopper_choices[next_selected_chopper_index][1]}")
-        if next_selected_mission_id == "city":
-            play_satellite_reallocating()
         reset_game()
         next_mode = start_mission_intro_or_playing_fn(next_selected_mission_id)
     elif previous_mode == "select_chopper" and gamepad_mode.selected_mission_backtracked:

@@ -94,6 +94,21 @@ def update_vip_overlay_state(
     )
 
 
+def apply_weather_runtime_update(
+    *,
+    runtime: object,
+    weather_runtime: WeatherRuntimeUpdateResult,
+    set_toast: object,
+) -> None:
+    """Apply weather runtime outputs to mutable runtime state and optional toast."""
+    runtime.weather_mode = weather_runtime.weather_mode
+    runtime.weather_timer = weather_runtime.weather_timer
+    runtime.weather_duration = weather_runtime.weather_duration
+    runtime.hud_disabled_timer = weather_runtime.hud_disabled_timer
+    if weather_runtime.lightning_disabled_hud:
+        set_toast("⚡ ELECTRONIC WARFARE: HUD/Targeting disabled!")
+
+
 def update_weather_effects(
     *,
     particles_enabled: bool,

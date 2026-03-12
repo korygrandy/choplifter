@@ -130,6 +130,15 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced inline field-by-field context load/store code with helper calls.
 - **Goal:** keep context synchronization explicit and centralized, reducing risk of future state-threading regressions.
 
+### Weather runtime apply extraction
+
+- **Module update:** `src/choplifter/app/frame_update.py`
+  - Added `apply_weather_runtime_update(...)` to centralize:
+    - runtime weather field updates (`weather_mode`, `weather_timer`, `weather_duration`, `hud_disabled_timer`)
+    - lightning HUD-disable toast emission.
+- **Main loop change (`main.py`):** replaced inline weather-runtime assignment/toast block with one helper call.
+- **Goal:** reduce per-frame orchestration noise in `main.py` and keep weather runtime side effects in the frame-update boundary.
+
 ### Validation status (session 3)
 
 - Import smoke: PASS (`from src.choplifter.main import run`)
