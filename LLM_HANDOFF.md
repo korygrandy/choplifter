@@ -203,6 +203,18 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced inline keyboard polling and active-gamepad snapshot/read block with one helper call.
 - **Goal:** reduce per-frame input-read boilerplate in `main.py` while preserving input state semantics.
 
+### Fixed-step preamble extraction
+
+- **New module:** `src/choplifter/app/fixed_step_preamble.py`
+  - Added `prepare_fixed_step_preamble(...)` and `FixedStepPreambleResult` to centralize pre-fixed-step loop preparation:
+    - optional frame-local context reload when `context_swapped`
+    - helicopter input build
+    - mission/runtime airport-flag sync
+    - driver input build
+    - accumulator clamp before fixed-step loop
+- **Main loop change (`main.py`):** replaced inline context-reload/input-build/accumulator-clamp block with one helper call and result assignment.
+- **Goal:** reduce fixed-step setup orchestration noise in `main.py` while preserving execution order and behavior.
+
 ### City Siege satellite SFX timing fix
 
 - **Problem:** `satellite-reallocating.ogg` could fire at City mission launch trigger time (before intro cutscene completed) on gamepad flow.

@@ -46,6 +46,7 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 - Main-loop pygame event routing block was moved out of `main.py` into `src/choplifter/app/event_loop.py` via `process_pygame_events(...)`.
 - Active gamepad per-frame mode-routing block was moved out of `main.py` into `src/choplifter/app/gamepad_frame_flow.py` via `process_active_gamepad_frame(...)`.
 - Keyboard polling + active-gamepad snapshot acquisition were moved out of `main.py` into `src/choplifter/app/frame_inputs.py` via `read_frame_input_snapshot(...)`.
+- Fixed-step preamble setup (context reload, input assembly, runtime sync, accumulator clamp) was moved out of `main.py` into `src/choplifter/app/fixed_step_preamble.py` via `prepare_fixed_step_preamble(...)`.
 
 ### Gameplay Validation (Highest Priority)
 

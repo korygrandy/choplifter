@@ -76,7 +76,7 @@ from .app.runtime_state import GameRuntimeState
 from .app.main_loop_context import MainLoopContext
 from .app.airport_runtime_flags import sync_airport_runtime_flags
 from .app.bus_door_flow import apply_airport_bus_door_transitions
-from .app.driver_inputs import build_driver_inputs
+from .app.fixed_step_preamble import prepare_fixed_step_preamble
 from .app.frame_inputs import read_frame_input_snapshot
 from .app.gamepad_frame_flow import process_active_gamepad_frame
 from .app.loop_mode_adjustments import apply_post_input_mode_adjustments
@@ -528,13 +528,15 @@ def run() -> None:
             gp_lift_up = gamepad_frame.gp_lift_up
             gp_lift_down = gamepad_frame.gp_lift_down
 
-        if context_swapped:
-            # Wrappers can swap mission/helicopter/session objects during keyboard/gamepad handling.
-            mission, helicopter, accumulator, prev_stats, campaign_sentiment, airport_runtime = (
-                load_frame_locals_from_context(loop_ctx=loop_ctx)
-            )
-
-        helicopter_input = build_helicopter_input(
+        fixed_step_preamble = prepare_fixed_step_preamble(
+            context_swapped=context_swapped,
+            loop_ctx=loop_ctx,
+            mission=mission,
+            helicopter=helicopter,
+            accumulator=accumulator,
+            prev_stats=prev_stats,
+            campaign_sentiment=campaign_sentiment,
+            airport_runtime=airport_runtime,
             mode=mode,
             kb_tilt_left=kb_tilt_left,
             kb_tilt_right=kb_tilt_right,
@@ -545,36 +547,20 @@ def run() -> None:
             gp_tilt_right=gp_tilt_right,
             gp_lift_up=gp_lift_up,
             gp_lift_down=gp_lift_down,
-        )
-
-        # Keep mission-level engineer/vehicle flags in sync for combat and AI gating.
-        sync_airport_runtime_flags(
-            mission=mission,
+            runtime=runtime,
             selected_mission_id=selected_mission_id,
-            airport_tech_state=airport_runtime.tech_state,
-            meal_truck_driver_mode=bool(runtime.meal_truck_driver_mode),
-            bus_driver_mode=bool(runtime.bus_driver_mode),
+            build_helicopter_input_fn=build_helicopter_input,
+            sync_airport_runtime_flags_fn=sync_airport_runtime_flags,
         )
-        
-        driver_inputs = build_driver_inputs(
-            mode=mode,
-            helicopter_input=helicopter_input,
-            kb_tilt_left=kb_tilt_left,
-            kb_tilt_right=kb_tilt_right,
-            gp_tilt_left=gp_tilt_left,
-            gp_tilt_right=gp_tilt_right,
-            meal_truck_driver_mode=runtime.meal_truck_driver_mode,
-            meal_truck_lift_command_extended=runtime.meal_truck_lift_command_extended,
-            bus_driver_mode=runtime.bus_driver_mode,
-        )
-        helicopter_input = driver_inputs.helicopter_input
-        truck_driver_input = driver_inputs.truck_driver_input
-        bus_driver_input = driver_inputs.bus_driver_input
-
-        # Fixed-timestep update.
-        # Clamp accumulator to avoid spiral of death if the window stalls.
-        if accumulator > 0.25:
-            accumulator = 0.25
+        mission = fixed_step_preamble.mission
+        helicopter = fixed_step_preamble.helicopter
+        accumulator = fixed_step_preamble.accumulator
+        prev_stats = fixed_step_preamble.prev_stats
+        campaign_sentiment = fixed_step_preamble.campaign_sentiment
+        airport_runtime = fixed_step_preamble.airport_runtime
+        helicopter_input = fixed_step_preamble.helicopter_input
+        truck_driver_input = fixed_step_preamble.truck_driver_input
+        bus_driver_input = fixed_step_preamble.bus_driver_input
 
 
         while accumulator >= tick.dt:
