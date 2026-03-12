@@ -79,6 +79,7 @@ from .app.airport_runtime_flags import sync_airport_runtime_flags
 from .app.bus_door_flow import apply_airport_bus_door_transitions
 from .app.weapon_lock import chopper_weapons_locked
 from .app.airport_session import configure_airport_runtime_for_mission, create_empty_airport_runtime
+from .app.airport_render import draw_airport_world_overlays
 from .app.airport_update import apply_airport_playing_tick_update
 from .app.objective_overlay import get_mission_objective_overlay_duration
 from .app.vehicle_driver_modes import handle_airport_driver_mode_doors
@@ -90,7 +91,7 @@ from .app.game_update import (
 )
 from .app.mode_update import resolve_post_frame_mode_transitions
 from .app.frame_update import advance_weather_runtime, update_vip_overlay_state, update_weather_effects, update_camera_tracking
-from .app.frame_render import draw_airport_world_overlays, draw_mode_overlays, draw_playing_hud_and_overlays, draw_weather_particles, render_frame_post_fx
+from .app.frame_render import draw_mode_overlays, draw_playing_hud_and_overlays, draw_weather_particles, render_frame_post_fx
 from .app.event_loop import (
     handle_global_debug_keydown,
     handle_gamepad_pause_flow,

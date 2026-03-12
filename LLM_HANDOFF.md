@@ -390,11 +390,11 @@ Purpose: keep `src/choplifter/main.py` functional as the game orchestrator witho
 
 ### Extraction Plan (Priority Order)
 
-1. `P0`: Extract airport mission setup/reset/config blocks from `main.py` into `app/airport_session.py`.
-2. `P0`: Extract airport per-tick update pipeline into `app/airport_update.py` (bus, hostages, tech, truck, enemies, objectives, cutscene state).
-3. `P1`: Extract airport render orchestration hooks into `app/airport_render.py`.
-4. `P1`: Replace wildcard airport imports in `main.py` with explicit imports from thin facade modules.
-5. `P2`: Add an internal `MainLoopContext`/`AirportRuntimeContext` structure to reduce long `nonlocal` variable lists.
+1. `P0` DONE: Airport mission setup/reset/config blocks extracted from `main.py` into `app/airport_session.py`.
+2. `P0` DONE: Airport per-tick update pipeline extracted into `app/airport_update.py` (bus, hostages, tech, truck, enemies, objectives, cutscene state).
+3. `P1` DONE: Airport render orchestration hooks extracted into `app/airport_render.py`.
+4. `P1` DONE: Airport imports in `main.py` use explicit module imports (no wildcard airport imports remain).
+5. `P2` NEXT: Add an internal `MainLoopContext`/`AirportRuntimeContext` structure to reduce long `nonlocal` variable lists.
 
 ### Governance Rules
 
