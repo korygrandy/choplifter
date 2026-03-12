@@ -370,7 +370,7 @@ def _draw_lives_strip(screen: pygame.Surface, mission: MissionState, helicopter:
     screen.blit(panel, (x, y))
 
 
-def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopter, *, driver_mode_active: bool = False) -> None:
+def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopter, *, driver_mode_active: bool = False, debug_mode: bool = False) -> None:
     global _HUD_FONT, _HUD_SMALL_FONT
     if _HUD_FONT is None:
         pygame.font.init()
@@ -573,6 +573,9 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
     if float(getattr(mission, "mine_warning_seconds", 0.0)) > 0.0:
         mine_dist = int(float(getattr(mission, "mine_warning_distance", 0.0)))
         lines.append(f"[MINE] * PROXIMITY ({mine_dist}px)")
+
+    if not debug_mode:
+        return
 
     x = 12
     y = screen.get_height() - 12 - len(lines) * 20
