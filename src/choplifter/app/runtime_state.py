@@ -19,3 +19,13 @@ class GameRuntimeState:
     bus_driver_mode: bool = False
     doors_open_before_cutscene: bool = False
     camera_x_smoothed: float | None = None
+    debug_mode: bool = False
+    debug_weather_index: int = 0
+    weather_mode: str = "clear"
+    weather_timer: float = 0.0
+    weather_duration: float = 0.0
+    hud_disabled_timer: float = 0.0
+    prev_loop_mode: str = "intro"
+    vip_kia_overlay_timer: float = 0.0
+    vip_kia_overlay_shown: bool = False
+    city_objective_overlay_timer: float = 0.0

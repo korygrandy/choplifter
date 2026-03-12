@@ -1,6 +1,97 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import random
+
+
+@dataclass
+class WeatherRuntimeUpdateResult:
+    weather_mode: str
+    weather_timer: float
+    weather_duration: float
+    hud_disabled_timer: float
+    lightning_disabled_hud: bool
+
+
+@dataclass
+class VipOverlayStateResult:
+    vip_kia_overlay_timer: float
+    vip_kia_overlay_shown: bool
+
+
+def advance_weather_runtime(
+    *,
+    debug_mode: bool,
+    debug_weather_modes: list[str],
+    frame_dt: float,
+    weather_mode: str,
+    weather_timer: float,
+    weather_duration: float,
+    hud_disabled_timer: float,
+    rain: object,
+    fog: object,
+    dust: object,
+    lightning: object,
+    helicopter: object,
+    heli_settings: object,
+    window: object,
+) -> WeatherRuntimeUpdateResult:
+    if not debug_mode:
+        weather_timer += frame_dt
+        if weather_timer > weather_duration:
+            weather_mode = random.choice(debug_weather_modes)
+            weather_timer = 0.0
+            weather_duration = random.uniform(18, 40)
+
+    lightning_disabled_hud = False
+    if weather_mode == "rain":
+        rain.update(frame_dt, area_width=window.width, area_height=window.height)
+    if weather_mode == "fog":
+        fog.update(frame_dt, area_width=window.width, area_height=window.height)
+    if weather_mode == "dust":
+        dust.update(frame_dt, heli_pos=helicopter.pos, heli_vel=helicopter.vel, ground_y=heli_settings.ground_y)
+    if weather_mode == "storm":
+        rain.update(frame_dt, area_width=window.width, area_height=window.height)
+        fog.update(frame_dt, area_width=window.width, area_height=window.height)
+        hit_player, _strike_x = lightning.update(
+            frame_dt,
+            helicopter_x=helicopter.pos.x,
+            helicopter_y=helicopter.pos.y,
+        )
+        if hit_player:
+            hud_disabled_timer = 3.0
+            lightning_disabled_hud = True
+    if hud_disabled_timer > 0.0:
+        hud_disabled_timer -= frame_dt
+
+    return WeatherRuntimeUpdateResult(
+        weather_mode=weather_mode,
+        weather_timer=weather_timer,
+        weather_duration=weather_duration,
+        hud_disabled_timer=hud_disabled_timer,
+        lightning_disabled_hud=lightning_disabled_hud,
+    )
+
+
+def update_vip_overlay_state(
+    *,
+    mission: object,
+    vip_kia_overlay_timer: float,
+    vip_kia_overlay_shown: bool,
+) -> VipOverlayStateResult:
+    if hasattr(mission, "hostages"):
+        vip_hostage = next((h for h in mission.hostages if getattr(h, "is_vip", False)), None)
+        if vip_hostage:
+            if vip_hostage.state.name != "KIA":
+                vip_kia_overlay_shown = False
+            elif vip_kia_overlay_timer <= 0.0 and not vip_kia_overlay_shown:
+                vip_kia_overlay_timer = 3.0
+                vip_kia_overlay_shown = True
+
+    return VipOverlayStateResult(
+        vip_kia_overlay_timer=vip_kia_overlay_timer,
+        vip_kia_overlay_shown=vip_kia_overlay_shown,
+    )
 
 
 def update_weather_effects(

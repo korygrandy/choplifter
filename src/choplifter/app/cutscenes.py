@@ -127,6 +127,25 @@ def start_mission_cutscene(
     return True
 
 
+def start_mission_intro_or_playing(
+    state: MissionCutsceneState,
+    *,
+    assets_dir: Path,
+    logger: Logger,
+    mission_id: str,
+) -> str:
+    """Start the mission intro cutscene when available, otherwise continue directly to playing."""
+    cutscene_path = assets_dir / "city-seige-intro.avi"
+    cutscene_started = start_mission_cutscene(
+        state,
+        cutscene_path=cutscene_path,
+        logger=logger,
+        event_id="mission_start",
+        mission_id=mission_id,
+    )
+    return "cutscene" if cutscene_started else "playing"
+
+
 def close_mission_cutscene(state: MissionCutsceneState, *, immediate: bool = False) -> None:
     if state.video is not None:
         state.video.close(immediate=immediate)

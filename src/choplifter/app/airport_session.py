@@ -22,6 +22,8 @@ class AirportRuntimeState:
     cutscene_state: object
     meal_truck_state: object
     raised_bunker_x: float
+    meal_truck_spawn_x: float
+    total_rescue_target: int
 
 
 def create_empty_airport_runtime() -> AirportRuntimeState:
@@ -34,6 +36,8 @@ def create_empty_airport_runtime() -> AirportRuntimeState:
         cutscene_state=None,
         meal_truck_state=None,
         raised_bunker_x=1500.0,
+        meal_truck_spawn_x=1060.0,
+        total_rescue_target=16,
     )
 
 
@@ -122,4 +126,6 @@ def initialize_airport_runtime(
         cutscene_state=cutscene_state,
         meal_truck_state=meal_truck_state,
         raised_bunker_x=raised_bunker_x,
+        meal_truck_spawn_x=meal_truck_spawn_x,
+        total_rescue_target=total_rescue_target,
     )

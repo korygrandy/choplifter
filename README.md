@@ -46,6 +46,18 @@ Manual follow-up:
 - Run the `10-Minute Smoke Pass` in `docs/AIRPORT_MISSION_PLAYTEST_GUIDE.md`
 - Submit the smoke report using the command card template in `docs/AIRPORT_MISSION_PLAYTEST_GUIDE.md`
 
+# Full test suite (all tests, all modules)
+
+# Always run from the project root to ensure src package is importable
+
+# Windows
+
+powershell -ExecutionPolicy Bypass -File .\scripts\test_all.ps1
+
+# Or (cross-platform)
+
+python -m pytest tests --disable-warnings
+
 ## Controls
 
 ### Keyboard

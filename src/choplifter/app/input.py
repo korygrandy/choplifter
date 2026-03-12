@@ -16,6 +16,10 @@ def get_active_joystick(joysticks: Mapping[int, pygame.joystick.Joystick]) -> py
     return joysticks.get(instance_id)
 
 
+def build_skip_hint(joysticks: Mapping[int, pygame.joystick.Joystick]) -> str:
+    return "Enter/Space or A/Start: Skip" if get_active_joystick(joysticks) is not None else "Enter/Space: Skip"
+
+
 def _axis_value(js: pygame.joystick.Joystick, axis_index: int) -> float:
     if axis_index < 0 or axis_index >= js.get_numaxes():
         return 0.0

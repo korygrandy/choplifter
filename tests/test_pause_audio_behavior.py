@@ -8,9 +8,11 @@ from unittest.mock import Mock
 import pygame
 
 from src.choplifter.app.event_loop import (
+    apply_pause_transition,
     handle_gamepad_pause_button,
     handle_mission_end_gamepad_navigation,
     handle_mission_end_keyboard_navigation,
+    handle_pause_quit_confirm_gamepad,
 )
 from src.choplifter.app.keyboard_events import handle_keyboard_event
 from src.choplifter.audio import AudioBank
@@ -75,6 +77,9 @@ class PauseAudioBehaviorTests(unittest.TestCase):
             bus_accelerate=None,
             bus_brakes=None,
             bus_door=None,
+            hang_on_yall=None,
+            carjacked_mealtruck=None,
+            barak_explosion=None,
         )
 
     def test_pause_menu_mutes_gameplay_buses_but_keeps_ui(self) -> None:
@@ -330,6 +335,49 @@ class PauseAudioBehaviorTests(unittest.TestCase):
             just_paused_with_start=False,
         )
         self.assertEqual((mode, just_paused, toggled, clear_quit), ("paused", True, True, False))
+
+    def test_pause_transition_applies_audio_and_focus(self) -> None:
+        audio = _RecordingAudio()
+
+        entered = apply_pause_transition(
+            prev_mode="playing",
+            next_mode="paused",
+            pause_focus="quit",
+            audio=audio,
+        )
+        resumed = apply_pause_transition(
+            prev_mode="paused",
+            next_mode="playing",
+            pause_focus=entered.pause_focus,
+            audio=audio,
+        )
+
+        self.assertEqual(entered.pause_focus, "choppers")
+        self.assertTrue(entered.entered_pause)
+        self.assertFalse(entered.resumed_playing)
+        self.assertFalse(resumed.entered_pause)
+        self.assertTrue(resumed.resumed_playing)
+        self.assertEqual(audio.pause_active_calls, [True, False])
+        self.assertEqual(audio.pause_toggle_calls, 2)
+
+    def test_pause_quit_confirm_gamepad_edges(self) -> None:
+        handled, keep_running, quit_confirm = handle_pause_quit_confirm_gamepad(
+            quit_confirm=True,
+            a_down=True,
+            prev_btn_a_down=False,
+            b_down=False,
+            prev_btn_b_down=False,
+        )
+        self.assertEqual((handled, keep_running, quit_confirm), (True, False, True))
+
+        handled, keep_running, quit_confirm = handle_pause_quit_confirm_gamepad(
+            quit_confirm=True,
+            a_down=False,
+            prev_btn_a_down=False,
+            b_down=True,
+            prev_btn_b_down=False,
+        )
+        self.assertEqual((handled, keep_running, quit_confirm), (True, True, False))
 
     def test_keyboard_fire_blocked_when_weapon_locked(self) -> None:
         controls = SimpleNamespace(
