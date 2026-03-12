@@ -8,6 +8,21 @@ _TOAST_FONT: pygame.font.Font | None = None
 _INTRO_TITLE_FONT: pygame.font.Font | None = None
 _INTRO_SUB_FONT: pygame.font.Font | None = None
 _INTRO_SKIP_FONT: pygame.font.Font | None = None
+_SCRATCH_SURFACES: dict[tuple[int, int], pygame.Surface] = {}
+
+
+def _scratch_surface(width: int, height: int) -> pygame.Surface:
+    key = (max(1, int(width)), max(1, int(height)))
+    surf = _SCRATCH_SURFACES.get(key)
+    if surf is not None:
+        return surf
+
+    surf = pygame.Surface(key, pygame.SRCALPHA)
+    _SCRATCH_SURFACES[key] = surf
+    if len(_SCRATCH_SURFACES) > 48:
+        _SCRATCH_SURFACES.clear()
+        _SCRATCH_SURFACES[key] = surf
+    return surf
 
 
 def draw_chopper_select_overlay(
@@ -43,7 +58,7 @@ def draw_chopper_select_overlay(
     h = screen.get_height()
 
     # Dim the game view.
-    dim = pygame.Surface((w, h), pygame.SRCALPHA)
+    dim = _scratch_surface(w, h)
     dim.fill((0, 0, 0, 160))
     screen.blit(dim, (0, 0))
 
@@ -79,7 +94,7 @@ def draw_chopper_select_overlay(
         border = 4 if is_selected else 2
         bg = (20, 20, 20, 200) if is_selected else (10, 10, 10, 180)
 
-        panel = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        panel = _scratch_surface(rect.width, rect.height)
         panel.fill(bg)
         screen.blit(panel, rect.topleft)
 
@@ -106,7 +121,7 @@ def draw_chopper_select_overlay(
         btn_y = box_top + box_h + 22
         btn = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
 
-        panel = pygame.Surface((btn.width, btn.height), pygame.SRCALPHA)
+        panel = _scratch_surface(btn.width, btn.height)
         panel.fill((20, 20, 20, 200) if restart_selected else (10, 10, 10, 180))
         screen.blit(panel, btn.topleft)
         pygame.draw.rect(screen, (240, 240, 240) if restart_selected else (160, 160, 160), btn, 4 if restart_selected else 2)
@@ -126,7 +141,7 @@ def draw_chopper_select_overlay(
         btn_y = base_y
         btn = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
 
-        panel = pygame.Surface((btn.width, btn.height), pygame.SRCALPHA)
+        panel = _scratch_surface(btn.width, btn.height)
         panel.fill((20, 20, 20, 200) if restart_game_selected else (10, 10, 10, 180))
         screen.blit(panel, btn.topleft)
         pygame.draw.rect(
@@ -155,7 +170,7 @@ def draw_chopper_select_overlay(
         btn_y = base_y
         btn = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
 
-        panel = pygame.Surface((btn.width, btn.height), pygame.SRCALPHA)
+        panel = _scratch_surface(btn.width, btn.height)
         panel.fill((20, 20, 20, 200) if mute_selected else (10, 10, 10, 180))
         screen.blit(panel, btn.topleft)
         pygame.draw.rect(screen, (240, 240, 240) if mute_selected else (160, 160, 160), btn, 4 if mute_selected else 2)
@@ -180,7 +195,7 @@ def draw_chopper_select_overlay(
         btn_y = base_y
         btn = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
 
-        panel = pygame.Surface((btn.width, btn.height), pygame.SRCALPHA)
+        panel = _scratch_surface(btn.width, btn.height)
         panel.fill((220, 40, 40, 220) if quit_selected else (80, 10, 10, 180))
         screen.blit(panel, btn.topleft)
         pygame.draw.rect(screen, (255, 80, 80) if quit_selected else (160, 80, 80), btn, 4 if quit_selected else 2)
@@ -196,7 +211,7 @@ def draw_chopper_select_overlay(
             confirm_x = w // 2 - confirm_w // 2
             confirm_y = btn_y + btn_h + 16
             confirm_rect = pygame.Rect(confirm_x, confirm_y, confirm_w, confirm_h)
-            confirm_panel = pygame.Surface((confirm_w, confirm_h), pygame.SRCALPHA)
+            confirm_panel = _scratch_surface(confirm_w, confirm_h)
             confirm_panel.fill((40, 40, 40, 240))
             screen.blit(confirm_panel, (confirm_x, confirm_y))
             pygame.draw.rect(screen, (255, 80, 80), confirm_rect, 3)
@@ -227,7 +242,7 @@ def draw_mission_select_overlay(
     h = screen.get_height()
 
     # Dim the game view.
-    dim = pygame.Surface((w, h), pygame.SRCALPHA)
+    dim = _scratch_surface(w, h)
     dim.fill((0, 0, 0, 160))
     screen.blit(dim, (0, 0))
 
@@ -260,7 +275,7 @@ def draw_mission_select_overlay(
         border = 4 if is_selected else 2
         bg = (20, 20, 20, 200) if is_selected else (10, 10, 10, 180)
 
-        panel = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        panel = _scratch_surface(rect.width, rect.height)
         panel.fill(bg)
         screen.blit(panel, rect.topleft)
 

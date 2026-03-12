@@ -307,6 +307,38 @@ All items below were implemented and validated with import smoke, `tests/test_pa
     - Added facing-flip cache for meal truck body/box sprites so `pygame.transform.flip(...)` is not repeated every frame.
 - **Goal:** lower per-frame CPU cost in helicopter/vehicle rendering without visual behavior changes.
 
+### P1 perf: temporary surface reuse (initial slice)
+
+- **Change:** added reusable scratch/panel surfaces in hot render paths to reduce per-frame `pygame.Surface(...)` allocations.
+- **Modules:**
+  - `src/choplifter/render/helicopter.py`
+    - Cached full-screen damage flash overlay by screen size.
+  - `src/choplifter/debug_overlay.py`
+    - Reused debug panel surfaces by dimensions via a small bounded cache.
+  - `src/choplifter/render/overlays.py`
+    - Added shared scratch surface cache and replaced repeated dim/panel/confirm allocations.
+- **Note:** this is the first slice of the temp-surface backlog item; HUD and particle render paths are still pending.
+
+### P1 perf: temporary surface reuse (HUD extension)
+
+- **Change:** extended temp-surface reuse into HUD rendering to reduce per-frame panel/toast/crown allocations.
+- **Module:** `src/choplifter/render/hud.py`
+  - Added bounded scratch-surface caches for CRT stat panels and toast backgrounds.
+  - Reused VIP crown surfaces by dimensions instead of allocating per draw.
+  - Updated CRT wash step to use blend fill on reused surface instead of a transient wash surface.
+- **Validation:** import smoke, focused pause-audio regression, and airport smoke suite all pass.
+
+### P1 perf: temporary surface reuse (particle extension)
+
+- **Change:** added cached reusable particle shape sprites to reduce transient surface creation in particle draw loops.
+- **Module:** `src/choplifter/render/particles.py`
+  - Added caches for rain streak sprites by length.
+  - Added caches for fog puffs by radius.
+  - Added caches for wind-dust cloud circles by `(radius, color)`.
+  - Added cache for fire-plume polygons by `(width, height)`.
+- **Behavior note:** per-particle alpha is still applied at draw time, preserving fade/decay behavior while reducing allocations.
+- **Validation:** import smoke, focused pause-audio regression, and airport smoke suite all pass.
+
 ### Manual visual sanity checklist (P0 weather/perf)
 
 - **Status:** pending manual in-game verification.

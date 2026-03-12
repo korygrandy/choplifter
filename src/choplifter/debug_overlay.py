@@ -13,6 +13,20 @@ class DebugOverlay:
     def __init__(self) -> None:
         pygame.font.init()
         self._font = pygame.font.SysFont("consolas", 18)
+        self._panel_cache: dict[tuple[int, int], pygame.Surface] = {}
+
+    def _get_panel_surface(self, *, width: int, height: int) -> pygame.Surface:
+        key = (int(width), int(height))
+        panel = self._panel_cache.get(key)
+        if panel is not None:
+            return panel
+
+        panel = pygame.Surface((key[0], key[1]), pygame.SRCALPHA)
+        self._panel_cache[key] = panel
+        if len(self._panel_cache) > 8:
+            self._panel_cache.clear()
+            self._panel_cache[key] = panel
+        return panel
 
     def draw(
         self,
@@ -117,7 +131,7 @@ class DebugOverlay:
         w = max(s.get_width() for s in rendered) + padding * 2
         h = sum(s.get_height() for s in rendered) + padding * 2 + (len(rendered) - 1) * 2
 
-        panel = pygame.Surface((w, h), pygame.SRCALPHA)
+        panel = self._get_panel_surface(width=w, height=h)
         panel.fill((0, 0, 0, 140))
 
         cy = padding

@@ -13,6 +13,7 @@ _CHOPPER_SCALED: dict[tuple[str, int], pygame.Surface] = {}
 _CHOPPER_VARIANT: dict[tuple[str, int, str, bool, bool], pygame.Surface] = {}
 _CHOPPER_ROTATED: dict[tuple[str, int, str, bool, bool, int], pygame.Surface] = {}
 _CHOPPER_ROTATED_MAX = 256
+_DAMAGE_FLASH_SURFACE: dict[tuple[int, int], pygame.Surface] = {}
 
 
 def _bounded_put(cache: dict, key: object, value: pygame.Surface, *, max_size: int) -> None:
@@ -35,7 +36,14 @@ def draw_damage_flash(screen: pygame.Surface, helicopter: Helicopter) -> None:
         return
 
     r, g, b = helicopter.damage_flash_rgb
-    overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+    size_key = (int(screen.get_width()), int(screen.get_height()))
+    overlay = _DAMAGE_FLASH_SURFACE.get(size_key)
+    if overlay is None:
+        overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+        _DAMAGE_FLASH_SURFACE[size_key] = overlay
+        if len(_DAMAGE_FLASH_SURFACE) > 8:
+            _DAMAGE_FLASH_SURFACE.clear()
+            _DAMAGE_FLASH_SURFACE[size_key] = overlay
     overlay.fill((int(r), int(g), int(b), alpha))
     screen.blit(overlay, (0, 0))
 

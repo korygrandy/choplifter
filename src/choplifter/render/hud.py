@@ -19,6 +19,23 @@ _HUD_SMALL_FONT: pygame.font.Font | None = None
 _TOAST_FONT: pygame.font.Font | None = None
 _HUD_ICON_CACHE: dict[tuple[str, int], pygame.Surface | None] = {}
 _LIFE_ICON_CACHE: dict[tuple[str, int, bool], pygame.Surface | None] = {}
+_HUD_PANEL_SCRATCH: dict[tuple[int, int], pygame.Surface] = {}
+_TOAST_PANEL_SCRATCH: dict[tuple[int, int], pygame.Surface] = {}
+_VIP_CROWN_CACHE: dict[tuple[int, int], pygame.Surface] = {}
+
+
+def _scratch_surface(cache: dict[tuple[int, int], pygame.Surface], *, width: int, height: int, max_size: int) -> pygame.Surface:
+    key = (max(1, int(width)), max(1, int(height)))
+    surf = cache.get(key)
+    if surf is not None:
+        return surf
+
+    surf = pygame.Surface(key, pygame.SRCALPHA)
+    cache[key] = surf
+    if len(cache) > max_size:
+        cache.clear()
+        cache[key] = surf
+    return surf
 
 
 def _assets_ui_dir() -> Path:
@@ -31,13 +48,11 @@ def _create_crt_panel(width: int, height: int, *, panel_color: tuple[int, int, i
     flicker = 0.88 + 0.12 * (0.5 + 0.5 * math.sin(t * 21.0 + width * 0.03))
 
     br, bg, bb, ba = panel_color
-    panel = pygame.Surface((width, height), pygame.SRCALPHA)
+    panel = _scratch_surface(_HUD_PANEL_SCRATCH, width=width, height=height, max_size=24)
     panel.fill((br, bg, bb, max(0, min(255, int(ba * flicker)))))
 
     # Gentle phosphor wash.
-    wash = pygame.Surface((width, height), pygame.SRCALPHA)
-    wash.fill((18, 58, 26, 26))
-    panel.blit(wash, (0, 0))
+    panel.fill((18, 58, 26, 26), special_flags=pygame.BLEND_RGBA_ADD)
 
     # Subtle vertical lines to mimic old terminal glass.
     for x in range(2, width, 4):
@@ -108,7 +123,15 @@ def _draw_vip_crown_indicator(target: pygame.Surface, *, x: int, y: int, size: i
 
     crown_w = max(10, int(size * 0.95))
     crown_h = max(7, int(size * 0.62))
-    crown = pygame.Surface((crown_w, crown_h), pygame.SRCALPHA)
+    crown_key = (crown_w, crown_h)
+    crown = _VIP_CROWN_CACHE.get(crown_key)
+    if crown is None:
+        crown = pygame.Surface((crown_w, crown_h), pygame.SRCALPHA)
+        _VIP_CROWN_CACHE[crown_key] = crown
+        if len(_VIP_CROWN_CACHE) > 16:
+            _VIP_CROWN_CACHE.clear()
+            _VIP_CROWN_CACHE[crown_key] = crown
+    crown.fill((0, 0, 0, 0))
     points = [
         (1, crown_h - 2),
         (max(2, crown_w // 4), max(1, crown_h // 3)),
@@ -614,7 +637,7 @@ def draw_toast(screen: pygame.Surface, message: str) -> None:
     w = text.get_width() + padding_x * 2
     h = text.get_height() + padding_y * 2
 
-    panel = pygame.Surface((w, h), pygame.SRCALPHA)
+    panel = _scratch_surface(_TOAST_PANEL_SCRATCH, width=w, height=h, max_size=12)
     panel.fill((0, 0, 0, 160))
     panel.blit(text, (padding_x, padding_y))
 

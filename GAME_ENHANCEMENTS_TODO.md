@@ -59,6 +59,9 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 - P0 perf work completed: duplicate rain/fog/dust/lightning simulation was removed from render-prep path so weather sim runs once per frame.
 - P0 perf work completed: frame-phase timing instrumentation + debug perf counters were added (main-loop EMA + debug overlay display).
 - P1 perf work completed: transformed sprite caching was added for helicopter rotate/flip variants and meal-truck facing flips to reduce per-frame transform overhead.
+- P1 perf work in progress: initial temporary-surface reuse was added in `render/overlays.py`, `debug_overlay.py`, and helicopter damage-flash rendering to cut per-frame allocations in hot UI/render paths.
+- P1 perf work in progress: temporary-surface reuse was extended into `render/hud.py` (CRT/toast/crown paths) to further reduce per-frame HUD allocations.
+- P1 perf work in progress: temporary-surface reuse was extended into `render/particles.py` (rain/fog/wind-dust/fire-plume sprite caches) to reduce particle-path allocations.
 
 ### Gameplay Validation (Highest Priority)
 
