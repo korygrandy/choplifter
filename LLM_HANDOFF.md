@@ -196,6 +196,13 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced inline `if active_gamepad is not None:` gamepad mode-routing block with one helper call and result assignment.
 - **Goal:** reduce main-loop gamepad orchestration size while preserving edge-trigger behavior and mode/state side effects.
 
+### Frame input-read extraction
+
+- **New module:** `src/choplifter/app/frame_inputs.py`
+  - Added `read_frame_input_snapshot(...)` and `FrameInputSnapshot` to centralize keyboard polling and active gamepad snapshot acquisition, including haptics active-joystick synchronization.
+- **Main loop change (`main.py`):** replaced inline keyboard polling and active-gamepad snapshot/read block with one helper call.
+- **Goal:** reduce per-frame input-read boilerplate in `main.py` while preserving input state semantics.
+
 ### City Siege satellite SFX timing fix
 
 - **Problem:** `satellite-reallocating.ogg` could fire at City mission launch trigger time (before intro cutscene completed) on gamepad flow.

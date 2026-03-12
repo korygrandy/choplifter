@@ -8,7 +8,7 @@ import pygame
 from .audio import AudioBank
 from .audio_extra import play_satellite_reallocating
 from .accessibility import load_accessibility
-from .controls import load_controls, pressed
+from .controls import load_controls
 from .debug_overlay import DebugOverlay
 from .game_logging import create_session_logger
 from .helicopter import Facing, Helicopter, update_helicopter
@@ -60,7 +60,7 @@ from .app.cutscenes import (
     skip_mission_cutscene,
 )
 from .app.state import CutsceneState, IntroCutsceneState, MissionCutsceneState
-from .app.input import build_skip_hint, read_active_gamepad_snapshot
+from .app.input import build_skip_hint
 from .app.feedback import ScreenShakeState, rough_landing_feedback, update_screenshake_target
 from .app.flares import FlareState, reset_flares, try_start_flare_salvo, update_flares
 from .app.gamepads import init_connected_joysticks, handle_joy_device_added, handle_joy_device_removed
@@ -77,6 +77,7 @@ from .app.main_loop_context import MainLoopContext
 from .app.airport_runtime_flags import sync_airport_runtime_flags
 from .app.bus_door_flow import apply_airport_bus_door_transitions
 from .app.driver_inputs import build_driver_inputs
+from .app.frame_inputs import read_frame_input_snapshot
 from .app.gamepad_frame_flow import process_active_gamepad_frame
 from .app.loop_mode_adjustments import apply_post_input_mode_adjustments
 from .app.weapon_lock import chopper_weapons_locked
@@ -450,26 +451,25 @@ def run() -> None:
             play_satellite_reallocating_fn=play_satellite_reallocating,
         ).mode
 
-        keys = pygame.key.get_pressed()
-        kb_tilt_left = pressed(keys, controls.tilt_left)
-        kb_tilt_right = pressed(keys, controls.tilt_right)
-        kb_lift_up = pressed(keys, controls.lift_up)
-        kb_lift_down = pressed(keys, controls.lift_down)
-        kb_brake = pressed(keys, controls.brake)
+        frame_inputs = read_frame_input_snapshot(
+            controls=controls,
+            joysticks=joysticks,
+            gamepad_buttons=gamepad_buttons,
+            gamepad_deadzone=float(accessibility.gamepad_deadzone),
+            trigger_threshold=float(accessibility.trigger_threshold),
+        )
+        kb_tilt_left = frame_inputs.kb_tilt_left
+        kb_tilt_right = frame_inputs.kb_tilt_right
+        kb_lift_up = frame_inputs.kb_lift_up
+        kb_lift_down = frame_inputs.kb_lift_down
+        kb_brake = frame_inputs.kb_brake
 
         gp_tilt_left = False
         gp_tilt_right = False
         gp_lift_up = False
         gp_lift_down = False
 
-        active_gamepad = read_active_gamepad_snapshot(
-            joysticks,
-            button_state=gamepad_buttons,
-            deadzone=float(accessibility.gamepad_deadzone),
-            trigger_threshold01=float(accessibility.trigger_threshold),
-        )
-        active_js = active_gamepad.joystick if active_gamepad is not None else None
-        haptics.set_active_joystick(active_js)
+        active_gamepad = frame_inputs.active_gamepad
 
         if active_gamepad is not None:
             gamepad_frame = process_active_gamepad_frame(
