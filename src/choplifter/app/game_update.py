@@ -218,6 +218,12 @@ def process_playing_progression(
             boarded_now=0,
         )
 
+    # Keep warning beeps in sync with current health state even after heals/repairs.
+    if float(getattr(helicopter, "damage", 0.0)) < 70.0:
+        stop_warning_beeps = getattr(audio, "stop_chopper_warning_beeps", None)
+        if callable(stop_warning_beeps):
+            stop_warning_beeps()
+
     # Consume cinematic feedback impulses produced by mission damage events.
     consume_mission_feedback(
         state=screenshake,
