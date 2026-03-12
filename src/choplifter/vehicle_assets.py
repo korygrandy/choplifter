@@ -46,6 +46,7 @@ class TruckDriverInput:
 _meal_cart_sprite: Optional[pygame.Surface] = None
 _meal_cart_box_sprite: Optional[pygame.Surface] = None
 _meal_cart_extended_sprite: Optional[pygame.Surface] = None
+_flipped_surface_cache: dict[int, pygame.Surface] = {}
 
 
 def _load_sprite(name: str) -> Optional[pygame.Surface]:
@@ -58,12 +59,37 @@ def _load_sprite(name: str) -> Optional[pygame.Surface]:
 
 def _ensure_meal_truck_sprites() -> None:
 	global _meal_cart_sprite, _meal_cart_box_sprite, _meal_cart_extended_sprite
+	reloaded = False
 	if _meal_cart_sprite is None:
 		_meal_cart_sprite = _load_sprite("airport-meal-cart.png")
+		reloaded = True
 	if _meal_cart_box_sprite is None:
 		_meal_cart_box_sprite = _load_sprite("airport-meal-cart-box.png")
+		reloaded = True
 	if _meal_cart_extended_sprite is None:
 		_meal_cart_extended_sprite = _load_sprite("airport-meal-cart-extended.png")
+		reloaded = True
+	if reloaded:
+		_flipped_surface_cache.clear()
+
+
+def _get_facing_surface(base: Optional[pygame.Surface], *, facing_right: bool) -> Optional[pygame.Surface]:
+	if base is None:
+		return None
+	if not facing_right:
+		return base
+
+	key = id(base)
+	cached = _flipped_surface_cache.get(key)
+	if cached is not None:
+		return cached
+
+	flipped = pygame.transform.flip(base, True, False)
+	_flipped_surface_cache[key] = flipped
+	if len(_flipped_surface_cache) > 16:
+		_flipped_surface_cache.clear()
+		_flipped_surface_cache[key] = flipped
+	return flipped
 
 
 def create_airport_meal_truck_state(*, start_x: float, ground_y: float, plane_lz_x: float = 1500.0) -> AirportMealTruckState:
@@ -309,10 +335,10 @@ def draw_airport_meal_truck(target: pygame.Surface, meal_truck_state, *, camera_
 	# - `extended`: use airport-meal-cart-extended.png
 	# - all other states: use airport-meal-cart.png
 	if box_state == "extended" and _meal_cart_extended_sprite is not None:
-		body_sprite = pygame.transform.flip(_meal_cart_extended_sprite, True, False) if facing_right else _meal_cart_extended_sprite
+		body_sprite = _get_facing_surface(_meal_cart_extended_sprite, facing_right=facing_right)
 		target.blit(body_sprite, (x, y))
 	elif _meal_cart_sprite is not None:
-		body_sprite = pygame.transform.flip(_meal_cart_sprite, True, False) if facing_right else _meal_cart_sprite
+		body_sprite = _get_facing_surface(_meal_cart_sprite, facing_right=facing_right)
 		target.blit(body_sprite, (x, y))
 	else:
 		# Fallback body rectangle
@@ -321,5 +347,5 @@ def draw_airport_meal_truck(target: pygame.Surface, meal_truck_state, *, camera_
 	
 	# Moving box overlay must stay top-most during slide up/down animation.
 	if _meal_cart_box_sprite is not None and box_state in ("extending", "retracting"):
-		box_sprite = pygame.transform.flip(_meal_cart_box_sprite, True, False) if facing_right else _meal_cart_box_sprite
+		box_sprite = _get_facing_surface(_meal_cart_box_sprite, facing_right=facing_right)
 		target.blit(box_sprite, (x, y + box_y_offset))

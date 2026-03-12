@@ -58,6 +58,7 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 - Joypad startup regression (`NameError` on `handle_joy_device_added`) was fixed by restoring missing imports in `src/choplifter/app/event_loop.py`.
 - P0 perf work completed: duplicate rain/fog/dust/lightning simulation was removed from render-prep path so weather sim runs once per frame.
 - P0 perf work completed: frame-phase timing instrumentation + debug perf counters were added (main-loop EMA + debug overlay display).
+- P1 perf work completed: transformed sprite caching was added for helicopter rotate/flip variants and meal-truck facing flips to reduce per-frame transform overhead.
 
 ### Gameplay Validation (Highest Priority)
 
@@ -97,7 +98,7 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
     - Debug overlay shows stable rolling averages.
     - Baseline profile captured and attached to handoff notes.
 
-- [ ] `P1` Cache transformed helicopter/vehicle sprites (flip/rotate) with bounded memory.
+- [x] `P1` Cache transformed helicopter/vehicle sprites (flip/rotate) with bounded memory.
   - Scope:
     - Add quantized-angle cache for rotated helicopter sprites.
     - Cache facing variants for frequently flipped vehicle assets.

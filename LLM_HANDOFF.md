@@ -296,6 +296,17 @@ All items below were implemented and validated with import smoke, `tests/test_pa
   - `src/choplifter/app/runtime_state.py` (perf runtime fields)
   - `src/choplifter/debug_overlay.py` + `src/choplifter/app/frame_render.py` (perf counter display path)
 
+### P1 perf: transformed sprite caching (initial implementation)
+
+- **Change:** added bounded transform caches to reduce repeated `flip/rotate` work in hot render paths.
+- **Modules:**
+  - `src/choplifter/render/helicopter.py`
+    - Added cached helicopter variants keyed by `(skin, size, facing, doors_open, occupied)`.
+    - Added bounded rotated-surface cache with quantized roll buckets (0.5 deg).
+  - `src/choplifter/vehicle_assets.py`
+    - Added facing-flip cache for meal truck body/box sprites so `pygame.transform.flip(...)` is not repeated every frame.
+- **Goal:** lower per-frame CPU cost in helicopter/vehicle rendering without visual behavior changes.
+
 ### Manual visual sanity checklist (P0 weather/perf)
 
 - **Status:** pending manual in-game verification.

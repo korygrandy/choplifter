@@ -10,6 +10,17 @@ from ..helicopter import Facing, Helicopter
 _CHOPPER_ORIG: dict[str, pygame.Surface] = {}
 _CHOPPER_LOAD_FAILED: set[str] = set()
 _CHOPPER_SCALED: dict[tuple[str, int], pygame.Surface] = {}
+_CHOPPER_VARIANT: dict[tuple[str, int, str, bool, bool], pygame.Surface] = {}
+_CHOPPER_ROTATED: dict[tuple[str, int, str, bool, bool, int], pygame.Surface] = {}
+_CHOPPER_ROTATED_MAX = 256
+
+
+def _bounded_put(cache: dict, key: object, value: pygame.Surface, *, max_size: int) -> None:
+    """Insert into a small transform cache and cap memory growth."""
+    cache[key] = value
+    if len(cache) > max_size:
+        # Keep cache maintenance cheap; these surfaces are quickly repopulated.
+        cache.clear()
 
 
 def draw_damage_flash(screen: pygame.Surface, helicopter: Helicopter) -> None:
@@ -127,16 +138,29 @@ def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x:
         return out
 
     skin = getattr(helicopter, "skin_asset", "chopper-one.png")
-    sprite = _get_chopper_scaled(skin, width_px=120)
+    width_px = 120
+    sprite = _get_chopper_scaled(skin, width_px=width_px)
     if sprite is not None:
-        s = sprite
-        # The base sprite is authored facing LEFT; flip for RIGHT-facing.
-        if helicopter.facing is Facing.RIGHT:
-            s = pygame.transform.flip(s, True, False)
+        facing_name = str(getattr(helicopter.facing, "name", "LEFT"))
+        occupied = bool(boarded > 0)
+        variant_key = (skin, width_px, facing_name, bool(helicopter.doors_open), occupied)
+        variant = _CHOPPER_VARIANT.get(variant_key)
+        if variant is None:
+            variant = sprite
+            # The base sprite is authored facing LEFT; flip for RIGHT-facing.
+            if helicopter.facing is Facing.RIGHT:
+                variant = pygame.transform.flip(variant, True, False)
+            variant = _with_door_overlay(variant)
+            _CHOPPER_VARIANT[variant_key] = variant
 
-        s = _with_door_overlay(s)
+        # Quantize roll for cache reuse while keeping animation smooth.
+        angle_bucket = int(round(float(roll_deg) * 2.0))  # 0.5 degree buckets
+        rotated_key = variant_key + (angle_bucket,)
+        rotated = _CHOPPER_ROTATED.get(rotated_key)
+        if rotated is None:
+            rotated = pygame.transform.rotate(variant, -(angle_bucket / 2.0))
+            _bounded_put(_CHOPPER_ROTATED, rotated_key, rotated, max_size=_CHOPPER_ROTATED_MAX)
 
-        rotated = pygame.transform.rotate(s, -roll_deg)
         rect = rotated.get_rect(center=(x, y))
         screen.blit(rotated, rect)
         return
@@ -265,4 +289,7 @@ def _get_chopper_scaled(asset_filename: str, *, width_px: int) -> pygame.Surface
         scaled.set_colorkey(key, pygame.RLEACCEL)
 
     _CHOPPER_SCALED[cache_key] = scaled
+    # Asset reload can invalidate dependent transformed caches.
+    _CHOPPER_VARIANT.clear()
+    _CHOPPER_ROTATED.clear()
     return scaled
