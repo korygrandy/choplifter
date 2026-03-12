@@ -24,6 +24,19 @@ class AirportRuntimeState:
     raised_bunker_x: float
 
 
+def create_empty_airport_runtime() -> AirportRuntimeState:
+    return AirportRuntimeState(
+        bus_state=None,
+        hostage_state=None,
+        enemy_state=None,
+        tech_state=None,
+        objective_state=None,
+        cutscene_state=None,
+        meal_truck_state=None,
+        raised_bunker_x=1500.0,
+    )
+
+
 def configure_airport_passenger_distribution(*, mission: object, total_passengers: int = 16) -> tuple[list[float], int, float]:
     """Split airport civilians between lower compounds and elevated terminals."""
     compounds = list(getattr(mission, "compounds", []))
