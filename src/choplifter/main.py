@@ -78,6 +78,7 @@ from .app.airport_runtime_flags import sync_airport_runtime_flags
 from .app.bus_door_flow import apply_airport_bus_door_transitions
 from .app.driver_inputs import build_driver_inputs
 from .app.loop_state_updates import apply_joybutton_result, apply_keydown_result, apply_nonpaused_gamepad_result
+from .app.loop_mode_adjustments import apply_post_input_mode_adjustments
 from .app.weapon_lock import chopper_weapons_locked
 from .app.airport_session import configure_airport_runtime_for_mission, create_empty_airport_runtime
 from .app.airport_render import draw_airport_world_overlays
@@ -515,26 +516,19 @@ def run() -> None:
                     joybutton_result=joybutton_result,
                 )
 
-        # Check if we transitioned from select_chopper to cutscene via keyboard
-        # (gamepad path handles this inline)
-        if runtime.prev_loop_mode == "select_chopper" and mode == "cutscene" and cutscenes.mission.video is None:
-            mode = start_mission_intro_or_playing(
+        mode = apply_post_input_mode_adjustments(
+            mode=mode,
+            selected_mission_id=selected_mission_id,
+            runtime=runtime,
+            cutscene_video=cutscenes.mission.video,
+            start_mission_intro_or_playing_fn=lambda mission_id: start_mission_intro_or_playing(
                 cutscenes.mission,
                 assets_dir=assets_dir,
                 logger=logger,
-                mission_id=selected_mission_id,
-            )
-
-        # Defer city satellite SFX until gameplay actually begins.
-        if runtime.prev_loop_mode == "select_chopper" and mode in ("cutscene", "playing") and selected_mission_id == "city":
-            runtime.city_satellite_sfx_pending = True
-
-        if runtime.city_satellite_sfx_pending and mode == "playing":
-            play_satellite_reallocating()
-            runtime.city_satellite_sfx_pending = False
-        
-        # Update previous mode for next iteration
-        runtime.prev_loop_mode = mode
+                mission_id=mission_id,
+            ),
+            play_satellite_reallocating_fn=play_satellite_reallocating,
+        ).mode
 
         keys = pygame.key.get_pressed()
         kb_tilt_left = pressed(keys, controls.tilt_left)
