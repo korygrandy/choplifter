@@ -52,6 +52,8 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 - Accumulator-driven fixed-step loop control was moved out of `main.py` into `src/choplifter/app/fixed_step_loop.py` via `run_fixed_step_loop(...)`.
 - Mission preview/reset wrapper bodies were moved out of `main.py` into `src/choplifter/app/setup_wrappers.py` via `apply_mission_preview_to_context(...)` and `reset_game_to_context(...)`.
 - Startup initialization and initial menu/runtime setup were moved out of `main.py` into `src/choplifter/app/run_bootstrap.py` via `initialize_run_bootstrap(...)`.
+- Final app-exit cleanup was moved out of `main.py` into `src/choplifter/app/run_shutdown.py` via `finalize_run_shutdown(...)`.
+- Initial mission/session context assembly was moved out of `main.py` into `src/choplifter/app/session.py` via `initialize_main_loop_context(...)`.
 
 ### Gameplay Validation (Highest Priority)
 

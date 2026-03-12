@@ -22,18 +22,18 @@ from .app.input import build_skip_hint
 from .app.feedback import rough_landing_feedback, update_screenshake_target
 from .app.flares import reset_flares, try_start_flare_salvo, update_flares
 from .app.ui_constants import MISSION_END_RETURN_DELAY_S
-from .app.session import create_mission_and_helicopter
+from .app.session import create_mission_and_helicopter, initialize_main_loop_context
 from .app.flow import apply_mission_preview, reset_game
-from .app.stats_snapshot import MissionStatsSnapshot, take_mission_stats_snapshot
+from .app.stats_snapshot import take_mission_stats_snapshot
 from .app.accessibility_toggles import toggle_particles, toggle_flashes, toggle_screenshake
 from .app.doors import toggle_doors_with_logging
-from .app.main_loop_context import MainLoopContext
 from .app.airport_runtime_flags import sync_airport_runtime_flags
 from .app.fixed_step_preamble import prepare_fixed_step_preamble
 from .app.frame_inputs import read_frame_input_snapshot
 from .app.gamepad_frame_flow import process_active_gamepad_frame
 from .app.post_fixed_step_phase import run_post_fixed_step_phase
 from .app.run_bootstrap import initialize_run_bootstrap
+from .app.run_shutdown import finalize_run_shutdown
 from .app.setup_wrappers import apply_mission_preview_to_context, reset_game_to_context
 from .app.loop_mode_adjustments import apply_post_input_mode_adjustments
 from .app.weapon_lock import chopper_weapons_locked
@@ -110,37 +110,16 @@ def run() -> None:
     mode = bootstrap.mode
     runtime = bootstrap.runtime
     flares = bootstrap.flares
-
-
-
-
-
-    # --- Mission initialization ---
-    mission, helicopter = create_mission_and_helicopter(
+    loop_ctx = initialize_main_loop_context(
         heli_settings=heli_settings,
-        mission_id=selected_mission_id,
-        chopper_asset=selected_chopper_asset,
-    )
-    mission.audio = audio
-    campaign_sentiment = float(getattr(mission, "sentiment", 50.0))
-
-    prev_stats: MissionStatsSnapshot = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
-
-    # --- Airport Special Ops mission: placeholder entity state ---
-    airport_runtime = configure_airport_runtime_for_mission(
         selected_mission_id=selected_mission_id,
-        mission=mission,
-        ground_y=heli_settings.ground_y,
-        previous_runtime=create_empty_airport_runtime(),
-        hostage_deadline_s=120.0,
-    )
-    loop_ctx = MainLoopContext(
-        mission=mission,
-        helicopter=helicopter,
-        accumulator=0.0,
-        prev_stats=prev_stats,
-        campaign_sentiment=campaign_sentiment,
-        airport_runtime=airport_runtime,
+        selected_chopper_asset=selected_chopper_asset,
+        audio=audio,
+        create_mission_and_helicopter_fn=create_mission_and_helicopter,
+        take_mission_stats_snapshot_fn=take_mission_stats_snapshot,
+        boarded_count_fn=boarded_count,
+        configure_airport_runtime_for_mission_fn=configure_airport_runtime_for_mission,
+        create_empty_airport_runtime_fn=create_empty_airport_runtime,
     )
     context_swapped = False
 
@@ -501,18 +480,7 @@ def run() -> None:
             campaign_sentiment=campaign_sentiment,
         )
 
-    # Ensure all mixer channels are silenced before quitting the app.
-    try:
-        if audio is not None and hasattr(audio, "stop_persistent_channels"):
-            audio.stop_persistent_channels()
-        if pygame.mixer.get_init():
-            pygame.mixer.stop()
-            pygame.mixer.music.stop()
-            pygame.mixer.quit()
-    except Exception:
-        pass
-
-    pygame.quit()
+    finalize_run_shutdown(audio=audio)
 
 
 if __name__ == "__main__":

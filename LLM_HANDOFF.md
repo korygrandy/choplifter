@@ -254,6 +254,20 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced large startup/setup block with one bootstrap helper call and field assignment.
 - **Goal:** reduce `run()` bootstrap noise in `main.py` and keep startup orchestration behind a dedicated boundary.
 
+### Shutdown teardown extraction
+
+- **New module:** `src/choplifter/app/run_shutdown.py`
+  - Added `finalize_run_shutdown(...)` to centralize persistent audio stop, mixer shutdown, and final `pygame.quit()` handling.
+- **Main loop change (`main.py`):** replaced inline mixer/quit block with one shutdown helper call.
+- **Goal:** keep `run()` symmetric at the lifecycle edges by moving exit cleanup behind a dedicated boundary.
+
+### Main-loop context initialization extraction
+
+- **Updated module:** `src/choplifter/app/session.py`
+  - Added `initialize_main_loop_context(...)` to create the initial mission/helicopter pair, stats snapshot, airport runtime, and shared `MainLoopContext`.
+- **Main loop change (`main.py`):** replaced inline mission/session setup block with one context-initialization helper call.
+- **Goal:** reduce pre-loop setup noise in `run()` and keep mission-start state assembly in the existing session helper module.
+
 ### City Siege satellite SFX timing fix
 
 - **Problem:** `satellite-reallocating.ogg` could fire at City mission launch trigger time (before intro cutscene completed) on gamepad flow.
