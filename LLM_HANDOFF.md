@@ -189,6 +189,13 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced inline `for event in pygame.event.get()` dispatch block with one helper call and result assignment.
 - **Goal:** reduce main-loop event-routing complexity while preserving event ordering and runtime side effects.
 
+### Active-gamepad frame-flow extraction
+
+- **New module:** `src/choplifter/app/gamepad_frame_flow.py`
+  - Added `process_active_gamepad_frame(...)` and `ActiveGamepadFrameResult` to centralize the non-event active-gamepad per-frame block (pause toggle flow, paused/nonpaused mode routing, debug overlay toggle, and state snapshot sync).
+- **Main loop change (`main.py`):** replaced inline `if active_gamepad is not None:` gamepad mode-routing block with one helper call and result assignment.
+- **Goal:** reduce main-loop gamepad orchestration size while preserving edge-trigger behavior and mode/state side effects.
+
 ### City Siege satellite SFX timing fix
 
 - **Problem:** `satellite-reallocating.ogg` could fire at City mission launch trigger time (before intro cutscene completed) on gamepad flow.

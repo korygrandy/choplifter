@@ -77,7 +77,7 @@ from .app.main_loop_context import MainLoopContext
 from .app.airport_runtime_flags import sync_airport_runtime_flags
 from .app.bus_door_flow import apply_airport_bus_door_transitions
 from .app.driver_inputs import build_driver_inputs
-from .app.loop_state_updates import apply_nonpaused_gamepad_result
+from .app.gamepad_frame_flow import process_active_gamepad_frame
 from .app.loop_mode_adjustments import apply_post_input_mode_adjustments
 from .app.weapon_lock import chopper_weapons_locked
 from .app.airport_session import configure_airport_runtime_for_mission, create_empty_airport_runtime
@@ -105,16 +105,7 @@ from .app.frame_update import (
 )
 from .app.frame_render import render_mode_frame_from_runtime
 from .app.event_loop import (
-    handle_global_debug_keydown,
-    handle_gamepad_pause_flow,
-    handle_keydown_event,
-    handle_joybuttondown_event,
     process_pygame_events,
-    apply_paused_gameplay_shortcuts,
-    apply_paused_menu_decision,
-    handle_nonpaused_gamepad_mode_flow,
-    handle_paused_gamepad_mode_flow,
-    resolve_paused_mode_inputs,
 )
 
 
@@ -481,200 +472,61 @@ def run() -> None:
         haptics.set_active_joystick(active_js)
 
         if active_gamepad is not None:
-            gp = active_gamepad.readout
-            gp_tilt_left = gp.tilt_left
-            gp_tilt_right = gp.tilt_right
-            gp_lift_up = gp.lift_up
-            gp_lift_down = gp.lift_down
-            menu_dir = gp.menu_dir
-            menu_vert = gp.menu_vert
-
-            a_down = gp.a_down
-            b_down = gp.b_down
-            x_down = gp.x_down
-            y_down = gp.y_down
-            start_down = gp.start_down
-            rb_down = gp.rb_down
-            lb_down = gp.lb_down
-            back_down = gp.back_down
-            prev_btn_a_down = active_gamepad.prev_a_down
-            prev_btn_b_down = active_gamepad.prev_b_down
-            prev_btn_x_down = active_gamepad.prev_x_down
-            prev_btn_y_down = active_gamepad.prev_y_down
-            prev_btn_start_down = active_gamepad.prev_start_down
-            prev_btn_rb_down = active_gamepad.prev_rb_down
-            prev_btn_lb_down = active_gamepad.prev_lb_down
-            prev_btn_back_down = active_gamepad.prev_back_down
-
-            # --- DEBUG: Print all button states when any button is pressed ---
-            # (Suppressed to avoid log spam)
-            # if any([
-            #     a_down, b_down, x_down, y_down, start_down, rb_down, lb_down, back_down
-            # ]):
-            #     try:
-            #         num_buttons = active_js.get_numbuttons()
-            #         button_states = [active_js.get_button(i) for i,v in enumerate(button_states)]
-            #         logger.info(f"GAMEPAD BUTTONS: {[f'B{i}={v}' for i,v in enumerate(button_states)]}")
-            #     except Exception as e:
-            #         logger.info(f"GAMEPAD BUTTONS: error {e}")
-
-            # Debug overlay toggle (gamepad).
-            if lb_down and not prev_btn_lb_down:
-                debug = DebugSettings(show_overlay=not debug.show_overlay)
-                set_toast(f"Debug overlay: {'ON' if debug.show_overlay else 'OFF'}")
-
-
-
-            # --- GAMEPAD PAUSE BUTTON HANDLING ---
-            pause_flow = handle_gamepad_pause_flow(
+            gamepad_frame = process_active_gamepad_frame(
+                active_gamepad=active_gamepad,
+                running=running,
                 mode=mode,
-                pause_focus=runtime.pause_focus,
-                just_paused_with_start=runtime.just_paused_with_start,
-                quit_confirm=runtime.quit_confirm,
-                start_down=start_down,
-                prev_btn_start_down=prev_btn_start_down,
-                b_down=b_down,
-                prev_btn_b_down=prev_btn_b_down,
-                a_down=a_down,
-                prev_btn_a_down=prev_btn_a_down,
+                runtime=runtime,
+                selected_chopper_index=selected_chopper_index,
+                selected_mission_index=selected_mission_index,
+                selected_mission_id=selected_mission_id,
+                selected_chopper_asset=selected_chopper_asset,
+                debug=debug,
+                debug_settings=DebugSettings,
+                mission=mission,
+                helicopter=helicopter,
                 audio=audio,
                 logger=logger,
-            )
-            mode = pause_flow.mode
-            runtime.pause_focus = pause_flow.pause_focus
-            runtime.just_paused_with_start = pause_flow.just_paused_with_start
-            runtime.quit_confirm = pause_flow.quit_confirm
-            running = bool(running and pause_flow.running)
-
-
-            if mode != "paused":
-                nonpaused_result = handle_nonpaused_gamepad_mode_flow(
-                    mode=mode,
-                    menu_dir=menu_dir,
-                    prev_menu_dir=runtime.prev_menu_dir,
-                    a_down=a_down,
-                    prev_btn_a_down=prev_btn_a_down,
-                    b_down=b_down,
-                    prev_btn_b_down=prev_btn_b_down,
-                    x_down=x_down,
-                    prev_btn_x_down=prev_btn_x_down,
-                    y_down=y_down,
-                    prev_btn_y_down=prev_btn_y_down,
-                    start_down=start_down,
-                    prev_btn_start_down=prev_btn_start_down,
-                    rb_down=rb_down,
-                    prev_btn_rb_down=prev_btn_rb_down,
-                    lb_down=lb_down,
-                    prev_btn_lb_down=prev_btn_lb_down,
-                    back_down=back_down,
-                    prev_btn_back_down=prev_btn_back_down,
-                    selected_chopper_index=selected_chopper_index,
-                    selected_mission_index=selected_mission_index,
-                    selected_mission_id=selected_mission_id,
-                    selected_chopper_asset=selected_chopper_asset,
-                    chopper_choices=chopper_choices,
-                    mission_choices=mission_choices,
-                    audio=audio,
-                    set_toast=set_toast,
-                    play_satellite_reallocating=play_satellite_reallocating,
-                    reset_game=reset_game_wrapper,
-                    start_mission_intro_or_playing_fn=lambda mission_id: start_mission_intro_or_playing(
-                        cutscenes.mission,
-                        assets_dir=assets_dir,
-                        logger=logger,
-                        mission_id=mission_id,
-                    ),
-                    skip_intro=lambda: skip_intro(cutscenes.intro),
-                    skip_mission_cutscene=lambda: skip_mission_cutscene(cutscenes.mission),
-                    apply_mission_preview=apply_mission_preview_wrapper,
-                )
-                (
-                    mode,
-                    selected_chopper_index,
-                    selected_mission_index,
-                    selected_mission_id,
-                    selected_chopper_asset,
-                ) = apply_nonpaused_gamepad_result(
-                    mode=mode,
-                    selected_chopper_index=selected_chopper_index,
-                    selected_mission_index=selected_mission_index,
-                    selected_mission_id=selected_mission_id,
-                    selected_chopper_asset=selected_chopper_asset,
-                    nonpaused_result=nonpaused_result,
-                )
-
-            elif mode == "paused":
-                (
-                    runtime.pause_focus,
-                    mode,
-                    running,
-                    selected_chopper_index,
-                    selected_chopper_asset,
-                    runtime.muted,
-                    runtime.quit_confirm,
-                ) = handle_paused_gamepad_mode_flow(
-                    pause_focus=runtime.pause_focus,
-                    quit_confirm=runtime.quit_confirm,
-                    selected_chopper_index=selected_chopper_index,
-                    chopper_count=len(chopper_choices),
-                    menu_vert=menu_vert,
-                    prev_menu_vert=runtime.prev_menu_vert,
-                    menu_dir=menu_dir,
-                    prev_menu_dir=runtime.prev_menu_dir,
-                    a_down=a_down,
-                    prev_btn_a_down=prev_btn_a_down,
-                    b_down=b_down,
-                    prev_btn_b_down=prev_btn_b_down,
-                    x_down=x_down,
-                    prev_btn_x_down=prev_btn_x_down,
-                    y_down=y_down,
-                    prev_btn_y_down=prev_btn_y_down,
-                    rb_down=rb_down,
-                    prev_btn_rb_down=prev_btn_rb_down,
-                    back_down=back_down,
-                    prev_btn_back_down=prev_btn_back_down,
-                    crash_active=bool(getattr(mission, "crash_active", False)),
-                    mode=mode,
-                    running=running,
-                    selected_chopper_asset=selected_chopper_asset,
-                    muted=runtime.muted,
-                    selected_mission_id=selected_mission_id,
-                    chopper_choices=chopper_choices,
-                    helicopter=helicopter,
-                    audio=audio,
+                set_toast=set_toast,
+                play_satellite_reallocating=play_satellite_reallocating,
+                reset_game=reset_game_wrapper,
+                start_mission_intro_or_playing_fn=lambda mission_id: start_mission_intro_or_playing(
+                    cutscenes.mission,
+                    assets_dir=assets_dir,
                     logger=logger,
-                    play_satellite_reallocating=play_satellite_reallocating,
-                    reset_game=reset_game_wrapper,
-                    set_toast=set_toast,
-                    toggle_particles=toggle_particles_wrapper,
-                    toggle_flashes=toggle_flashes_wrapper,
-                    toggle_screenshake=toggle_screenshake_wrapper,
-                    apply_paused_menu_decision=apply_paused_menu_decision,
-                    apply_paused_gameplay_shortcuts=apply_paused_gameplay_shortcuts,
-                    flares=flares,
-                    meal_truck_driver_mode=runtime.meal_truck_driver_mode,
-                    bus_driver_mode=runtime.bus_driver_mode,
-                    mission=mission,
-                    spawn_projectile_from_helicopter_logged=spawn_projectile_from_helicopter_logged,
-                    try_start_flare_salvo=try_start_flare_salvo,
-                    toggle_doors_with_logging=toggle_doors_with_logging,
-                    boarded_count=boarded_count,
-                    chopper_weapons_locked=chopper_weapons_locked,
-                    Facing=Facing,
-                )
-
-            gamepad_buttons.snapshot(
-                a_down=a_down,
-                b_down=b_down,
-                x_down=x_down,
-                y_down=y_down,
-                start_down=start_down,
-                rb_down=rb_down,
-                lb_down=lb_down,
-                back_down=back_down,
+                    mission_id=mission_id,
+                ),
+                skip_intro=lambda: skip_intro(cutscenes.intro),
+                skip_mission_cutscene=lambda: skip_mission_cutscene(cutscenes.mission),
+                apply_mission_preview=apply_mission_preview_wrapper,
+                toggle_particles=toggle_particles_wrapper,
+                toggle_flashes=toggle_flashes_wrapper,
+                toggle_screenshake=toggle_screenshake_wrapper,
+                apply_paused_menu_decision=None,
+                apply_paused_gameplay_shortcuts=None,
+                spawn_projectile_from_helicopter_logged=spawn_projectile_from_helicopter_logged,
+                try_start_flare_salvo=try_start_flare_salvo,
+                toggle_doors_with_logging=toggle_doors_with_logging,
+                boarded_count=boarded_count,
+                chopper_weapons_locked=chopper_weapons_locked,
+                facing_enum=Facing,
+                chopper_choices=chopper_choices,
+                mission_choices=mission_choices,
+                flares=flares,
+                airport_runtime=airport_runtime,
+                gamepad_buttons=gamepad_buttons,
             )
-            runtime.prev_menu_dir = menu_dir
-            runtime.prev_menu_vert = menu_vert
+            running = gamepad_frame.running
+            mode = gamepad_frame.mode
+            selected_chopper_index = gamepad_frame.selected_chopper_index
+            selected_mission_index = gamepad_frame.selected_mission_index
+            selected_mission_id = gamepad_frame.selected_mission_id
+            selected_chopper_asset = gamepad_frame.selected_chopper_asset
+            debug = gamepad_frame.debug
+            gp_tilt_left = gamepad_frame.gp_tilt_left
+            gp_tilt_right = gamepad_frame.gp_tilt_right
+            gp_lift_up = gamepad_frame.gp_lift_up
+            gp_lift_down = gamepad_frame.gp_lift_down
 
         if context_swapped:
             # Wrappers can swap mission/helicopter/session objects during keyboard/gamepad handling.

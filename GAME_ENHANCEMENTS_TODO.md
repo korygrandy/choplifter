@@ -44,6 +44,7 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 - Intro/cutscene/world frame render dispatch moved out of `main.py` into `src/choplifter/app/frame_render.py` via `render_mode_frame(...)`.
 - Main-loop render call-site argument bundle was reduced by adding `render_mode_frame_from_runtime(...)` in `src/choplifter/app/frame_render.py`.
 - Main-loop pygame event routing block was moved out of `main.py` into `src/choplifter/app/event_loop.py` via `process_pygame_events(...)`.
+- Active gamepad per-frame mode-routing block was moved out of `main.py` into `src/choplifter/app/gamepad_frame_flow.py` via `process_active_gamepad_frame(...)`.
 
 ### Gameplay Validation (Highest Priority)
 
