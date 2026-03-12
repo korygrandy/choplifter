@@ -6,7 +6,11 @@ from dataclasses import dataclass
 from typing import Any, Callable, Sequence
 
 from ..controls import matches_key
+from .keydown_preflight import KeydownPreflightResult, handle_keydown_preflight
 from .keyboard_events import handle_keyboard_event
+from .pause_controls import handle_gamepad_pause_button, handle_pause_quit_confirm_gamepad
+from .pause_menu_effects import PausedMenuApplyResult, apply_paused_gameplay_shortcuts, apply_paused_menu_decision
+from .pause_menu_inputs import PausedMenuDecision, resolve_paused_mode_inputs
 from .vehicle_driver_modes import handle_airport_driver_mode_doors
 
 def handle_mission_end_keyboard_navigation(*, key: int, mode: str, mission_ended: bool, set_toast: callable) -> tuple[bool, str]:
@@ -57,8 +61,6 @@ def handle_global_debug_keydown(
                 return True
 
     return False
-
-
 
 
 def handle_paused_gamepad_mode_flow(
@@ -113,7 +115,6 @@ def handle_paused_gamepad_mode_flow(
     Facing: object,
 ) -> tuple:
     """Handle gamepad mode routing and side effects when paused."""
-    # Navigation and menu decision logic
     paused = resolve_paused_mode_inputs(
         pause_focus=pause_focus,
         quit_confirm=quit_confirm,
@@ -163,7 +164,7 @@ def handle_paused_gamepad_mode_flow(
     new_selected_chopper_asset = paused_applied.selected_chopper_asset
     new_muted = paused_applied.muted
     new_quit_confirm = paused_applied.quit_confirm
-    # Shortcuts
+
     apply_paused_gameplay_shortcuts(
         paused=paused,
         meal_truck_driver_mode=meal_truck_driver_mode,
@@ -237,19 +238,6 @@ class PauseTransitionResult:
     pause_focus: str
     entered_pause: bool
     resumed_playing: bool
-
-
-@dataclass
-class KeydownPreflightResult:
-    handled: bool
-    running: bool
-    mode: str
-    pause_focus: str
-    quit_confirm: bool
-    debug_mode: bool
-    debug_weather_index: int
-    debug_toast: str | None
-    selected_weather_mode: str | None
 
 
 @dataclass
@@ -372,101 +360,6 @@ def apply_pause_transition(
     )
 
 
-def handle_keydown_preflight(
-    *,
-    key: int,
-    mode: str,
-    mission_ended: bool,
-    pause_focus: str,
-    quit_confirm: bool,
-    debug_mode: bool,
-    debug_weather_index: int,
-    debug_weather_modes: Sequence[str],
-    set_toast: Callable[[str], None],
-    audio: object,
-    logger: object,
-) -> KeydownPreflightResult:
-    """Handle KEYDOWN cases that can short-circuit before the main keyboard handler."""
-    handled_mission_end, next_mode = handle_mission_end_keyboard_navigation(
-        key=key,
-        mode=mode,
-        mission_ended=mission_ended,
-        set_toast=set_toast,
-    )
-    if handled_mission_end:
-        pause_transition = apply_pause_transition(
-            prev_mode=mode,
-            next_mode=next_mode,
-            pause_focus=pause_focus,
-            audio=audio,
-        )
-        return KeydownPreflightResult(
-            handled=True,
-            running=True,
-            mode=next_mode,
-            pause_focus=pause_transition.pause_focus,
-            quit_confirm=quit_confirm,
-            debug_mode=debug_mode,
-            debug_weather_index=debug_weather_index,
-            debug_toast=None,
-            selected_weather_mode=None,
-        )
-
-    handled_quit_confirm, keep_running, next_quit_confirm = handle_pause_quit_confirm_keydown(
-        mode=mode,
-        quit_confirm=quit_confirm,
-        key=key,
-    )
-    if handled_quit_confirm:
-        if logger is not None:
-            if not keep_running:
-                logger.info("PAUSE MENU: Keyboard confirm quit (Enter/Space) on quit_confirm, exiting game")
-            else:
-                logger.info("PAUSE MENU: Keyboard cancel quit (Escape) on quit_confirm, returning to pause menu")
-        return KeydownPreflightResult(
-            handled=True,
-            running=keep_running,
-            mode=mode,
-            pause_focus=pause_focus,
-            quit_confirm=next_quit_confirm,
-            debug_mode=debug_mode,
-            debug_weather_index=debug_weather_index,
-            debug_toast=None,
-            selected_weather_mode=None,
-        )
-
-    handled_debug_key, next_debug_mode, next_debug_weather_index, debug_toast, selected_weather_mode = handle_debug_weather_keydown(
-        key=key,
-        debug_mode=debug_mode,
-        debug_weather_index=debug_weather_index,
-        debug_weather_modes=debug_weather_modes,
-    )
-    if handled_debug_key:
-        return KeydownPreflightResult(
-            handled=True,
-            running=True,
-            mode=mode,
-            pause_focus=pause_focus,
-            quit_confirm=quit_confirm,
-            debug_mode=next_debug_mode,
-            debug_weather_index=next_debug_weather_index,
-            debug_toast=debug_toast,
-            selected_weather_mode=selected_weather_mode,
-        )
-
-    return KeydownPreflightResult(
-        handled=False,
-        running=True,
-        mode=mode,
-        pause_focus=pause_focus,
-        quit_confirm=quit_confirm,
-        debug_mode=debug_mode,
-        debug_weather_index=debug_weather_index,
-        debug_toast=None,
-        selected_weather_mode=None,
-    )
-
-
 def handle_keydown_event(
     event: pygame.event.Event,
     *,
@@ -542,6 +435,8 @@ def handle_keydown_event(
         set_toast=set_toast,
         audio=audio,
         logger=logger,
+        handle_mission_end_keyboard_navigation_fn=handle_mission_end_keyboard_navigation,
+        apply_pause_transition_fn=apply_pause_transition,
     )
     next_mode = keydown_preflight.mode
     next_pause_focus = keydown_preflight.pause_focus
@@ -1142,78 +1037,6 @@ def route_gamepad_mode_inputs(
     )
 
 
-def handle_pause_quit_confirm_keydown(*, mode: str, quit_confirm: bool, key: int) -> tuple[bool, bool, bool]:
-    """Handle paused quit-confirm keyboard flow.
-
-    Returns: (handled, running, quit_confirm)
-    """
-    if not (mode == "paused" and quit_confirm):
-        return False, True, quit_confirm
-
-    if key in (pygame.K_RETURN, pygame.K_SPACE):
-        return True, False, quit_confirm
-
-    if key == pygame.K_ESCAPE:
-        return True, True, False
-
-    return False, True, quit_confirm
-
-
-def handle_pause_quit_confirm_gamepad(
-    *,
-    quit_confirm: bool,
-    a_down: bool,
-    prev_btn_a_down: bool,
-    b_down: bool,
-    prev_btn_b_down: bool,
-) -> tuple[bool, bool, bool]:
-    """Handle quit-confirm flow while paused using gamepad buttons.
-
-    Returns: (handled, running, quit_confirm)
-    """
-    if not quit_confirm:
-        return False, True, quit_confirm
-
-    if a_down and not prev_btn_a_down:
-        return True, False, quit_confirm
-
-    if b_down and not prev_btn_b_down:
-        return True, True, False
-
-    return False, True, quit_confirm
-
-
-def handle_gamepad_pause_button(
-    *,
-    mode: str,
-    start_down: bool,
-    prev_btn_start_down: bool,
-    b_down: bool,
-    prev_btn_b_down: bool,
-    just_paused_with_start: bool,
-) -> tuple[str, bool, bool, bool]:
-    """Handle Start/B pause toggling.
-
-    Returns: (next_mode, next_just_paused_with_start, toggled_pause_state, clear_quit_confirm)
-    """
-    start_edge = bool(start_down and not prev_btn_start_down)
-    b_edge = bool(b_down and not prev_btn_b_down)
-
-    if mode == "playing" and start_edge:
-        return "paused", True, True, False
-
-    if mode == "mission_end" and start_edge:
-        return "paused", True, True, False
-
-    if mode == "paused":
-        if (start_edge and not just_paused_with_start) or b_edge:
-            return "playing", False, True, True
-        if (not start_down) and prev_btn_start_down and just_paused_with_start:
-            return mode, False, False, False
-
-    return mode, just_paused_with_start, False, False
-
-
 def should_skip_on_gamepad_buttons(
     *,
     a_down: bool,
@@ -1307,383 +1130,3 @@ def handle_select_mission_gamepad(
         next_mode = "select_chopper"
 
     return next_mode, next_index, did_change_selection
-
-
-def handle_paused_focus_navigation(*, menu_vert: int, prev_menu_vert: int, pause_focus: str) -> tuple[str, bool]:
-    """Move pause focus when vertical menu input edges occur."""
-    if menu_vert == 0 or menu_vert == prev_menu_vert:
-        return pause_focus, False
-
-    order = ["choppers", "restart_mission", "restart_game", "mute", "quit"]
-    try:
-        idx = order.index(pause_focus)
-    except ValueError:
-        return pause_focus, False
-    step = -1 if menu_vert < 0 else 1
-    next_idx = (idx + step) % len(order)
-    return order[next_idx], True
-
-
-def handle_paused_chopper_cycle(
-    *,
-    pause_focus: str,
-    menu_dir: int,
-    prev_menu_dir: int,
-    selected_chopper_index: int,
-    chopper_count: int,
-) -> tuple[int, bool]:
-    """Cycle paused-menu chopper selection on left/right input edges."""
-    if pause_focus != "choppers":
-        return selected_chopper_index, False
-
-    if menu_dir == 0 or menu_dir == prev_menu_dir:
-        return selected_chopper_index, False
-
-    if chopper_count <= 0:
-        return 0, False
-
-    next_index = (int(selected_chopper_index) + int(menu_dir)) % int(chopper_count)
-    return next_index, (next_index != int(selected_chopper_index))
-
-
-def resolve_paused_a_action(
-    *,
-    a_down: bool,
-    prev_btn_a_down: bool,
-    pause_focus: str,
-    quit_confirm: bool,
-) -> tuple[str, bool, str]:
-    """Resolve paused-menu A button action and quit-confirm state."""
-    if not (a_down and not prev_btn_a_down):
-        return "none", quit_confirm, pause_focus
-
-    if pause_focus == "restart_mission":
-        return "restart_mission", False, pause_focus
-    if pause_focus == "restart_game":
-        return "restart_game", False, pause_focus
-    if pause_focus == "mute":
-        return "toggle_mute", False, pause_focus
-    if pause_focus == "quit":
-        if quit_confirm:
-            return "quit_exit", True, pause_focus
-        return "quit_prompt", True, pause_focus
-
-    return "none", False, pause_focus
-
-
-def resolve_paused_gameplay_shortcuts(
-    *,
-    b_down: bool,
-    prev_btn_b_down: bool,
-    a_down: bool,
-    prev_btn_a_down: bool,
-    y_down: bool,
-    prev_btn_y_down: bool,
-    back_down: bool,
-    prev_btn_back_down: bool,
-    x_down: bool,
-    prev_btn_x_down: bool,
-    crash_active: bool,
-    quit_confirm: bool,
-) -> tuple[bool, bool, bool, bool, bool, bool]:
-    """Resolve paused-mode gameplay shortcut flags.
-
-    Returns:
-    (cancel_quit_confirm, trigger_flare, toggle_doors, reverse_flip, cycle_facing, fire_weapon)
-    """
-    b_edge = bool(b_down and not prev_btn_b_down)
-    a_edge = bool(a_down and not prev_btn_a_down)
-    y_edge = bool(y_down and not prev_btn_y_down)
-    back_edge = bool(back_down and not prev_btn_back_down)
-    x_edge = bool(x_down and not prev_btn_x_down)
-
-    cancel_quit_confirm = bool(b_edge and quit_confirm)
-    trigger_flare = b_edge
-
-    if crash_active:
-        return cancel_quit_confirm, trigger_flare, False, False, False, False
-
-    return cancel_quit_confirm, trigger_flare, a_edge, y_edge, back_edge, x_edge
-
-
-def handle_debug_weather_keydown(
-    *,
-    key: int,
-    debug_mode: bool,
-    debug_weather_index: int,
-    debug_weather_modes: Sequence[str],
-) -> tuple[bool, bool, int, str | None, str | None]:
-    """Handle F3/F5/F6 debug-weather key events.
-
-    Returns: (handled, next_debug_mode, next_weather_index, toast_message, selected_weather_mode)
-    """
-    if key == pygame.K_F3:
-        next_debug_mode = not debug_mode
-        return True, next_debug_mode, debug_weather_index, f"Debug mode: {'ON' if next_debug_mode else 'OFF'} (F3)", None
-
-    if debug_mode and key == pygame.K_F5:
-        next_index = (debug_weather_index + 1) % max(1, len(debug_weather_modes))
-        selected_mode = debug_weather_modes[next_index]
-        return True, debug_mode, next_index, f"Weather: {selected_mode}", selected_mode
-
-    if debug_mode and key == pygame.K_F6:
-        next_index = (debug_weather_index - 1) % max(1, len(debug_weather_modes))
-        selected_mode = debug_weather_modes[next_index]
-        return True, debug_mode, next_index, f"Weather: {selected_mode}", selected_mode
-
-    return False, debug_mode, debug_weather_index, None, None
-
-
-@dataclass
-class PausedMenuDecision:
-    pause_focus: str
-    quit_confirm: bool
-    selected_chopper_index: int
-    play_menu_select: bool
-    action: str
-    toggle_particles: bool
-    toggle_flashes: bool
-    toggle_screenshake: bool
-    cancel_quit_confirm: bool
-    trigger_flare: bool
-    toggle_doors: bool
-    reverse_flip: bool
-    cycle_facing: bool
-    fire_weapon: bool
-
-
-@dataclass
-class PausedMenuApplyResult:
-    mode: str
-    running: bool
-    selected_chopper_index: int
-    selected_chopper_asset: str
-    muted: bool
-    quit_confirm: bool
-
-
-def resolve_paused_mode_inputs(
-    *,
-    pause_focus: str,
-    quit_confirm: bool,
-    selected_chopper_index: int,
-    chopper_count: int,
-    menu_vert: int,
-    prev_menu_vert: int,
-    menu_dir: int,
-    prev_menu_dir: int,
-    a_down: bool,
-    prev_btn_a_down: bool,
-    b_down: bool,
-    prev_btn_b_down: bool,
-    x_down: bool,
-    prev_btn_x_down: bool,
-    y_down: bool,
-    prev_btn_y_down: bool,
-    rb_down: bool,
-    prev_btn_rb_down: bool,
-    back_down: bool,
-    prev_btn_back_down: bool,
-    crash_active: bool,
-) -> PausedMenuDecision:
-    """Resolve all paused-mode gamepad decisions in one place."""
-    toggle_particles = bool(x_down and not prev_btn_x_down)
-    toggle_flashes = bool(y_down and not prev_btn_y_down)
-    toggle_screenshake = bool(rb_down and not prev_btn_rb_down)
-
-    next_pause_focus = pause_focus
-    next_quit_confirm = quit_confirm
-    next_chopper_index = int(selected_chopper_index)
-    play_menu_select = False
-
-    next_pause_focus, focus_changed = handle_paused_focus_navigation(
-        menu_vert=menu_vert,
-        prev_menu_vert=prev_menu_vert,
-        pause_focus=next_pause_focus,
-    )
-    if focus_changed:
-        play_menu_select = True
-        next_quit_confirm = False
-
-    next_chopper_index, chopper_changed = handle_paused_chopper_cycle(
-        pause_focus=next_pause_focus,
-        menu_dir=menu_dir,
-        prev_menu_dir=prev_menu_dir,
-        selected_chopper_index=next_chopper_index,
-        chopper_count=chopper_count,
-    )
-    if chopper_changed:
-        play_menu_select = True
-        next_quit_confirm = False
-
-    action, next_quit_confirm, next_pause_focus = resolve_paused_a_action(
-        a_down=a_down,
-        prev_btn_a_down=prev_btn_a_down,
-        pause_focus=next_pause_focus,
-        quit_confirm=next_quit_confirm,
-    )
-
-    (
-        cancel_quit_confirm,
-        trigger_flare,
-        toggle_doors,
-        reverse_flip,
-        cycle_facing,
-        fire_weapon,
-    ) = resolve_paused_gameplay_shortcuts(
-        b_down=b_down,
-        prev_btn_b_down=prev_btn_b_down,
-        a_down=a_down,
-        prev_btn_a_down=prev_btn_a_down,
-        y_down=y_down,
-        prev_btn_y_down=prev_btn_y_down,
-        back_down=back_down,
-        prev_btn_back_down=prev_btn_back_down,
-        x_down=x_down,
-        prev_btn_x_down=prev_btn_x_down,
-        crash_active=crash_active,
-        quit_confirm=next_quit_confirm,
-    )
-
-    return PausedMenuDecision(
-        pause_focus=next_pause_focus,
-        quit_confirm=next_quit_confirm,
-        selected_chopper_index=next_chopper_index,
-        play_menu_select=play_menu_select,
-        action=action,
-        toggle_particles=toggle_particles,
-        toggle_flashes=toggle_flashes,
-        toggle_screenshake=toggle_screenshake,
-        cancel_quit_confirm=cancel_quit_confirm,
-        trigger_flare=trigger_flare,
-        toggle_doors=toggle_doors,
-        reverse_flip=reverse_flip,
-        cycle_facing=cycle_facing,
-        fire_weapon=fire_weapon,
-    )
-
-
-def apply_paused_menu_decision(
-    *,
-    paused: PausedMenuDecision,
-    mode: str,
-    running: bool,
-    selected_chopper_index: int,
-    selected_chopper_asset: str,
-    muted: bool,
-    selected_mission_id: str,
-    chopper_choices: Sequence[tuple[str, str]],
-    helicopter: object,
-    audio: object,
-    logger: object,
-    play_satellite_reallocating: Callable[[], None],
-    reset_game: Callable[[], None],
-    set_toast: Callable[[str], None],
-    toggle_particles: Callable[[], None],
-    toggle_flashes: Callable[[], None],
-    toggle_screenshake: Callable[[], None],
-) -> PausedMenuApplyResult:
-    next_mode = mode
-    next_running = running
-    next_selected_chopper_index = selected_chopper_index
-    next_selected_chopper_asset = selected_chopper_asset
-    next_muted = muted
-    next_quit_confirm = paused.quit_confirm
-
-    if paused.selected_chopper_index != selected_chopper_index:
-        next_selected_chopper_index = paused.selected_chopper_index
-        next_selected_chopper_asset = chopper_choices[next_selected_chopper_index][0]
-        helicopter.skin_asset = next_selected_chopper_asset
-
-    if paused.play_menu_select:
-        audio.play_menu_select()
-
-    if paused.toggle_particles:
-        toggle_particles()
-    if paused.toggle_flashes:
-        toggle_flashes()
-    if paused.toggle_screenshake:
-        toggle_screenshake()
-
-    if paused.action != "none":
-        if paused.action == "restart_mission":
-            logger.info(f"PAUSE MENU: A pressed on restart_mission")
-            if selected_mission_id == "city":
-                play_satellite_reallocating()
-            reset_game()
-            next_mode = "playing"
-            audio.set_pause_menu_active(False)
-            audio.play_pause_toggle()
-            next_quit_confirm = False
-        elif paused.action == "restart_game":
-            logger.info(f"PAUSE MENU: A pressed on restart_game")
-            next_mode = "select_mission"
-            set_toast("Restart Game")
-            audio.set_pause_menu_active(False)
-            audio.play_pause_toggle()
-            next_quit_confirm = False
-        elif paused.action == "toggle_mute":
-            logger.info(f"PAUSE MENU: A pressed on mute (muted={not next_muted})")
-            next_muted = not next_muted
-            audio.set_muted(next_muted)
-            next_quit_confirm = False
-        elif paused.action == "quit_prompt":
-            logger.info(f"PAUSE MENU: A pressed on quit, showing confirmation dialog")
-        elif paused.action == "quit_exit":
-            logger.info(f"PAUSE MENU: A pressed on quit_confirm, exiting game (gamepad A)")
-            next_running = False
-
-    if paused.cancel_quit_confirm:
-        logger.info(f"PAUSE MENU: B pressed on quit_confirm, canceling quit and returning to pause menu")
-        next_quit_confirm = False
-
-    return PausedMenuApplyResult(
-        mode=next_mode,
-        running=next_running,
-        selected_chopper_index=next_selected_chopper_index,
-        selected_chopper_asset=next_selected_chopper_asset,
-        muted=next_muted,
-        quit_confirm=next_quit_confirm,
-    )
-
-
-def apply_paused_gameplay_shortcuts(
-    *,
-    paused: PausedMenuDecision,
-    meal_truck_driver_mode: bool,
-    bus_driver_mode: bool,
-    mission: object,
-    helicopter: object,
-    audio: object,
-    logger: object,
-    flares: object,
-    try_start_flare_salvo: Callable[..., None],
-    toggle_doors_with_logging: Callable[..., None],
-    boarded_count: Callable[[object], int],
-    set_toast: Callable[[str], None],
-    spawn_projectile_from_helicopter_logged: Callable[[object, object, object], None],
-    chopper_weapons_locked: Callable[..., bool],
-    Facing: object,
-) -> None:
-    engineer_remote_control_active = bool(getattr(mission, "engineer_remote_control_active", False))
-    weapons_locked = chopper_weapons_locked(
-        meal_truck_driver_mode=bool(meal_truck_driver_mode),
-        bus_driver_mode=bool(bus_driver_mode),
-        engineer_remote_control_active=engineer_remote_control_active,
-    )
-
-    if paused.trigger_flare and not weapons_locked:
-        try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
-
-    if paused.toggle_doors:
-        toggle_doors_with_logging(helicopter, mission, audio, logger, boarded_count, set_toast)
-    if paused.reverse_flip:
-        helicopter.reverse_flip()
-    if paused.cycle_facing:
-        helicopter.cycle_facing()
-    if paused.fire_weapon and not weapons_locked and not bool(getattr(mission, "crash_active", False)):
-        spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
-        if helicopter.facing is Facing.FORWARD:
-            audio.play_bomb()
-        else:
-            audio.play_shoot()
