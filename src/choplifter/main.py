@@ -95,6 +95,7 @@ from .app.game_update import (
 from .app.mode_update import apply_mode_transition_effects, resolve_post_frame_mode_transitions
 from .app.frame_update import (
     advance_weather_runtime,
+    prepare_frame_render_state,
     apply_vip_overlay_update,
     apply_weather_runtime_update,
     apply_camera_update,
@@ -882,50 +883,33 @@ def run() -> None:
             set_toast=set_toast,
         )
 
-        update_weather_effects(
+        frame_prep = prepare_frame_render_state(
             particles_enabled=particles_enabled,
             mode=mode,
             frame_dt=frame_dt,
-            weather_mode=runtime.weather_mode,
+            runtime=runtime,
+            selected_mission_id=selected_mission_id,
+            mission=mission,
+            helicopter=helicopter,
+            heli_settings=heli_settings,
+            airport_runtime=airport_runtime,
+            screenshake=screenshake,
+            screenshake_enabled=screenshake_enabled,
+            audio=audio,
             sky_smoke=sky_smoke,
             rain=rain,
             fog=fog,
             dust=dust,
             storm_clouds=storm_clouds,
             lightning=lightning,
-            helicopter=helicopter,
-            heli_settings=heli_settings,
             screen=screen,
             window=window,
+            update_screenshake_target_fn=update_screenshake_target,
         )
-
-        # Side-scrolling camera (world x -> screen x).
-        camera_update = update_camera_tracking(
-            selected_mission_id=selected_mission_id,
-            helicopter_x=float(helicopter.pos.x),
-            meal_truck_driver_mode=bool(runtime.meal_truck_driver_mode),
-            bus_driver_mode=bool(runtime.bus_driver_mode),
-            airport_meal_truck_state=airport_runtime.meal_truck_state,
-            airport_bus_state=airport_runtime.bus_state,
-            camera_x_smoothed=runtime.camera_x_smoothed,
-            frame_dt=frame_dt,
-            world_width=float(mission.world_width),
-            view_width=float(screen.get_width()),
-        )
-        camera_x = apply_camera_update(runtime=runtime, camera_update=camera_update)
-
-        # Update audio (ducking is applied via bus volumes).
-        audio.set_cinematic_ducked(mode == "cutscene", factor=0.5)
-        audio.update(frame_dt)
-
-        # Screenshake offsets (render-time only; affects the whole frame).
-        target, shake_x, shake_y = update_screenshake_target(
-            state=screenshake,
-            frame_dt=frame_dt,
-            enabled=screenshake_enabled,
-            mode=mode,
-            screen=screen,
-        )
+        camera_x = frame_prep.camera_x
+        target = frame_prep.target
+        shake_x = frame_prep.shake_x
+        shake_y = frame_prep.shake_y
 
 
         # Render.

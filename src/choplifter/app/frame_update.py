@@ -183,6 +183,14 @@ class CameraUpdateResult:
     camera_x_smoothed: float | None
 
 
+@dataclass
+class FrameRenderPreparationResult:
+    camera_x: float
+    target: object
+    shake_x: int
+    shake_y: int
+
+
 def update_camera_tracking(
     *,
     selected_mission_id: str,
@@ -238,3 +246,80 @@ def apply_camera_update(*, runtime: object, camera_update: CameraUpdateResult) -
     """Persist camera smoothing state and return current camera x for rendering."""
     runtime.camera_x_smoothed = camera_update.camera_x_smoothed
     return float(camera_update.camera_x)
+
+
+def prepare_frame_render_state(
+    *,
+    particles_enabled: bool,
+    mode: str,
+    frame_dt: float,
+    runtime: object,
+    selected_mission_id: str,
+    mission: object,
+    helicopter: object,
+    heli_settings: object,
+    airport_runtime: object,
+    screenshake: object,
+    screenshake_enabled: bool,
+    audio: object,
+    sky_smoke: object,
+    rain: object,
+    fog: object,
+    dust: object,
+    storm_clouds: object,
+    lightning: object,
+    screen: object,
+    window: object,
+    update_screenshake_target_fn: object,
+) -> FrameRenderPreparationResult:
+    """Prepare camera/audio/screenshake state used by frame rendering."""
+    update_weather_effects(
+        particles_enabled=particles_enabled,
+        mode=mode,
+        frame_dt=frame_dt,
+        weather_mode=runtime.weather_mode,
+        sky_smoke=sky_smoke,
+        rain=rain,
+        fog=fog,
+        dust=dust,
+        storm_clouds=storm_clouds,
+        lightning=lightning,
+        helicopter=helicopter,
+        heli_settings=heli_settings,
+        screen=screen,
+        window=window,
+    )
+
+    camera_update = update_camera_tracking(
+        selected_mission_id=selected_mission_id,
+        helicopter_x=float(helicopter.pos.x),
+        meal_truck_driver_mode=bool(runtime.meal_truck_driver_mode),
+        bus_driver_mode=bool(runtime.bus_driver_mode),
+        airport_meal_truck_state=airport_runtime.meal_truck_state,
+        airport_bus_state=airport_runtime.bus_state,
+        camera_x_smoothed=runtime.camera_x_smoothed,
+        frame_dt=frame_dt,
+        world_width=float(mission.world_width),
+        view_width=float(screen.get_width()),
+    )
+    camera_x = apply_camera_update(runtime=runtime, camera_update=camera_update)
+
+    # Update audio (ducking is applied via bus volumes).
+    audio.set_cinematic_ducked(mode == "cutscene", factor=0.5)
+    audio.update(frame_dt)
+
+    # Screenshake offsets (render-time only; affects the whole frame).
+    target, shake_x, shake_y = update_screenshake_target_fn(
+        state=screenshake,
+        frame_dt=frame_dt,
+        enabled=screenshake_enabled,
+        mode=mode,
+        screen=screen,
+    )
+
+    return FrameRenderPreparationResult(
+        camera_x=float(camera_x),
+        target=target,
+        shake_x=int(shake_x),
+        shake_y=int(shake_y),
+    )

@@ -154,6 +154,19 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced inline `gamepad_buttons.snapshot(...)` + `runtime.prev_menu_*` assignment block with helper call.
 - **Goal:** reduce repetitive edge-trigger state bookkeeping in `main.py` and keep gamepad state-sync behavior consistent.
 
+### Frame render preparation extraction
+
+- **Module update:** `src/choplifter/app/frame_update.py`
+  - Added `prepare_frame_render_state(...)` to centralize per-frame weather effects, camera update/apply, cinematic audio update, and screenshake render-target resolution.
+- **Main loop change (`main.py`):** replaced inline block for weather/camera/audio/screenshake preparation with one helper call.
+- **Goal:** keep late-frame orchestration in `main.py` compact while preserving behavior through a single preparation boundary.
+
+### City Siege satellite SFX timing fix
+
+- **Problem:** `satellite-reallocating.ogg` could fire at City mission launch trigger time (before intro cutscene completed) on gamepad flow.
+- **Fix:** deferred playback until gameplay mode begins after mission intro cutscene (or skip) using post-input mode adjustment logic and runtime pending flag.
+- **Touched modules:** `main.py`, `app/nonpaused_gamepad_mode_flow.py`, `app/runtime_state.py`, `app/loop_mode_adjustments.py`.
+
 ### Validation status (session 3)
 
 - Import smoke: PASS (`from src.choplifter.main import run`)
@@ -446,7 +459,6 @@ Known placeholder indicator to replace:
 - Prefer small extraction steps with immediate diagnostics and smoke tests.
 - Avoid broad behavior changes during structural refactors.
 - If changing controls or mode flow, update `README.md` and this file in the same change.
-- Airport mission modules use wildcard imports (`from .module import *`) - may need cleanup later.
 
 ## Long-Term Strategy: Keep `main.py` Modular and Manageable
 

@@ -38,6 +38,8 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 - Weather runtime assignment/toast application moved out of `main.py` into `src/choplifter/app/frame_update.py` via `apply_weather_runtime_update(...)`.
 - Mode-transition side effects and camera result application moved out of `main.py` into helper functions in `src/choplifter/app/mode_update.py` and `src/choplifter/app/frame_update.py`.
 - Gamepad snapshot and previous menu-axis sync moved out of `main.py` into `src/choplifter/app/gamepad_state_sync.py`.
+- Post-input mode adjustment logic (cutscene fallback + deferred city satellite SFX trigger) moved out of `main.py` into `src/choplifter/app/loop_mode_adjustments.py`.
+- VIP overlay state assignment and frame render preparation blocks moved out of `main.py` into helpers in `src/choplifter/app/frame_update.py`.
 
 ### Gameplay Validation (Highest Priority)
 
@@ -93,6 +95,9 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 
 - [x] `P2` Bus door visual polish: fade transition between `city-bus.png` and `city-bus-doors-open.png` on open/close.
   - Add blend timing for opening and closing states (for example 0.2s-0.3s each).
+
+- [x] `P2` City Siege mission-start satellite SFX timing: `satellite-reallocating.ogg` now triggers after mission intro cutscene completion (or skip), not at cutscene start.
+  - Applied in gamepad mission confirmation flow through deferred mode-based playback.
 
 ### UX and Messaging
 
