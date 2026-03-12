@@ -147,6 +147,13 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced inline mode-transition side-effect block and camera result assignment block with helper calls.
 - **Goal:** keep `main.py` orchestration focused while consolidating side-effect application logic in module boundaries.
 
+### Gamepad state sync extraction
+
+- **New module:** `src/choplifter/app/gamepad_state_sync.py`
+  - Added `sync_gamepad_state(...)` to centralize button snapshot persistence and previous menu-axis sync.
+- **Main loop change (`main.py`):** replaced inline `gamepad_buttons.snapshot(...)` + `runtime.prev_menu_*` assignment block with helper call.
+- **Goal:** reduce repetitive edge-trigger state bookkeeping in `main.py` and keep gamepad state-sync behavior consistent.
+
 ### Validation status (session 3)
 
 - Import smoke: PASS (`from src.choplifter.main import run`)
