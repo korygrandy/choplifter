@@ -95,6 +95,7 @@ from .app.game_update import (
 from .app.mode_update import apply_mode_transition_effects, resolve_post_frame_mode_transitions
 from .app.frame_update import (
     advance_weather_runtime,
+    apply_vip_overlay_update,
     apply_weather_runtime_update,
     apply_camera_update,
     update_camera_tracking,
@@ -365,8 +366,7 @@ def run() -> None:
             vip_kia_overlay_timer=runtime.vip_kia_overlay_timer,
             vip_kia_overlay_shown=runtime.vip_kia_overlay_shown,
         )
-        runtime.vip_kia_overlay_timer = vip_overlay_state.vip_kia_overlay_timer
-        runtime.vip_kia_overlay_shown = vip_overlay_state.vip_kia_overlay_shown
+        apply_vip_overlay_update(runtime=runtime, vip_overlay_state=vip_overlay_state)
 
         weather_runtime = advance_weather_runtime(
             debug_mode=runtime.debug_mode,

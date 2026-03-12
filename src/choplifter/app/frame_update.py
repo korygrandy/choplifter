@@ -94,6 +94,12 @@ def update_vip_overlay_state(
     )
 
 
+def apply_vip_overlay_update(*, runtime: object, vip_overlay_state: VipOverlayStateResult) -> None:
+    """Apply VIP overlay state update results to runtime."""
+    runtime.vip_kia_overlay_timer = vip_overlay_state.vip_kia_overlay_timer
+    runtime.vip_kia_overlay_shown = vip_overlay_state.vip_kia_overlay_shown
+
+
 def apply_weather_runtime_update(
     *,
     runtime: object,
