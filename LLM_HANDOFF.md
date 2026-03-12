@@ -175,6 +175,20 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced inline `if intro / elif cutscene / else world+postfx` render branch with one helper call that returns updated overlay timers.
 - **Goal:** keep `main.py` focused on loop orchestration and reduce conditional render branching in the main loop body.
 
+### Runtime-aware frame render wrapper extraction
+
+- **Module update:** `src/choplifter/app/frame_render.py`
+  - Added `render_mode_frame_from_runtime(...)` to adapt grouped runtime/menu settings into `render_mode_frame(...)`.
+- **Main loop change (`main.py`):** switched the large `render_mode_frame(...)` kwarg bundle to a shorter `render_mode_frame_from_runtime(...)` call.
+- **Goal:** reduce main-loop render call-site parameter noise while preserving rendering behavior and timer threading.
+
+### Pygame event-dispatch extraction
+
+- **Module update:** `src/choplifter/app/event_loop.py`
+  - Added `process_pygame_events(...)` and `PygameEventDispatchResult` to centralize per-frame pygame event routing (global debug keys, QUIT/device events, KEYDOWN flow, JOYBUTTONDOWN flow).
+- **Main loop change (`main.py`):** replaced inline `for event in pygame.event.get()` dispatch block with one helper call and result assignment.
+- **Goal:** reduce main-loop event-routing complexity while preserving event ordering and runtime side effects.
+
 ### City Siege satellite SFX timing fix
 
 - **Problem:** `satellite-reallocating.ogg` could fire at City mission launch trigger time (before intro cutscene completed) on gamepad flow.

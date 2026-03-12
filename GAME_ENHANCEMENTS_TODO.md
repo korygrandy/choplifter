@@ -42,6 +42,8 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 - VIP overlay state assignment and frame render preparation blocks moved out of `main.py` into helpers in `src/choplifter/app/frame_update.py`.
 - Shared world render branch orchestration moved out of `main.py` into `src/choplifter/app/frame_render.py` via `render_world_branch(...)` while preserving draw order.
 - Intro/cutscene/world frame render dispatch moved out of `main.py` into `src/choplifter/app/frame_render.py` via `render_mode_frame(...)`.
+- Main-loop render call-site argument bundle was reduced by adding `render_mode_frame_from_runtime(...)` in `src/choplifter/app/frame_render.py`.
+- Main-loop pygame event routing block was moved out of `main.py` into `src/choplifter/app/event_loop.py` via `process_pygame_events(...)`.
 
 ### Gameplay Validation (Highest Priority)
 
