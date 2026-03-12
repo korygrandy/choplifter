@@ -4,10 +4,33 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import math
+import os
 import random
 
 import pygame
 from .app.escort_risk import airport_escort_damage_multiplier
+
+# Sprite cache — loaded once on first draw call, never reloaded.
+_RAIDER_SPRITE: pygame.Surface | None = None
+_RAIDER_SPRITE_TRIED: bool = False
+_RAIDER_RENDER_W = 36
+_RAIDER_RENDER_H = 24
+
+
+def _get_raider_sprite() -> "pygame.Surface | None":
+	global _RAIDER_SPRITE, _RAIDER_SPRITE_TRIED
+	if _RAIDER_SPRITE_TRIED:
+		return _RAIDER_SPRITE
+	_RAIDER_SPRITE_TRIED = True
+	try:
+		asset_dir = os.path.join(os.path.dirname(__file__), "assets")
+		path = os.path.join(asset_dir, "nazir-robot-tank.png")
+		raw = pygame.image.load(path).convert_alpha()
+		scaled = pygame.transform.scale(raw, (_RAIDER_RENDER_W, _RAIDER_RENDER_H))
+		_RAIDER_SPRITE = scaled
+	except Exception:
+		_RAIDER_SPRITE = None
+	return _RAIDER_SPRITE
 
 
 @dataclass
@@ -68,7 +91,7 @@ def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_sta
 			phase = "approach"
 			weave_phase = random.uniform(0.0, math.pi * 2.0)
 		else:
-			y = ground_y - random.uniform(22.0, 36.0)
+			y = ground_y  # Bottom-aligned to ground, same as city bus
 			vx = -random.uniform(55.0, 80.0)
 			ttl_s = 24.0
 			vy = 0.0
@@ -160,14 +183,22 @@ def draw_airport_enemies(target: pygame.Surface, enemy_state, *, camera_x: float
 				1,
 			)
 		else:
-			pygame.draw.polygon(
-				target,
-				(200, 40, 40),
-				[(x, y), (x - 10, y + 20), (x + 10, y + 20)],
-			)
-			pygame.draw.polygon(
-				target,
-				(40, 10, 10),
-				[(x, y), (x - 10, y + 20), (x + 10, y + 20)],
-				1,
-			)
+			sprite = _get_raider_sprite()
+			if sprite is not None:
+				# Draw centred horizontally, bottom-aligned to ground position.
+				draw_x = x - _RAIDER_RENDER_W // 2
+				draw_y = y - _RAIDER_RENDER_H
+				target.blit(sprite, (draw_x, draw_y))
+			else:
+				# Procedural triangle fallback when asset is unavailable.
+				pygame.draw.polygon(
+					target,
+					(200, 40, 40),
+					[(x, y), (x - 10, y + 20), (x + 10, y + 20)],
+				)
+				pygame.draw.polygon(
+					target,
+					(40, 10, 10),
+					[(x, y), (x - 10, y + 20), (x + 10, y + 20)],
+					1,
+				)

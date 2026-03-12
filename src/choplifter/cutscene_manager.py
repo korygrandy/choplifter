@@ -11,7 +11,7 @@ from .hostage_logic import get_active_airport_terminal_label
 
 @dataclass
 class AirportCutsceneState:
-	meal_truck_extend_triggered: bool = False
+	last_cued_terminal_index: int = -1
 	cue_timer_s: float = 0.0
 	cue_text: str = ""
 
@@ -30,14 +30,15 @@ def update_airport_cutscene_state(cutscene_state, dt: float, *, meal_truck_state
 	tech_operating = bool(tech_state is not None and getattr(tech_state, "is_deployed", False))
 	hostage_state_name = str(getattr(hostage_state, "state", "waiting")) if hostage_state is not None else "waiting"
 
+	current_terminal = int(getattr(hostage_state, "active_terminal_index", 0)) if hostage_state is not None else 0
 	if (
-		not cutscene_state.meal_truck_extend_triggered
+		cutscene_state.last_cued_terminal_index != current_terminal
 		and truck_extended
 		and tech_operating
 		and hostage_state_name in ("waiting", "truck_loading")
 	):
 		terminal_label = get_active_airport_terminal_label(hostage_state) if hostage_state is not None else "elevated"
-		cutscene_state.meal_truck_extend_triggered = True
+		cutscene_state.last_cued_terminal_index = current_terminal
 		cutscene_state.cue_timer_s = 4.0
 		cutscene_state.cue_text = f"{terminal_label.title()} terminal reached. Extraction window open."
 

@@ -1,6 +1,6 @@
 # LLM Handoff (Current Engineering State)
 
-Last updated: 2026-03-11
+Last updated: 2026-03-11 (session 2)
 
 This file is the canonical engineering handoff for future AI/dev sessions.
 
@@ -89,6 +89,57 @@ Current script behavior (`scripts/build_windows_exe.ps1`):
 2. Add optional "lite media" packaging mode if distribution size needs major further reduction.
 3. Convert heavy WAV effects to OGG where acceptable.
 4. Keep the explicit asset-manifest staging approach and update docs when include rules change.
+
+## Recent Changes (Session 2 — 2026-03-11)
+
+All items below were implemented, validated with import-ok, and tests pass.
+
+### BARAK MRAD — deploy SFX on all state paths
+
+- **Problem:** The fail-safe state-transition path entered `DEPLOY` without calling the deploy sound effect.
+- **Fix:** Added `_enter_barak_deploy(mission, e, *, logger, reason, fx_strength)` helper in `enemy_update.py`. All three DEPLOY entry points (arrived, already_in_position, fail_safe) now route through it.
+- **Test:** `tests/test_barak_mrad_state_cycle.py` — `test_fail_safe_invalid_state_enters_deploy_and_plays_deploy_sfx` added; 4/4 pass.
+
+### Airport terminal window flicker — warm amber
+
+- **Problem:** Old pale-blue glow was barely visible and non-thematic.
+- **Fix (in `render/world.py`):**
+  - Door-glass windows: warm amber double-layer (`breath * 0.6 + stutter * 0.4`) when occupied; dim `(52,62,76)` when empty.
+  - New porthole row (2–4 portholes) per elevated terminal: independent per-porthole flicker, amber when occupied, `(44,52,66)` when empty.
+
+### Fuselage wreck visual under left elevated compound
+
+- **New function `_draw_fuselage_wreck(screen, r, t)` in `render/world.py`:**
+  - Draws a wrecked plane underlay behind the leftmost elevated terminal when ≥2 elevated terminals are present.
+  - Includes: fuselage body, tail fin, nose cone, broken wing stub, animated engine fire.
+  - Flag: `is_fuselage_terminal` (left-most elevated compound when `len(elevated) >= 2`).
+
+### Cutscene re-trigger per terminal
+
+- **Problem:** Old `meal_truck_extend_triggered: bool` one-shot would only fire the airport cutscene cue once per mission.
+- **Fix (`cutscene_manager.py`):** Replaced with `last_cued_terminal_index: int = -1`. Cue fires whenever `active_terminal_index != last_cued_terminal_index` and truck is extended + tech deployed, enabling re-fire on each new compound (fuselage → jetway).
+- **Tests:** `tests/test_airport_terminal_messaging.py` — 4/4 pass (includes `test_cue_fires_for_fuselage_then_re_fires_for_jetway`).
+
+### Passengers — white everywhere
+
+- `hostage_logic.py` `_draw_stick_figure_passenger`: body `(250,250,250)`, head `(255,255,255)`.
+- Elevated door-burst boarding silhouettes in `render/world.py`: pure white.
+- Truck passenger count text, badge border, and fallback circle indicator: pure white.
+
+### Raider sprite swap
+
+- **Asset:** `src/choplifter/assets/nazir-robot-tank.png` (60×40 native, rendered 36×24).
+- **Implementation (`enemy_spawns.py`):**
+  - Module-level `_RAIDER_SPRITE / _RAIDER_SPRITE_TRIED / _RAIDER_RENDER_W / _RAIDER_RENDER_H` globals.
+  - `_get_raider_sprite()` lazy-loads, scales to 36×24, pre-flips horizontally (tank faces left), caches.
+  - Draw branch: sprite blit bottom-aligned centered; red triangle polygon is silent fallback.
+
+### Sprite preloader — zero disk I/O after mission start
+
+- **New module `src/choplifter/sprite_preloader.py`** with `preload_mission_sprites(mission_id, chopper_asset)`.
+- Eagerly warms every lazy sprite cache (enemy images, chopper skin, HUD icons, life strip icons, bus sprites, meal-truck sprites, raider sprite) at mission-start time.
+- Called at the end of `reset_game_wrapper()` in `main.py` — the single choke-point for initial start, restart, and post-pause restart.
+- Asset scope: common assets always loaded; airport-only assets gated on `mission_id == "airport"`.
 
 ### Mission Select Pre-check UI (Planned)
 
@@ -207,10 +258,14 @@ Known placeholder indicator to replace:
 ### Airport Modules With Active Ownership
 
 - `src/choplifter/main.py`: airport setup/reset distribution logic, mission-end aggregation.
-- `src/choplifter/hostage_logic.py`: elevated-hostage flow, transfer state, airport passenger rendering.
+- `src/choplifter/hostage_logic.py`: elevated-hostage flow, transfer state, airport passenger rendering (white passengers + count UI).
 - `src/choplifter/mission_tech.py`: tech lifecycle and transfer completion gating.
 - `src/choplifter/objective_manager.py`: objective phase labels/status progression.
-- `src/choplifter/render/world.py`: airport scene, terminals, tower, on-foot passenger rendering.
+- `src/choplifter/render/world.py`: airport scene, terminals, tower, on-foot passenger rendering; fuselage wreck; amber porthole/window flicker.
+- `src/choplifter/enemy_update.py`: BARAK MRAD state machine; `_enter_barak_deploy()` centralizes all DEPLOY entries.
+- `src/choplifter/enemy_spawns.py`: airport ground/air enemy waves; raider sprite loader and draw path.
+- `src/choplifter/cutscene_manager.py`: airport cutscene cue trigger; `last_cued_terminal_index` re-trigger logic.
+- `src/choplifter/sprite_preloader.py`: eager sprite cache warmer; called once per mission-start via `reset_game_wrapper`.
 
 ### Verification Commands Used
 

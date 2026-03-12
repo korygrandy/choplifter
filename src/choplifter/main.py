@@ -85,6 +85,7 @@ from .app.bus_door_flow import apply_airport_bus_door_transitions
 from .app.weapon_lock import chopper_weapons_locked
 from .app.airport_session import initialize_airport_runtime
 from .app.objective_overlay import get_mission_objective_overlay_duration
+from .sprite_preloader import preload_mission_sprites
 from .app.game_update import (
     build_helicopter_input,
     run_playing_fixed_step,
@@ -365,6 +366,8 @@ def run() -> None:
             airport_cutscene_state = airport_runtime.cutscene_state
             airport_meal_truck_state = airport_runtime.meal_truck_state
             airport_raised_bunker_x = float(airport_runtime.raised_bunker_x)
+
+        preload_mission_sprites(selected_mission_id, selected_chopper_asset)
 
     def toggle_particles_wrapper() -> None:
         nonlocal particles_enabled

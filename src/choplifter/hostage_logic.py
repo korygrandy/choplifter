@@ -281,9 +281,9 @@ def _draw_stick_figure_passenger(target: pygame.Surface, x: int, y: int, passeng
 	# Pixel size for retro look
 	pixel = 2
 	
-	# Beige/tan color for civilians
-	body_color = (245, 235, 210)  # Beige
-	head_color = (210, 180, 140)  # Tan
+	# Bright white passenger palette for better readability.
+	body_color = (250, 250, 250)
+	head_color = (255, 255, 255)
 	outline_color = (25, 25, 25)  # Dark outline
 	
 	# Determine if this passenger waves (based on index - about 30% wave)
@@ -412,7 +412,7 @@ def _draw_meal_truck_passengers(target: pygame.Surface, hostage_state, meal_truc
 		pygame.font.init()
 		font = pygame.font.SysFont("consolas", 16, bold=True)
 		text = f"x{passenger_count}"
-		surf = font.render(text, True, (255, 235, 205))  # Light beige/cream color
+		surf = font.render(text, True, (255, 255, 255))
 		
 		# Center the text horizontally on the truck
 		text_rect = surf.get_rect(center=(truck_x, text_y))
@@ -420,13 +420,13 @@ def _draw_meal_truck_passengers(target: pygame.Surface, hostage_state, meal_truc
 		# Draw dark background for readability
 		bg_rect = text_rect.inflate(6, 4)
 		pygame.draw.rect(target, (20, 20, 30, 180), bg_rect, border_radius=3)
-		pygame.draw.rect(target, (245, 235, 210), bg_rect, 1, border_radius=3)
+		pygame.draw.rect(target, (255, 255, 255), bg_rect, 1, border_radius=3)
 		
 		# Draw the text
 		target.blit(surf, text_rect)
 	except Exception:
 		# Fallback: simple circle indicator if font fails
-		pygame.draw.circle(target, (255, 235, 205), (truck_x, text_y), 6)
+		pygame.draw.circle(target, (255, 255, 255), (truck_x, text_y), 6)
 		pygame.draw.circle(target, (25, 25, 25), (truck_x, text_y), 6, 1)
 
 

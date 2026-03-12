@@ -286,6 +286,41 @@ def _draw_base(screen: pygame.Surface, mission: MissionState, *, camera_x: float
     pygame.draw.line(screen, frame_color, (pole_x + 1, base_y), (pole_x + 1 + flag_len, base_y + 1), 1)
 
 
+def _draw_fuselage_wreck(screen: pygame.Surface, r: pygame.Rect, t: float) -> None:
+    """Wrecked plane fuselage visual beneath the left (fuselage) elevated airport terminal."""
+    bx = r.x - 38
+    by = r.bottom + 2
+    bw = r.width + 74
+    bh = 22
+    body = pygame.Rect(bx, by, bw, bh)
+    pygame.draw.rect(screen, (84, 78, 70), body, border_radius=5)
+    pygame.draw.line(screen, (104, 96, 88), (bx + 14, by + 4), (bx + bw - 22, by + 4), 2)
+    pygame.draw.rect(screen, (38, 34, 30), body, 2, border_radius=5)
+    # Tail fin (vertical stabiliser at left end).
+    tf = ((bx + 8, by), (bx + 4, by - 28), (bx + 26, by))
+    pygame.draw.polygon(screen, (72, 66, 58), tf)
+    pygame.draw.polygon(screen, (36, 32, 28), tf, 1)
+    # Nose cone (tapered right end).
+    nc_mid_y = by + bh // 2
+    nc = ((bx + bw - 4, by + 3), (bx + bw + 28, nc_mid_y), (bx + bw - 4, by + bh - 3))
+    pygame.draw.polygon(screen, (78, 72, 64), nc)
+    pygame.draw.polygon(screen, (38, 34, 30), nc, 1)
+    # Broken lower wing stub angling down-left from body.
+    wx = bx + bw // 3
+    wy = by + bh - 5
+    wing = ((wx, wy), (wx - 32, wy + 12), (wx - 20, wy + 12), (wx + 6, wy))
+    pygame.draw.polygon(screen, (78, 70, 62), wing)
+    pygame.draw.polygon(screen, (38, 34, 30), wing, 1)
+    # Engine fire (animated).
+    fx = bx + int(bw * 0.58)
+    fy = by - 1
+    flicker = (math.sin(t * 11.5 + 1.3) + 1.0) * 0.5
+    fh = int(13 + flicker * 9)
+    fw = int(8 + flicker * 5)
+    pygame.draw.polygon(screen, (228, 76, 18), [(fx, fy), (fx + fw, fy - fh // 2), (fx, fy - fh), (fx - 4, fy - fh // 2)])
+    pygame.draw.polygon(screen, (255, 190, 42), [(fx + 1, fy - 2), (fx + fw // 2 + 1, fy - fh // 2), (fx + 1, fy - fh + 4)])
+
+
 def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
     mission_id = str(getattr(mission, "mission_id", "")).lower()
     is_airport_special = mission_id in ("airport", "airport_special_ops")
@@ -333,6 +368,12 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
             boarding_active = is_loading_terminal and airport_hostage_state_name == "truck_loading"
             passengers_inside = terminal_remaining_count > 0
             is_elevated_terminal = abs(float(c.pos.y) - elevated_y) <= 1.0
+            # Fuselage terminal: leftmost elevated compound (wrecked-plane visual).
+            is_fuselage_terminal = (
+                is_elevated_terminal
+                and len(terminal_pickup_xs) >= 2
+                and compound_center_x <= min(float(tx) for tx in terminal_pickup_xs) + 55.0
+            )
 
             # Elevated jetway set piece: smoke plume behind roof + intense side flames.
             if is_elevated_terminal:
@@ -382,6 +423,10 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                 pygame.draw.polygon(screen, (255, 202, 62), inner)
                 pygame.draw.polygon(screen, (255, 238, 140), ember)
 
+                # Fuselage wreck underlay drawn behind the elevated platform.
+                if is_fuselage_terminal:
+                    _draw_fuselage_wreck(screen, r, t)
+
             # Light tan jetway body.
             body_color = (212, 198, 172) if not c.is_open else (170, 156, 132)
             edge_color = (78, 72, 60)
@@ -400,6 +445,25 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
             for i in range(1, 4):
                 sx = r.x + int((r.width / 4.0) * i)
                 pygame.draw.line(screen, seam_color, (sx, r.y + 4), (sx, r.bottom - 4), 1)
+
+            # Upper porthole row: warm amber flicker when occupied, dark when empty.
+            if is_elevated_terminal:
+                port_y = r.y + max(8, int(r.height * 0.26))
+                port_r = max(3, int(r.width * 0.055))
+                n_ports = max(2, min(4, r.width // 22))
+                for pi in range(n_ports):
+                    px = r.centerx if n_ports == 1 else r.x + 12 + pi * ((r.width - 24) // max(1, n_ports - 1))
+                    if passengers_inside:
+                        pf = (math.sin(t * 14.0 + pi * 1.7 + compound_center_x * 0.04) + 1.0) * 0.5
+                        port_color = (
+                            min(255, int(186 + pf * 64)),
+                            min(255, int(140 + pf * 55)),
+                            int(32 + pf * 30),
+                        )
+                    else:
+                        port_color = (44, 52, 66)
+                    pygame.draw.circle(screen, port_color, (px, port_y), port_r)
+                    pygame.draw.circle(screen, (18, 22, 28), (px, port_y), port_r, 1)
 
             # French door pair near lower center with long vertical windows.
             door_h = max(18, int(r.height * 0.38))
@@ -436,12 +500,18 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
             pygame.draw.rect(screen, edge_color, left_door, 1, border_radius=1)
             pygame.draw.rect(screen, edge_color, right_door, 1, border_radius=1)
 
-            # Window colors shift when passengers are still in the terminal.
+            # Window glow: warm amber double-flicker when occupied, dim off-state when empty.
             if passengers_inside:
-                glow = int((math.sin(t * 5.0) + 1.0) * 22)
-                win_fill = (96 + glow, 176 + glow // 2, 220)
+                breath = (math.sin(t * 6.5) + 1.0) * 0.5
+                stutter = (math.sin(t * 21.0 + compound_center_x * 0.08) + 1.0) * 0.5
+                mix = breath * 0.6 + stutter * 0.4
+                win_fill = (
+                    min(255, int(192 + mix * 60)),
+                    min(255, int(148 + mix * 52)),
+                    int(38 + mix * 28),
+                )
             else:
-                win_fill = (92, 128, 152)
+                win_fill = (52, 62, 76)
 
             # Long windows on each french door leaf.
             left_glass = left_door.inflate(-6, -4)
@@ -521,11 +591,11 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                         py = door_area.bottom - 1 - (i % 2)
 
                         # Tiny passenger silhouette (head + torso + legs).
-                        pygame.draw.circle(screen, (224, 206, 176), (px, py - 10), 2)
-                        pygame.draw.line(screen, (236, 222, 196), (px, py - 8), (px, py - 3), 2)
+                        pygame.draw.circle(screen, (255, 255, 255), (px, py - 10), 2)
+                        pygame.draw.line(screen, (250, 250, 250), (px, py - 8), (px, py - 3), 2)
                         leg_swing = -1 if math.sin(t * 10.0 + i * 0.8) > 0 else 1
-                        pygame.draw.line(screen, (236, 222, 196), (px, py - 3), (px - leg_swing, py), 1)
-                        pygame.draw.line(screen, (236, 222, 196), (px, py - 3), (px + leg_swing, py), 1)
+                        pygame.draw.line(screen, (250, 250, 250), (px, py - 3), (px - leg_swing, py), 1)
+                        pygame.draw.line(screen, (250, 250, 250), (px, py - 3), (px + leg_swing, py), 1)
                         pygame.draw.circle(screen, (30, 34, 40), (px, py - 10), 2, 1)
 
                 # After the burst exits, keep a tiny group visible in front of the compound.
@@ -534,10 +604,10 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                     for i in range(settled):
                         px = int(front_x + move_dir * i * 7)
                         py = door_area.bottom - 1 - (i % 2)
-                        pygame.draw.circle(screen, (224, 206, 176), (px, py - 10), 2)
-                        pygame.draw.line(screen, (236, 222, 196), (px, py - 8), (px, py - 3), 2)
-                        pygame.draw.line(screen, (236, 222, 196), (px, py - 3), (px - 1, py), 1)
-                        pygame.draw.line(screen, (236, 222, 196), (px, py - 3), (px + 1, py), 1)
+                        pygame.draw.circle(screen, (255, 255, 255), (px, py - 10), 2)
+                        pygame.draw.line(screen, (250, 250, 250), (px, py - 8), (px, py - 3), 2)
+                        pygame.draw.line(screen, (250, 250, 250), (px, py - 3), (px - 1, py), 1)
+                        pygame.draw.line(screen, (250, 250, 250), (px, py - 3), (px + 1, py), 1)
                         pygame.draw.circle(screen, (30, 34, 40), (px, py - 10), 2, 1)
 
             # Preserve destroyed/open gameplay readability.
