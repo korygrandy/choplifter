@@ -111,6 +111,31 @@ All items below were implemented and validated with import smoke, `tests/test_pa
 - **Main loop change (`main.py`):** replaced duplicated inline vehicle input/gating block with one helper call.
 - **Goal:** keep `main.py` focused on orchestration and reduce error-prone duplicated state logic.
 
+### Event-result assignment extraction
+
+- **New module:** `src/choplifter/app/loop_state_updates.py`
+  - Added helper functions:
+    - `apply_keydown_result(...)`
+    - `apply_joybutton_result(...)`
+    - `apply_nonpaused_gamepad_result(...)`
+- **Main loop change (`main.py`):** extracted repetitive result-to-runtime/selection assignment blocks for keyboard/gamepad event handlers.
+- **Goal:** reduce assignment boilerplate in `main.py` and keep event handling code focused on dispatch rather than state copy logic.
+
+### Main-loop context sync helper extraction
+
+- **New module:** `src/choplifter/app/main_loop_context_sync.py`
+  - Added:
+    - `load_frame_locals_from_context(...)`
+    - `store_frame_locals_to_context(...)`
+- **Main loop change (`main.py`):** replaced inline field-by-field context load/store code with helper calls.
+- **Goal:** keep context synchronization explicit and centralized, reducing risk of future state-threading regressions.
+
+### Validation status (session 3)
+
+- Import smoke: PASS (`from src.choplifter.main import run`)
+- Focused regression: PASS (`tests/test_pause_audio_behavior.py`)
+- Airport smoke suite: PASS (`scripts/run_airport_smoke.ps1`)
+
 ## Recent Changes (Session 2 — 2026-03-11)
 
 All items below were implemented, validated with import-ok, and tests pass.

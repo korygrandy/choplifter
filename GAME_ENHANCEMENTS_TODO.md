@@ -33,6 +33,8 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 - Main-loop context refactor was stabilized after sync-order and stale-accumulator rollback fixes in `src/choplifter/main.py`.
 - Airport mission bleed/artifact contamination caused by context overwrite timing has been addressed.
 - Vehicle input/gating orchestration moved out of `main.py` into `src/choplifter/app/driver_inputs.py` as part of continued modularization.
+- Keyboard/gamepad event-result state assignment boilerplate moved out of `main.py` into `src/choplifter/app/loop_state_updates.py`.
+- Main-loop context load/store code moved out of `main.py` into `src/choplifter/app/main_loop_context_sync.py`.
 
 ### Gameplay Validation (Highest Priority)
 

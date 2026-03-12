@@ -77,9 +77,11 @@ from .app.main_loop_context import MainLoopContext
 from .app.airport_runtime_flags import sync_airport_runtime_flags
 from .app.bus_door_flow import apply_airport_bus_door_transitions
 from .app.driver_inputs import build_driver_inputs
+from .app.loop_state_updates import apply_joybutton_result, apply_keydown_result, apply_nonpaused_gamepad_result
 from .app.weapon_lock import chopper_weapons_locked
 from .app.airport_session import configure_airport_runtime_for_mission, create_empty_airport_runtime
 from .app.airport_render import draw_airport_world_overlays
+from .app.main_loop_context_sync import load_frame_locals_from_context, store_frame_locals_to_context
 from .app.airport_update import AirportRuntimeContext, apply_airport_playing_tick_update
 from .app.objective_overlay import get_mission_objective_overlay_duration
 from .app.vehicle_driver_modes import handle_airport_driver_mode_doors
@@ -341,12 +343,9 @@ def run() -> None:
         screenshake_enabled = toggle_screenshake(screenshake_enabled, set_toast)
 
     running = True
-    mission = loop_ctx.mission
-    helicopter = loop_ctx.helicopter
-    accumulator = loop_ctx.accumulator
-    prev_stats = loop_ctx.prev_stats
-    campaign_sentiment = loop_ctx.campaign_sentiment
-    airport_runtime = loop_ctx.airport_runtime
+    mission, helicopter, accumulator, prev_stats, campaign_sentiment, airport_runtime = load_frame_locals_from_context(
+        loop_ctx=loop_ctx
+    )
     
     while running:
         frame_dt = clock.tick(120) / 1000.0
@@ -455,19 +454,25 @@ def run() -> None:
                         engineer_remote_control_active=bool(getattr(mission, "engineer_remote_control_active", False)),
                     ),
                 )
-                running = bool(keydown_result.running and running)
-                mode = keydown_result.mode
-                runtime.pause_focus = keydown_result.pause_focus
-                runtime.muted = keydown_result.muted
-                selected_mission_index = keydown_result.selected_mission_index
-                selected_mission_id = keydown_result.selected_mission_id
-                selected_chopper_index = keydown_result.selected_chopper_index
-                selected_chopper_asset = keydown_result.selected_chopper_asset
-                debug = keydown_result.debug
-                runtime.quit_confirm = keydown_result.quit_confirm
-                runtime.meal_truck_driver_mode = keydown_result.meal_truck_driver_mode
-                runtime.meal_truck_lift_command_extended = keydown_result.meal_truck_lift_command_extended
-                runtime.bus_driver_mode = keydown_result.bus_driver_mode
+                (
+                    running,
+                    mode,
+                    selected_mission_index,
+                    selected_mission_id,
+                    selected_chopper_index,
+                    selected_chopper_asset,
+                    debug,
+                ) = apply_keydown_result(
+                    running=running,
+                    mode=mode,
+                    runtime=runtime,
+                    selected_mission_index=selected_mission_index,
+                    selected_mission_id=selected_mission_id,
+                    selected_chopper_index=selected_chopper_index,
+                    selected_chopper_asset=selected_chopper_asset,
+                    debug=debug,
+                    keydown_result=keydown_result,
+                )
                 if not running:
                     continue
             elif event.type == pygame.JOYBUTTONDOWN:
@@ -498,11 +503,11 @@ def run() -> None:
                     chopper_weapons_locked=chopper_weapons_locked,
                     Facing=Facing,
                 )
-                mode = joybutton_result.mode
-                runtime.pause_focus = joybutton_result.pause_focus
-                runtime.meal_truck_driver_mode = joybutton_result.meal_truck_driver_mode
-                runtime.meal_truck_lift_command_extended = joybutton_result.meal_truck_lift_command_extended
-                runtime.bus_driver_mode = joybutton_result.bus_driver_mode
+                mode = apply_joybutton_result(
+                    mode=mode,
+                    runtime=runtime,
+                    joybutton_result=joybutton_result,
+                )
 
         # Check if we transitioned from select_chopper to cutscene via keyboard
         # (gamepad path handles this inline)
@@ -646,11 +651,20 @@ def run() -> None:
                     skip_mission_cutscene=lambda: skip_mission_cutscene(cutscenes.mission),
                     apply_mission_preview=apply_mission_preview_wrapper,
                 )
-                mode = nonpaused_result.mode
-                selected_chopper_index = nonpaused_result.selected_chopper_index
-                selected_mission_index = nonpaused_result.selected_mission_index
-                selected_mission_id = nonpaused_result.selected_mission_id
-                selected_chopper_asset = nonpaused_result.selected_chopper_asset
+                (
+                    mode,
+                    selected_chopper_index,
+                    selected_mission_index,
+                    selected_mission_id,
+                    selected_chopper_asset,
+                ) = apply_nonpaused_gamepad_result(
+                    mode=mode,
+                    selected_chopper_index=selected_chopper_index,
+                    selected_mission_index=selected_mission_index,
+                    selected_mission_id=selected_mission_id,
+                    selected_chopper_asset=selected_chopper_asset,
+                    nonpaused_result=nonpaused_result,
+                )
 
             elif mode == "paused":
                 (
@@ -727,12 +741,9 @@ def run() -> None:
 
         if context_swapped:
             # Wrappers can swap mission/helicopter/session objects during keyboard/gamepad handling.
-            mission = loop_ctx.mission
-            helicopter = loop_ctx.helicopter
-            accumulator = loop_ctx.accumulator
-            prev_stats = loop_ctx.prev_stats
-            campaign_sentiment = loop_ctx.campaign_sentiment
-            airport_runtime = loop_ctx.airport_runtime
+            mission, helicopter, accumulator, prev_stats, campaign_sentiment, airport_runtime = (
+                load_frame_locals_from_context(loop_ctx=loop_ctx)
+            )
 
         helicopter_input = build_helicopter_input(
             mode=mode,
@@ -1025,12 +1036,15 @@ def run() -> None:
         pygame.display.flip()
 
         # Persist frame-local updates to shared loop context.
-        loop_ctx.mission = mission
-        loop_ctx.helicopter = helicopter
-        loop_ctx.accumulator = accumulator
-        loop_ctx.prev_stats = prev_stats
-        loop_ctx.campaign_sentiment = campaign_sentiment
-        loop_ctx.airport_runtime = airport_runtime
+        store_frame_locals_to_context(
+            loop_ctx=loop_ctx,
+            mission=mission,
+            helicopter=helicopter,
+            accumulator=accumulator,
+            prev_stats=prev_stats,
+            campaign_sentiment=campaign_sentiment,
+            airport_runtime=airport_runtime,
+        )
 
     # Ensure all mixer channels are silenced before quitting the app.
     try:
