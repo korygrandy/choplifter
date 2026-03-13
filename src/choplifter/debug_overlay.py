@@ -13,8 +13,29 @@ class DebugOverlay:
     def __init__(self) -> None:
         pygame.font.init()
         self._font = pygame.font.SysFont("consolas", 18)
+        self._panel_cache: dict[tuple[int, int], pygame.Surface] = {}
 
-    def draw(self, screen: pygame.Surface, helicopter: Helicopter, mission: MissionState, fps: float) -> None:
+    def _get_panel_surface(self, *, width: int, height: int) -> pygame.Surface:
+        key = (int(width), int(height))
+        panel = self._panel_cache.get(key)
+        if panel is not None:
+            return panel
+
+        panel = pygame.Surface((key[0], key[1]), pygame.SRCALPHA)
+        self._panel_cache[key] = panel
+        if len(self._panel_cache) > 8:
+            self._panel_cache.clear()
+            self._panel_cache[key] = panel
+        return panel
+
+    def draw(
+        self,
+        screen: pygame.Surface,
+        helicopter: Helicopter,
+        mission: MissionState,
+        fps: float,
+        perf_counters: object | None = None,
+    ) -> None:
         boarded = boarded_count(mission)
         compound_states = " ".join(
             f"{max(0, int(c.health))}{'O' if c.is_open else 'S'}" for c in mission.compounds
@@ -75,13 +96,42 @@ class DebugOverlay:
             f"compounds: {compound_states}",
         ]
 
+        if isinstance(perf_counters, dict) and perf_counters:
+            lines.extend(
+                [
+                    "perf(ms):",
+                    (
+                        "  frame="
+                        f"{float(perf_counters.get('frame_total_ms', 0.0)):0.2f} "
+                        "preamble="
+                        f"{float(perf_counters.get('frame_preamble_ms', 0.0)):0.2f} "
+                        "event="
+                        f"{float(perf_counters.get('event_dispatch_ms', 0.0)):0.2f}"
+                    ),
+                    (
+                        "  input="
+                        f"{float(perf_counters.get('input_phase_ms', 0.0)):0.2f} "
+                        "fixed="
+                        f"{float(perf_counters.get('fixed_step_ms', 0.0)):0.2f} "
+                        "post="
+                        f"{float(perf_counters.get('post_phase_ms', 0.0)):0.2f}"
+                    ),
+                    (
+                        "  prep="
+                        f"{float(perf_counters.get('frame_prep_ms', 0.0)):0.2f} "
+                        "render="
+                        f"{float(perf_counters.get('render_present_ms', 0.0)):0.2f}"
+                    ),
+                ]
+            )
+
         x, y = 12, 10
         padding = 4
         rendered = [self._font.render(line, True, (240, 240, 240)) for line in lines]
         w = max(s.get_width() for s in rendered) + padding * 2
         h = sum(s.get_height() for s in rendered) + padding * 2 + (len(rendered) - 1) * 2
 
-        panel = pygame.Surface((w, h), pygame.SRCALPHA)
+        panel = self._get_panel_surface(width=w, height=h)
         panel.fill((0, 0, 0, 140))
 
         cy = padding

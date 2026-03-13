@@ -9,6 +9,18 @@ import time
 
 _LOGGER_NAME = "choplifter"
 
+# Module-level reference to the console StreamHandler so debug_mode can gate it.
+_console_handler: logging.StreamHandler | None = None
+
+
+def set_console_log_debug(enabled: bool) -> None:
+    """Enable (DEBUG) or silence (CRITICAL) the in-game console log output.
+
+    The file log is unaffected — it always records everything.
+    """
+    if _console_handler is not None:
+        _console_handler.setLevel(logging.DEBUG if enabled else logging.CRITICAL)
+
 
 def _default_logs_dir() -> Path:
     """Choose a writable logs directory suitable for packaged executables.
@@ -71,9 +83,11 @@ def create_session_logger(logs_dir: str | os.PathLike | None = None) -> logging.
         fh = None
 
 
+    global _console_handler
     sh = logging.StreamHandler()
-    sh.setLevel(logging.DEBUG)
+    sh.setLevel(logging.CRITICAL)  # Silent by default; enabled when debug_mode is on.
     sh.setFormatter(formatter)
+    _console_handler = sh
 
     if fh is not None:
         logger.addHandler(fh)

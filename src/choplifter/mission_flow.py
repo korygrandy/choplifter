@@ -8,6 +8,7 @@ from .helicopter import Helicopter
 from .mission_combat import _damage_helicopter, _mine_explode, _spawn_enemy_bullet_toward
 from .mission_compounds import _update_compounds_and_release
 from .mission_crash import _handle_crash_and_respawn
+from .app.escort_risk import tick_post_respawn_escort_risk
 from .mission_helpers import boarded_count, _log_progress_if_changed, _update_fuel, _update_sentiment
 from .mission_hostages import _handle_unload, _update_hostages
 from .mission_particles import _update_world_particles
@@ -35,6 +36,8 @@ def update_mission(
 
     if mission.flare_invuln_seconds > 0.0:
         mission.flare_invuln_seconds = max(0.0, mission.flare_invuln_seconds - dt)
+
+    tick_post_respawn_escort_risk(mission, dt)
 
     _update_fuel(mission, helicopter, dt, logger)
     if helicopter.fuel <= 0.0:
@@ -82,5 +85,7 @@ def update_mission(
 
     _log_progress_if_changed(mission, logger)
 
-    if mission.stats.saved >= 20:
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    is_airport_mission = mission_id in ("airport", "airport_special_ops", "mission2", "m2")
+    if (not is_airport_mission) and mission.stats.saved >= 20:
         end_mission(mission, "THE END", "RESCUE SUCCESS", logger)

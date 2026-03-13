@@ -4,7 +4,13 @@ import logging
 import random
 from typing import Callable
 
-from .boarding_telemetry import BOARDING_FAIL_DOORS_CLOSED, BOARDING_FAIL_FULL, BOARDING_FAIL_NOT_GROUNDED, record_boarding_failure
+from .boarding_telemetry import (
+    BOARDING_FAIL_DOORS_CLOSED,
+    BOARDING_FAIL_FULL,
+    BOARDING_FAIL_NOT_GROUNDED,
+    BOARDING_FAIL_TECH_NOT_ON_CHOPPER,
+    record_boarding_failure,
+)
 from .game_types import HostageState
 from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
@@ -23,6 +29,10 @@ def _update_hostages(
 ) -> None:
     gravity = 900.0  # px/sec^2
     logger = logging.getLogger("choplifter")
+    fall_delay_min_s = float(getattr(mission.tuning, "airborne_fall_delay_min_s", 2.0))
+    fall_delay_max_s = float(getattr(mission.tuning, "airborne_fall_delay_max_s", 3.0))
+    if fall_delay_max_s < fall_delay_min_s:
+        fall_delay_min_s, fall_delay_max_s = fall_delay_max_s, fall_delay_min_s
 
     # Falling logic.
     for h in mission.hostages:
@@ -39,7 +49,7 @@ def _update_hostages(
                 h.fall_angle = 0.0  # Reset angle on impact.
             continue
 
-    # Hostage ejection logic: only one every 4-6s, only after 1s with doors open while airborne.
+    # Hostage ejection logic: wait 2-3s airborne with doors open, then drop one every 2-2.5s.
     now = getattr(mission, "elapsed_seconds", 0.0)
 
     # Track previous eligibility state for logging.
@@ -47,8 +57,13 @@ def _update_hostages(
     eligible = helicopter.doors_open and not helicopter.grounded
 
     if eligible:
+        if not bool(prev_eligible):
+            # Sample a per-airborne-window grace period so falls don't start instantly.
+            mission._hostage_fall_delay_s = random.uniform(fall_delay_min_s, fall_delay_max_s)
+            mission.next_fall_time = now + float(mission._hostage_fall_delay_s)
         mission.doors_open_maxvel_timer += dt
-        if mission.doors_open_maxvel_timer > 1.0:
+        fall_delay_s = float(getattr(mission, "_hostage_fall_delay_s", 2.5))
+        if mission.doors_open_maxvel_timer > fall_delay_s:
             if now >= getattr(mission, "next_fall_time", 0.0):
                 boarded_hostages = [h for h in mission.hostages if h.state is HostageState.BOARDED]
                 if boarded_hostages:
@@ -89,8 +104,9 @@ def _update_hostages(
                 f"[HOSTAGE FALL] Timer reset due to {', '.join(reason)} | now={now:.2f} | doors_open_maxvel_timer={mission.doors_open_maxvel_timer:.2f}"
             )
         mission.doors_open_maxvel_timer = 0.0
-        # Reset next_fall_time so timer doesn't accumulate while not eligible.
-        mission.next_fall_time = now + random.uniform(2.0, 2.5)
+        # Reset per-window delay so the next airborne window samples a new 2-3s grace.
+        mission._hostage_fall_delay_s = random.uniform(fall_delay_min_s, fall_delay_max_s)
+        mission.next_fall_time = now + float(mission._hostage_fall_delay_s)
 
     # Track eligibility for next frame.
     mission._prev_fall_eligible = eligible
@@ -99,6 +115,15 @@ def _update_hostages(
     boarded = boarded_count_fn(mission)
 
     lz_available = helicopter.grounded and helicopter.doors_open and boarded < capacity
+    # Airport special rule: lower-compound civilian rescue is enabled only while tech is on chopper.
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    if mission_id in ("airport", "airport_special_ops", "airportspecialops", "mission2", "m2"):
+        tech_state = getattr(mission, "mission_tech", None)
+        tech_on_chopper = bool(tech_state is not None and str(getattr(tech_state, "state", "")) == "on_chopper")
+        if not tech_on_chopper:
+            lz_available = False
+            if helicopter.grounded and helicopter.doors_open:
+                record_boarding_failure(mission, BOARDING_FAIL_TECH_NOT_ON_CHOPPER)
 
     # Boarding radius tuned from playtest feedback and exposed via mission tuning.
     load_radius = max(30.0, float(getattr(mission.tuning, "hostage_boarding_radius", 58.0)))
@@ -110,6 +135,17 @@ def _update_hostages(
     chaotic_cap = max(1, int(mission.tuning.hostage_chaotic_max_moving_to_lz))
     chaos_p = clamp(mission.tuning.hostage_chaos_probability, 0.0, 1.0)
     moving_to_lz = sum(1 for h in mission.hostages if h.state is HostageState.MOVING_TO_LZ)
+
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    is_airport = mission_id in ("airport", "airport_special_ops", "airportspecialops", "mission2", "m2")
+    # For airport missions pack rescued civilians near the tower LZ instead of at
+    # mission.base (which is the far-right airfield and not the rescue handoff point).
+    if is_airport:
+        _bus_state = getattr(mission, "airport_bus_state", None)
+        _tower_stop_x = float(getattr(_bus_state, "stop_x", 500.0)) if _bus_state is not None else 500.0
+        rescue_pack_x = _tower_stop_x - 80.0  # pack left of tower LZ
+    else:
+        rescue_pack_x = mission.base.pos.x
 
     def saved_slot_pos(slot: int) -> Vec2:
         # Pack saved hostages inside the base zone.
@@ -124,7 +160,7 @@ def _update_hostages(
         col = slot % cols
         row = slot // cols
 
-        x = mission.base.pos.x + padding_x + col * spacing_x
+        x = rescue_pack_x + padding_x + col * spacing_x
         floor_y = heli.ground_y - 6.0
         y = max(mission.base.pos.y + padding_y, floor_y - row * spacing_y)
         return Vec2(x, y)
@@ -225,8 +261,16 @@ def _handle_unload(mission: MissionState, helicopter: Helicopter, heli: Helicopt
         return
 
     if not mission.base.contains_point(helicopter.pos):
-        mission.unload_release_seconds = 0.0
-        return
+        # Airport special: also allow unloading at the tower LZ (bus stop zone).
+        _mission_id = str(getattr(mission, "mission_id", "")).lower()
+        _at_tower_lz = False
+        if _mission_id in ("airport", "airport_special_ops", "airportspecialops", "mission2", "m2"):
+            _bus_state = getattr(mission, "airport_bus_state", None)
+            _tower_stop_x = float(getattr(_bus_state, "stop_x", 500.0)) if _bus_state is not None else 500.0
+            _at_tower_lz = float(helicopter.pos.x) <= _tower_stop_x + 140.0
+        if not _at_tower_lz:
+            mission.unload_release_seconds = 0.0
+            return
 
     mission.unload_release_seconds = max(0.0, mission.unload_release_seconds - dt)
     if mission.unload_release_seconds > 0.0:

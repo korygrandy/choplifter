@@ -23,6 +23,7 @@ class MissionTuning:
     tank_fire_max_cooldown_s: float = 1.5
 
     tank_health: float = 110.0
+    barak_health: float = 143.0  # ~30% tougher than tank_health (110 * 1.3)
     tank_initial_cooldown_s: float = 1.5
     tank_ground_offset_y: float = 8.0
     tank_fire_range_x: float = 360.0
@@ -71,6 +72,8 @@ class MissionTuning:
     hostage_chaotic_start_radius: float = 340.0
     hostage_chaos_probability: float = 0.35
     hostage_boarding_radius: float = 64.0
+    airborne_fall_delay_min_s: float = 2.0
+    airborne_fall_delay_max_s: float = 3.0
 
     barak_deploy_angle_speed_rad_s: float = 1.5
     barak_deploy_extension_speed_s: float = 1.2
@@ -92,6 +95,7 @@ class MissionTuning:
     barak_flare_near_miss_arm_radius_px: float = 54.0
     barak_flare_post_pass_explode_distance_px: float = 68.0
     barak_flare_last_chance_override_radius_px: float = 92.0
+    barak_destroy_second_burst_delay_s: float = 0.14
 
 
 @dataclass(frozen=True)

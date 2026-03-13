@@ -6,7 +6,7 @@ from src.choplifter.controls import matches_key, pressed
 from src.choplifter.app.menu_helpers import cycle_index, move_pause_focus
 
 
-def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any, mission: Any, helicopter: Any, audio: Any, logger: Any, chopper_choices: list, mission_choices: list, pause_focus: str, muted: bool, set_toast: Callable, reset_game: Callable, apply_mission_preview: Callable, skip_intro: Callable, skip_mission_cutscene: Callable, toggle_particles_wrapper: Callable, toggle_flashes_wrapper: Callable, toggle_screenshake_wrapper: Callable, spawn_projectile_from_helicopter_logged: Callable, try_start_flare_salvo: Callable, toggle_doors_with_logging: Callable, Facing: Any, DebugSettings: Any, boarded_count: Any, flares: Any, selected_mission_index: int, selected_mission_id: str, selected_chopper_index: int, selected_chopper_asset: str, debug: Any, quit_confirm: bool) -> tuple[str, str, bool, int, str, int, str, Any, bool]:
+def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any, mission: Any, helicopter: Any, audio: Any, logger: Any, chopper_choices: list, mission_choices: list, pause_focus: str, muted: bool, set_toast: Callable, reset_game: Callable, apply_mission_preview: Callable, skip_intro: Callable, skip_mission_cutscene: Callable, toggle_particles_wrapper: Callable, toggle_flashes_wrapper: Callable, toggle_screenshake_wrapper: Callable, spawn_projectile_from_helicopter_logged: Callable, try_start_flare_salvo: Callable, toggle_doors_with_logging: Callable, Facing: Any, DebugSettings: Any, boarded_count: Any, flares: Any, selected_mission_index: int, selected_mission_id: str, selected_chopper_index: int, selected_chopper_asset: str, debug: Any, quit_confirm: bool, helicopter_weapon_locked: bool = False) -> tuple[str, str, bool, int, str, int, str, Any, bool]:
     """
     Handles keyboard events and returns updated (mode, pause_focus, muted).
     """
@@ -21,6 +21,9 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
         mode = "playing"
         audio.set_pause_menu_active(False)
         audio.play_pause_toggle()
+    elif mode == "select_chopper" and event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+        mode = "select_mission"
+        set_toast("Back to Mission Select")
     elif matches_key(event.key, controls.quit):
         # Always return a 9-tuple, using current values for unchanged fields
         return (
@@ -42,13 +45,10 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
             selected_chopper_index = cycle_index(selected_chopper_index, 1, len(chopper_choices))
             selected_chopper_asset = chopper_choices[selected_chopper_index][0]
             audio.play_menu_select()
-        elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+        elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
             mode = "cutscene"
             set_toast(f"Chopper selected: {chopper_choices[selected_chopper_index][1]}")
             reset_game()
-        elif event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
-            mode = "select_mission"
-            set_toast("Back to Mission Select")
     elif mode == "select_mission":
         if event.key in (pygame.K_LEFT, pygame.K_a):
             selected_mission_index = cycle_index(selected_mission_index, -1, len(mission_choices))
@@ -60,7 +60,7 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
             selected_mission_id = mission_choices[selected_mission_index][0]
             audio.play_menu_select()
             apply_mission_preview()
-        elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+        elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
             mode = "select_chopper"
             set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")
     elif mode == "paused":
@@ -90,7 +90,7 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
             selected_chopper_asset = chopper_choices[selected_chopper_index][0]
             helicopter.skin_asset = selected_chopper_asset
             audio.play_menu_select()
-        elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+        elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
             if pause_focus == "restart_mission":
                 reset_game()
                 mode = "playing"
@@ -132,11 +132,12 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
     elif mode == "playing" and matches_key(event.key, controls.flare):
         if logger:
             logger.debug("Flare key pressed (key=%s) in playing mode", event.key)
-        try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
+        if not helicopter_weapon_locked:
+            try_start_flare_salvo(flares, mission=mission, helicopter=helicopter, audio=audio)
     elif mode == "playing" and matches_key(event.key, controls.fire):
         if logger:
             logger.debug("Fire key pressed (key=%s) in playing mode", event.key)
-        if not getattr(mission, "crash_active", False):
+        if not getattr(mission, "crash_active", False) and not helicopter_weapon_locked:
             spawn_projectile_from_helicopter_logged(mission, helicopter, logger)
             if helicopter.facing is Facing.FORWARD:
                 audio.play_bomb()

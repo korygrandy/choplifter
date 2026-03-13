@@ -5,6 +5,8 @@ from typing import Mapping
 
 import pygame
 
+from .gamepad_button_state import GamepadButtonState
+
 
 def get_active_joystick(joysticks: Mapping[int, pygame.joystick.Joystick]) -> pygame.joystick.Joystick | None:
     if not joysticks:
@@ -12,6 +14,10 @@ def get_active_joystick(joysticks: Mapping[int, pygame.joystick.Joystick]) -> py
     # Prefer a stable order to avoid flipping between devices.
     instance_id = sorted(joysticks.keys())[0]
     return joysticks.get(instance_id)
+
+
+def build_skip_hint(joysticks: Mapping[int, pygame.joystick.Joystick]) -> str:
+    return "Enter/Space or A/Start: Skip" if get_active_joystick(joysticks) is not None else "Enter/Space: Skip"
 
 
 def _axis_value(js: pygame.joystick.Joystick, axis_index: int) -> float:
@@ -48,6 +54,20 @@ class GamepadReadout:
     rb_down: bool
     lb_down: bool
     back_down: bool
+
+
+@dataclass(frozen=True)
+class ActiveGamepadSnapshot:
+    joystick: pygame.joystick.Joystick
+    readout: GamepadReadout
+    prev_a_down: bool
+    prev_b_down: bool
+    prev_x_down: bool
+    prev_y_down: bool
+    prev_start_down: bool
+    prev_rb_down: bool
+    prev_lb_down: bool
+    prev_back_down: bool
 
 
 def read_gamepad(
@@ -122,4 +142,34 @@ def read_gamepad(
         rb_down=rb_down,
         lb_down=lb_down,
         back_down=back_down,
+    )
+
+
+def read_active_gamepad_snapshot(
+    joysticks: Mapping[int, pygame.joystick.Joystick],
+    *,
+    button_state: GamepadButtonState,
+    deadzone: float,
+    trigger_threshold01: float,
+) -> ActiveGamepadSnapshot | None:
+    joystick = get_active_joystick(joysticks)
+    if joystick is None:
+        return None
+
+    readout = read_gamepad(
+        joystick,
+        deadzone=deadzone,
+        trigger_threshold01=trigger_threshold01,
+    )
+    return ActiveGamepadSnapshot(
+        joystick=joystick,
+        readout=readout,
+        prev_a_down=button_state.a_down,
+        prev_b_down=button_state.b_down,
+        prev_x_down=button_state.x_down,
+        prev_y_down=button_state.y_down,
+        prev_start_down=button_state.start_down,
+        prev_rb_down=button_state.rb_down,
+        prev_lb_down=button_state.lb_down,
+        prev_back_down=button_state.back_down,
     )

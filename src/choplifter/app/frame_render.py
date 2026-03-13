@@ -99,6 +99,8 @@ def draw_playing_hud_and_overlays(
     city_objective_overlay_timer: float,
     frame_dt: float,
     draw_hud_fn: object,
+    driver_mode_active: bool = False,
+    debug_mode: bool = False,
 ) -> tuple[float, float]:
     """Draw playing HUD effects and return updated (vip_timer, objective_timer)."""
     if hud_disabled_timer > 0.0:
@@ -107,7 +109,7 @@ def draw_playing_hud_and_overlays(
         overlay_surf.fill((40, 40, 40, 180))
         target.blit(overlay_surf, (0, 0))
     else:
-        draw_hud_fn(target, mission, helicopter)
+        draw_hud_fn(target, mission, helicopter, driver_mode_active=driver_mode_active, debug_mode=debug_mode)
 
     next_vip_timer = float(vip_kia_overlay_timer)
     next_city_objective_timer = float(city_objective_overlay_timer)
@@ -205,6 +207,140 @@ def draw_mode_overlays(
         )
 
 
+def render_world_branch(
+    *,
+    mode: str,
+    target: pygame.Surface,
+    screen: pygame.Surface,
+    mission: object,
+    helicopter: object,
+    camera_x: float,
+    frame_dt: float,
+    selected_mission_id: str,
+    particles_enabled: bool,
+    weather_mode: str,
+    ground_y: float,
+    sky_smoke: object,
+    rain: object,
+    fog: object,
+    dust: object,
+    storm_clouds: object,
+    lightning: object,
+    airport_runtime: object,
+    hud_disabled_timer: float,
+    vip_kia_overlay_timer: float,
+    city_objective_overlay_timer: float,
+    meal_truck_driver_mode: bool,
+    debug_mode: bool,
+    mission_choices: object,
+    selected_mission_index: int,
+    chopper_choices: object,
+    selected_chopper_index: int,
+    pause_focus: str,
+    muted: bool,
+    quit_confirm: bool,
+    paused_hint: str,
+    draw_sky_fn: object,
+    draw_ground_fn: object,
+    draw_mission_fn: object,
+    draw_airport_world_overlays_fn: object,
+    draw_flares_fn: object,
+    draw_explosion_particles_fn: object,
+    draw_enemy_damage_fx_fn: object,
+    draw_helicopter_damage_fx_fn: object,
+    draw_helicopter_fn: object,
+    draw_impact_sparks_fn: object,
+    boarded_count_fn: object,
+    draw_hud_fn: object,
+    draw_mission_select_overlay_fn: object,
+    draw_chopper_select_overlay_fn: object,
+    draw_mission_end_overlay_fn: object,
+) -> tuple[float, float]:
+    """Render the shared world branch and return updated overlay timers."""
+    draw_sky_fn(
+        target,
+        ground_y,
+        bg_asset=getattr(mission, "bg_asset", "mission1-bg.jpg"),
+        dt=frame_dt,
+        enable_fade=(mode == "select_mission"),
+    )
+    draw_weather_particles(
+        target=target,
+        particles_enabled=particles_enabled,
+        weather_mode=weather_mode,
+        sky_smoke=sky_smoke,
+        rain=rain,
+        fog=fog,
+        dust=dust,
+        storm_clouds=storm_clouds,
+        lightning=lightning,
+        ground_y=float(ground_y),
+    )
+    draw_ground_fn(target, ground_y)
+    draw_mission_fn(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
+
+    if selected_mission_id == "airport":
+        draw_airport_world_overlays_fn(
+            target=target,
+            camera_x=camera_x,
+            helicopter=helicopter,
+            mission=mission,
+            heli_ground_y=ground_y,
+            airport_bus_state=airport_runtime.bus_state,
+            airport_hostage_state=airport_runtime.hostage_state,
+            airport_enemy_state=airport_runtime.enemy_state,
+            airport_tech_state=airport_runtime.tech_state,
+            airport_objective_state=airport_runtime.objective_state,
+            airport_meal_truck_state=airport_runtime.meal_truck_state,
+            airport_cutscene_state=airport_runtime.cutscene_state,
+        )
+
+    draw_flares_fn(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
+    draw_explosion_particles_fn(target, mission, camera_x=camera_x)
+    draw_enemy_damage_fx_fn(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
+    draw_helicopter_damage_fx_fn(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
+    draw_helicopter_fn(target, helicopter, camera_x=camera_x, boarded=boarded_count_fn(mission))
+    draw_impact_sparks_fn(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
+
+    if weather_mode == "storm":
+        storm_clouds.draw(target, layer="black")
+
+    next_vip_timer = float(vip_kia_overlay_timer)
+    next_city_objective_timer = float(city_objective_overlay_timer)
+    if mode == "playing":
+        next_vip_timer, next_city_objective_timer = draw_playing_hud_and_overlays(
+            target=target,
+            screen=screen,
+            mission=mission,
+            helicopter=helicopter,
+            hud_disabled_timer=hud_disabled_timer,
+            vip_kia_overlay_timer=next_vip_timer,
+            city_objective_overlay_timer=next_city_objective_timer,
+            frame_dt=frame_dt,
+            draw_hud_fn=draw_hud_fn,
+            driver_mode_active=meal_truck_driver_mode,
+            debug_mode=debug_mode,
+        )
+    else:
+        draw_mode_overlays(
+            mode=mode,
+            target=target,
+            mission_choices=mission_choices,
+            selected_mission_index=selected_mission_index,
+            chopper_choices=chopper_choices,
+            selected_chopper_index=selected_chopper_index,
+            pause_focus=pause_focus,
+            muted=muted,
+            quit_confirm=quit_confirm,
+            paused_hint=paused_hint,
+            draw_mission_select_overlay_fn=draw_mission_select_overlay_fn,
+            draw_chopper_select_overlay_fn=draw_chopper_select_overlay_fn,
+        )
+
+    draw_mission_end_overlay_fn(target, mission)
+    return next_vip_timer, next_city_objective_timer
+
+
 def render_frame_post_fx(
     *,
     mode: str,
@@ -220,6 +356,7 @@ def render_frame_post_fx(
     mission: object,
     overlay: object,
     fps: float,
+    perf_counters: object,
     draw_debug_overlay_fn: object,
     draw_toast_fn: object,
     draw_damage_flash_fn: object,
@@ -233,8 +370,283 @@ def render_frame_post_fx(
         draw_damage_flash_fn(target, helicopter)
 
     if debug_show_overlay and mode == "playing":
-        overlay.draw(target, helicopter, mission, fps)
+        overlay.draw(
+            target,
+            helicopter,
+            mission,
+            fps,
+            perf_counters=perf_counters,
+        )
 
     if target is not screen:
         screen.fill((0, 0, 0))
         screen.blit(target, (int(shake_x), int(shake_y)))
+
+
+def render_mode_frame(
+    *,
+    mode: str,
+    target: pygame.Surface,
+    screen: pygame.Surface,
+    skip_hint: str,
+    cutscenes: object,
+    mission: object,
+    helicopter: object,
+    camera_x: float,
+    frame_dt: float,
+    selected_mission_id: str,
+    particles_enabled: bool,
+    weather_mode: str,
+    ground_y: float,
+    sky_smoke: object,
+    rain: object,
+    fog: object,
+    dust: object,
+    storm_clouds: object,
+    lightning: object,
+    airport_runtime: object,
+    hud_disabled_timer: float,
+    vip_kia_overlay_timer: float,
+    city_objective_overlay_timer: float,
+    meal_truck_driver_mode: bool,
+    debug_mode: bool,
+    mission_choices: object,
+    selected_mission_index: int,
+    chopper_choices: object,
+    selected_chopper_index: int,
+    pause_focus: str,
+    muted: bool,
+    quit_confirm: bool,
+    paused_hint: str,
+    draw_intro_fn: object,
+    draw_mission_cutscene_fn: object,
+    draw_sky_fn: object,
+    draw_ground_fn: object,
+    draw_mission_fn: object,
+    draw_airport_world_overlays_fn: object,
+    draw_flares_fn: object,
+    draw_explosion_particles_fn: object,
+    draw_enemy_damage_fx_fn: object,
+    draw_helicopter_damage_fx_fn: object,
+    draw_helicopter_fn: object,
+    draw_impact_sparks_fn: object,
+    boarded_count_fn: object,
+    draw_hud_fn: object,
+    draw_mission_select_overlay_fn: object,
+    draw_chopper_select_overlay_fn: object,
+    draw_mission_end_overlay_fn: object,
+    shake_x: int,
+    shake_y: int,
+    debug_show_overlay: bool,
+    toast_message: str,
+    flashes_enabled: bool,
+    overlay: object,
+    fps: float,
+    perf_counters: object,
+    draw_debug_overlay_fn: object,
+    draw_toast_fn: object,
+    draw_damage_flash_fn: object,
+) -> tuple[float, float]:
+    """Render the frame by mode and return updated overlay timers."""
+    next_vip_timer = float(vip_kia_overlay_timer)
+    next_city_objective_timer = float(city_objective_overlay_timer)
+
+    if mode == "intro":
+        draw_intro_fn(cutscenes.intro, target, skip_hint=skip_hint)
+        return next_vip_timer, next_city_objective_timer
+
+    if mode == "cutscene":
+        draw_mission_cutscene_fn(cutscenes.mission, target, skip_hint=skip_hint)
+        return next_vip_timer, next_city_objective_timer
+
+    next_vip_timer, next_city_objective_timer = render_world_branch(
+        mode=mode,
+        target=target,
+        screen=screen,
+        mission=mission,
+        helicopter=helicopter,
+        camera_x=camera_x,
+        frame_dt=frame_dt,
+        selected_mission_id=selected_mission_id,
+        particles_enabled=particles_enabled,
+        weather_mode=weather_mode,
+        ground_y=ground_y,
+        sky_smoke=sky_smoke,
+        rain=rain,
+        fog=fog,
+        dust=dust,
+        storm_clouds=storm_clouds,
+        lightning=lightning,
+        airport_runtime=airport_runtime,
+        hud_disabled_timer=hud_disabled_timer,
+        vip_kia_overlay_timer=next_vip_timer,
+        city_objective_overlay_timer=next_city_objective_timer,
+        meal_truck_driver_mode=meal_truck_driver_mode,
+        debug_mode=debug_mode,
+        mission_choices=mission_choices,
+        selected_mission_index=selected_mission_index,
+        chopper_choices=chopper_choices,
+        selected_chopper_index=selected_chopper_index,
+        pause_focus=pause_focus,
+        muted=muted,
+        quit_confirm=quit_confirm,
+        paused_hint=paused_hint,
+        draw_sky_fn=draw_sky_fn,
+        draw_ground_fn=draw_ground_fn,
+        draw_mission_fn=draw_mission_fn,
+        draw_airport_world_overlays_fn=draw_airport_world_overlays_fn,
+        draw_flares_fn=draw_flares_fn,
+        draw_explosion_particles_fn=draw_explosion_particles_fn,
+        draw_enemy_damage_fx_fn=draw_enemy_damage_fx_fn,
+        draw_helicopter_damage_fx_fn=draw_helicopter_damage_fx_fn,
+        draw_helicopter_fn=draw_helicopter_fn,
+        draw_impact_sparks_fn=draw_impact_sparks_fn,
+        boarded_count_fn=boarded_count_fn,
+        draw_hud_fn=draw_hud_fn,
+        draw_mission_select_overlay_fn=draw_mission_select_overlay_fn,
+        draw_chopper_select_overlay_fn=draw_chopper_select_overlay_fn,
+        draw_mission_end_overlay_fn=draw_mission_end_overlay_fn,
+    )
+
+    render_frame_post_fx(
+        mode=mode,
+        target=target,
+        screen=screen,
+        shake_x=shake_x,
+        shake_y=shake_y,
+        debug_mode=debug_mode,
+        debug_show_overlay=debug_show_overlay,
+        toast_message=toast_message,
+        flashes_enabled=flashes_enabled,
+        helicopter=helicopter,
+        mission=mission,
+        overlay=overlay,
+        fps=fps,
+        perf_counters=perf_counters,
+        draw_debug_overlay_fn=draw_debug_overlay_fn,
+        draw_toast_fn=draw_toast_fn,
+        draw_damage_flash_fn=draw_damage_flash_fn,
+    )
+
+    return next_vip_timer, next_city_objective_timer
+
+
+def render_mode_frame_from_runtime(
+    *,
+    mode: str,
+    target: pygame.Surface,
+    screen: pygame.Surface,
+    skip_hint: str,
+    cutscenes: object,
+    mission: object,
+    helicopter: object,
+    camera_x: float,
+    frame_dt: float,
+    selected_mission_id: str,
+    particles_enabled: bool,
+    sky_smoke: object,
+    rain: object,
+    fog: object,
+    dust: object,
+    storm_clouds: object,
+    lightning: object,
+    runtime: object,
+    heli_settings: object,
+    airport_runtime: object,
+    mission_choices: object,
+    selected_mission_index: int,
+    chopper_choices: object,
+    selected_chopper_index: int,
+    paused_hint: str,
+    debug_show_overlay: bool,
+    toast_message: str,
+    flashes_enabled: bool,
+    overlay: object,
+    fps: float,
+    draw_intro_fn: object,
+    draw_mission_cutscene_fn: object,
+    draw_sky_fn: object,
+    draw_ground_fn: object,
+    draw_mission_fn: object,
+    draw_airport_world_overlays_fn: object,
+    draw_flares_fn: object,
+    draw_explosion_particles_fn: object,
+    draw_enemy_damage_fx_fn: object,
+    draw_helicopter_damage_fx_fn: object,
+    draw_helicopter_fn: object,
+    draw_impact_sparks_fn: object,
+    boarded_count_fn: object,
+    draw_hud_fn: object,
+    draw_mission_select_overlay_fn: object,
+    draw_chopper_select_overlay_fn: object,
+    draw_mission_end_overlay_fn: object,
+    shake_x: int,
+    shake_y: int,
+    draw_debug_overlay_fn: object,
+    draw_toast_fn: object,
+    draw_damage_flash_fn: object,
+) -> tuple[float, float]:
+    """Render a frame by adapting grouped runtime settings into render_mode_frame."""
+    return render_mode_frame(
+        mode=mode,
+        target=target,
+        screen=screen,
+        skip_hint=skip_hint,
+        cutscenes=cutscenes,
+        mission=mission,
+        helicopter=helicopter,
+        camera_x=camera_x,
+        frame_dt=frame_dt,
+        selected_mission_id=selected_mission_id,
+        particles_enabled=particles_enabled,
+        weather_mode=str(getattr(runtime, "weather_mode", "clear")),
+        ground_y=float(getattr(heli_settings, "ground_y", 0.0)),
+        sky_smoke=sky_smoke,
+        rain=rain,
+        fog=fog,
+        dust=dust,
+        storm_clouds=storm_clouds,
+        lightning=lightning,
+        airport_runtime=airport_runtime,
+        hud_disabled_timer=float(getattr(runtime, "hud_disabled_timer", 0.0)),
+        vip_kia_overlay_timer=float(getattr(runtime, "vip_kia_overlay_timer", 0.0)),
+        city_objective_overlay_timer=float(getattr(runtime, "city_objective_overlay_timer", 0.0)),
+        meal_truck_driver_mode=bool(getattr(runtime, "meal_truck_driver_mode", False)),
+        debug_mode=bool(getattr(runtime, "debug_mode", False)),
+        mission_choices=mission_choices,
+        selected_mission_index=selected_mission_index,
+        chopper_choices=chopper_choices,
+        selected_chopper_index=selected_chopper_index,
+        pause_focus=str(getattr(runtime, "pause_focus", "choppers")),
+        muted=bool(getattr(runtime, "muted", False)),
+        quit_confirm=bool(getattr(runtime, "quit_confirm", False)),
+        paused_hint=paused_hint,
+        draw_intro_fn=draw_intro_fn,
+        draw_mission_cutscene_fn=draw_mission_cutscene_fn,
+        draw_sky_fn=draw_sky_fn,
+        draw_ground_fn=draw_ground_fn,
+        draw_mission_fn=draw_mission_fn,
+        draw_airport_world_overlays_fn=draw_airport_world_overlays_fn,
+        draw_flares_fn=draw_flares_fn,
+        draw_explosion_particles_fn=draw_explosion_particles_fn,
+        draw_enemy_damage_fx_fn=draw_enemy_damage_fx_fn,
+        draw_helicopter_damage_fx_fn=draw_helicopter_damage_fx_fn,
+        draw_helicopter_fn=draw_helicopter_fn,
+        draw_impact_sparks_fn=draw_impact_sparks_fn,
+        boarded_count_fn=boarded_count_fn,
+        draw_hud_fn=draw_hud_fn,
+        draw_mission_select_overlay_fn=draw_mission_select_overlay_fn,
+        draw_chopper_select_overlay_fn=draw_chopper_select_overlay_fn,
+        draw_mission_end_overlay_fn=draw_mission_end_overlay_fn,
+        shake_x=shake_x,
+        shake_y=shake_y,
+        debug_show_overlay=debug_show_overlay,
+        toast_message=toast_message,
+        flashes_enabled=flashes_enabled,
+        overlay=overlay,
+        fps=fps,
+        perf_counters=getattr(runtime, "perf_overlay", None),
+        draw_debug_overlay_fn=draw_debug_overlay_fn,
+        draw_toast_fn=draw_toast_fn,
+        draw_damage_flash_fn=draw_damage_flash_fn,
+    )

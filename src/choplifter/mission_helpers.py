@@ -3,8 +3,10 @@ from __future__ import annotations
 """Mission helper functions extracted from mission.py."""
 
 import logging
+import math
 from typing import TYPE_CHECKING
 
+from .barak_mrad import BARAK_LAUNCHER_VISIBLE_STATES
 from .entities import Compound, Enemy, Hostage, Projectile
 from .game_types import EnemyKind, HostageState
 from .math2d import Vec2, clamp
@@ -43,17 +45,71 @@ def _hits_circle(a: Vec2, b: Vec2, radius: float) -> bool:
     return dx * dx + dy * dy <= radius * radius
 
 
+def _distance_point_to_segment_sq(point: Vec2, start: Vec2, end: Vec2) -> float:
+    seg_x = end.x - start.x
+    seg_y = end.y - start.y
+    seg_len_sq = seg_x * seg_x + seg_y * seg_y
+    if seg_len_sq <= 1e-6:
+        dx = point.x - start.x
+        dy = point.y - start.y
+        return dx * dx + dy * dy
+
+    t = clamp(((point.x - start.x) * seg_x + (point.y - start.y) * seg_y) / seg_len_sq, 0.0, 1.0)
+    nearest_x = start.x + seg_x * t
+    nearest_y = start.y + seg_y * t
+    dx = point.x - nearest_x
+    dy = point.y - nearest_y
+    return dx * dx + dy * dy
+
+
+def _distance_segment_to_segment_sq(a0: Vec2, a1: Vec2, b0: Vec2, b1: Vec2) -> float:
+    # Closest-distance approximation for short projectile steps against thin geometry.
+    return min(
+        _distance_point_to_segment_sq(a0, b0, b1),
+        _distance_point_to_segment_sq(a1, b0, b1),
+        _distance_point_to_segment_sq(b0, a0, a1),
+        _distance_point_to_segment_sq(b1, a0, a1),
+    )
+
+
+def _projectile_hits_barak_launcher(p: Projectile, e: Enemy, previous_pos: Vec2 | None = None) -> bool:
+    if str(getattr(e, "mrad_state", "")) not in BARAK_LAUNCHER_VISIBLE_STATES:
+        return False
+
+    angle = float(getattr(e, "launcher_angle", 0.0))
+    ext_progress = clamp(float(getattr(e, "launcher_ext_progress", 0.0)), 0.0, 1.0)
+    launcher_base = Vec2(e.pos.x - 40.0, e.pos.y - 28.0)
+    launcher_length = 36.0 + 44.0 * ext_progress
+    launcher_tip = Vec2(
+        launcher_base.x + launcher_length * math.cos(angle),
+        launcher_base.y - launcher_length * math.sin(angle),
+    )
+    launcher_radius = 12.0
+    if previous_pos is None:
+        return _distance_point_to_segment_sq(p.pos, launcher_base, launcher_tip) <= launcher_radius * launcher_radius
+    return _distance_segment_to_segment_sq(previous_pos, p.pos, launcher_base, launcher_tip) <= launcher_radius * launcher_radius
+
+
 def _projectile_hits_enemy(
     p: Projectile,
     e: Enemy,
     heli: HelicopterSettings,
     tuning: MissionTuning,
+    previous_pos: Vec2 | None = None,
 ) -> bool:
     if e.kind is EnemyKind.TANK:
         w, h = 44.0, 18.0
         left = e.pos.x - w * 0.5
         top = heli.ground_y - h
         return left <= p.pos.x <= left + w and top <= p.pos.y <= top + h
+
+    if e.kind is EnemyKind.BARAK_MRAD:
+        # MRAP body is taller/wider than the legacy tank box, especially readable while moving.
+        w, h = 56.0, 32.0
+        left = e.pos.x - w * 0.5
+        top = heli.ground_y - h
+        body_hit = left <= p.pos.x <= left + w and top <= p.pos.y <= top + h
+        return body_hit or _projectile_hits_barak_launcher(p, e, previous_pos)
 
     if e.kind is EnemyKind.JET:
         return _hits_circle(p.pos, e.pos, radius=20.0)

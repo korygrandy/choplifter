@@ -44,3 +44,25 @@ def resolve_post_frame_mode_transitions(
         restore_doors_after_cutscene=restore_doors_after_cutscene,
         mission_end_auto_returned=mission_end_auto_returned,
     )
+
+
+def apply_mode_transition_effects(
+    *,
+    mode_transition: ModeTransitionResult,
+    runtime: object,
+    helicopter: object,
+    logger: object,
+    audio: object,
+    set_toast: object,
+) -> None:
+    """Apply side effects for resolved post-frame mode transitions."""
+    if mode_transition.restore_doors_after_cutscene:
+        prev_state = bool(getattr(helicopter, "doors_open", False))
+        helicopter.doors_open = bool(getattr(runtime, "doors_open_before_cutscene", False))
+        logger.info(
+            f"DOORS: restored after cutscene | was_open={prev_state} | restored_open={helicopter.doors_open}"
+        )
+        audio.log_audio_channel_snapshot(tag="cutscene_exit", logger=logger)
+
+    if mode_transition.mission_end_auto_returned:
+        set_toast("Mission ended: returning to Mission Select")

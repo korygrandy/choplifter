@@ -19,10 +19,13 @@ from .game_types import ProjectileKind
 
 # Cache for loaded bus sprite
 _bus_sprite_cache: Optional[pygame.Surface] = None
+_bus_sprite_doors_open_cache: Optional[pygame.Surface] = None
 BUS_SPEED_PX_PER_SEC: float = 80.0
 BUS_ACCEL_TIME_S: float = 1.4
 BUS_DECEL_DISTANCE_PX: float = 240.0
 BUS_STOP_X: float = 500.0
+BUS_CREEP_SPEED_PX_PER_SEC: float = 20.0
+BUS_DOOR_ANIMATION_DURATION: float = 0.3  # Duration for opening/closing animation
 
 
 def _clamp01(value: float) -> float:
@@ -55,6 +58,29 @@ def _load_bus_sprite() -> Optional[pygame.Surface]:
         return None
 
 
+def _load_bus_sprite_doors_open() -> Optional[pygame.Surface]:
+    """Load the bus (doors open) sprite from assets. Returns None if loading fails."""
+    global _bus_sprite_doors_open_cache
+	
+    if _bus_sprite_doors_open_cache is not None:
+        return _bus_sprite_doors_open_cache
+	
+    try:
+        module_dir = Path(__file__).resolve().parent
+        bus_asset_path = module_dir / "assets" / "city-bus-doors-open.png"
+        _bus_sprite_doors_open_cache = pygame.image.load(str(bus_asset_path)).convert_alpha()
+        return _bus_sprite_doors_open_cache
+    except Exception:
+        return None
+
+
+@dataclass
+class BusDriverInput:
+    """Player input for manually driving the bus (left/right only)."""
+    move_left: bool = False
+    move_right: bool = False
+
+
 @dataclass
 class BusState:
     """Represents the state of the bus in the Airport mission."""
@@ -63,13 +89,35 @@ class BusState:
     width: int = 64       # Pixel width
     height: int = 24      # Pixel height
     velocity_x: float = 0 # Speed moving left across screen (negative = moving left)
-    is_moving: bool = True  # Whether bus is actively moving
+    is_moving: bool = False  # Whether bus is actively moving
     elapsed_s: float = 0.0
     start_x: float = 0.0
     stop_x: float = BUS_STOP_X
-    phase: str = "accelerating"  # "accelerating", "cruising", "decelerating", "stopped"
+    phase: str = "stopped"       # "accelerating", "cruising", "decelerating", "stopped"
     max_health: float = 100.0
     health: float = 100.0
+    
+    drive_mode: str = "parked"   # "parked" / "forward" / "reset"
+    driver_mode_active: bool = False  # True when player is manually driving
+    # Bus door animation state machine
+    door_state: str = "closed"  # closed/opening/open/closing
+    door_animation_progress: float = 0.0  # 0.0 to 1.0 over 0.3 seconds
+    door_animation_duration: float = 0.3  # Animation duration in seconds
+    door_auto_close_timer_s: float = 0.0  # Optional hold-open timer (used for deboarding)
+    door_auto_close_armed: bool = False
+
+
+def _bus_door_open_blend(bus_state: BusState) -> float:
+    """Return 0..1 blend weight for the doors-open sprite."""
+    state = str(getattr(bus_state, "door_state", "closed"))
+    progress = _clamp01(float(getattr(bus_state, "door_animation_progress", 0.0)))
+    if state == "open":
+        return 1.0
+    if state == "opening":
+        return progress
+    if state == "closing":
+        return 1.0 - progress
+    return 0.0
 
 
 def create_bus_state(start_x: float = 1200, ground_y: float = 400) -> BusState:
@@ -83,7 +131,34 @@ def create_bus_state(start_x: float = 1200, ground_y: float = 400) -> BusState:
     return BusState(x=start_x, y=ground_y, start_x=start_x)
 
 
-def update_bus_ai(bus_state: BusState, dt: float, audio=None) -> BusState:
+def _run_bus_door_animation(bus_state: BusState, dt: float) -> None:
+    """Advance the door open/close animation one tick."""
+    door_state = getattr(bus_state, "door_state", "closed")
+    was_open_at_tick_start = door_state == "open"
+    door_progress = getattr(bus_state, "door_animation_progress", 0.0)
+    door_duration = getattr(bus_state, "door_animation_duration", BUS_DOOR_ANIMATION_DURATION)
+    if door_state == "opening":
+        door_progress += dt / door_duration
+        if door_progress >= 1.0:
+            door_progress = 1.0
+            bus_state.door_state = "open"
+        bus_state.door_animation_progress = door_progress
+    elif door_state == "closing":
+        door_progress += dt / door_duration
+        if door_progress >= 1.0:
+            door_progress = 1.0
+            bus_state.door_state = "closed"
+        bus_state.door_animation_progress = door_progress
+
+    if bool(getattr(bus_state, "door_auto_close_armed", False)) and was_open_at_tick_start and str(getattr(bus_state, "door_state", "closed")) == "open":
+        hold = max(0.0, float(getattr(bus_state, "door_auto_close_timer_s", 0.0)) - float(dt))
+        bus_state.door_auto_close_timer_s = hold
+        if hold <= 0.0:
+            bus_state.door_auto_close_armed = False
+            close_bus_doors(bus_state)
+
+
+def update_bus_ai(bus_state: BusState, dt: float, audio=None, *, mission_phase: str = "waiting_for_tech_deploy", tech_on_bus: bool = False, driver_input=None) -> BusState:
     """
     Update bus position and behavior.
     
@@ -95,36 +170,122 @@ def update_bus_ai(bus_state: BusState, dt: float, audio=None) -> BusState:
     Returns:
         Updated bus state
     """
-    if bus_state.is_moving:
-        prev_phase = bus_state.phase
-        bus_state.elapsed_s += dt
-
-        # Ease in from rest based on elapsed time.
-        accel_factor = _smoothstep01(bus_state.elapsed_s / BUS_ACCEL_TIME_S)
-
-        # Ease out as we approach the final stop x.
-        distance_to_stop = max(0.0, bus_state.x - bus_state.stop_x)
-        decel_factor = _smoothstep01(distance_to_stop / BUS_DECEL_DISTANCE_PX)
-
-        # Determine which factor is limiting (acceleration vs deceleration)
-        if accel_factor < 1.0:
-            bus_state.phase = "accelerating"
-        elif decel_factor < accel_factor:
-            bus_state.phase = "decelerating"
-        else:
+    # --- Manual driver override: player is in the bus cab ---
+    if bus_state.driver_mode_active and driver_input is not None:
+        if driver_input.move_left:
+            bus_state.velocity_x = -BUS_SPEED_PX_PER_SEC
+            bus_state.is_moving = True
             bus_state.phase = "cruising"
+        elif driver_input.move_right:
+            bus_state.velocity_x = BUS_SPEED_PX_PER_SEC
+            bus_state.is_moving = True
+            bus_state.phase = "cruising"
+        else:
+            bus_state.velocity_x = 0.0
+            bus_state.is_moving = False
+            bus_state.phase = "stopped"
+        bus_state.x += bus_state.velocity_x * dt
+        if bus_state.x > bus_state.start_x:
+            bus_state.x = bus_state.start_x
+        if bus_state.x <= bus_state.stop_x:
+            bus_state.x = bus_state.stop_x
+            bus_state.velocity_x = 0.0
+            bus_state.is_moving = False
+            bus_state.phase = "stopped"
+            bus_state.drive_mode = "parked"
+        _run_bus_door_animation(bus_state, dt)
+        return bus_state
 
-        # Play sounds on phase transitions
-        if audio is not None:
-            if prev_phase == "accelerating" and bus_state.phase == "accelerating" and bus_state.elapsed_s < dt * 1.5:
-                # Play acceleration sound once at start
+    # --- Phase-gated auto-drive (player is in the chopper) ---
+    # ------------------------------------------------------------------
+    # Phase-gated drive modes.
+    # - truck_driving_to_bus: slow creep left so transfer lane is reachable
+    # - escort_to_lz (+ tech_on_bus): full drive to mission stop_x
+    # - auto_reset: drive right back to start_x
+    # - everything else: parked
+    # ------------------------------------------------------------------
+    if mission_phase == "auto_reset":
+        target_drive_mode = "reset"
+    elif mission_phase == "truck_driving_to_bus":
+        target_drive_mode = "forward"
+    elif mission_phase == "escort_to_lz" and bool(tech_on_bus):
+        target_drive_mode = "forward"
+    else:
+        target_drive_mode = "parked"
+
+    prev_is_moving = bool(getattr(bus_state, "is_moving", False))
+    if target_drive_mode != bus_state.drive_mode:
+        if target_drive_mode == "forward":
+            # Tech just boarded — start escort drive from rest.
+            bus_state.drive_mode = "forward"
+            bus_state.is_moving = True
+            bus_state.elapsed_s = 0.0   # reset accel ramp
+            bus_state.phase = "accelerating"
+            if audio is not None and hasattr(audio, "play_bus_accelerate"):
                 audio.play_bus_accelerate()
-            elif prev_phase != "decelerating" and bus_state.phase == "decelerating":
-                # Play brake sound when entering deceleration
+        elif target_drive_mode == "reset":
+            bus_state.drive_mode = "reset"
+            bus_state.is_moving = True
+            bus_state.phase = "cruising"
+            if audio is not None and hasattr(audio, "play_bus_accelerate"):
+                audio.play_bus_accelerate()
+        else:
+            # Escort cancelled or mission over — stop the bus.
+            bus_state.drive_mode = "parked"
+            bus_state.is_moving = False
+            bus_state.velocity_x = 0.0
+            bus_state.phase = "stopped"
+            if prev_is_moving and audio is not None and hasattr(audio, "play_bus_brakes"):
                 audio.play_bus_brakes()
 
-        speed_factor = min(accel_factor, decel_factor)
-        bus_state.velocity_x = -BUS_SPEED_PX_PER_SEC * speed_factor
+    if bus_state.is_moving and bus_state.drive_mode == "reset":
+        bus_state.phase = "cruising"
+        bus_state.velocity_x = BUS_SPEED_PX_PER_SEC
+        bus_state.x += bus_state.velocity_x * dt
+
+        if bus_state.x >= bus_state.start_x - 1.0:
+            bus_state.x = bus_state.start_x
+            bus_state.velocity_x = 0.0
+            bus_state.is_moving = False
+            bus_state.phase = "stopped"
+            bus_state.drive_mode = "parked"
+
+    elif bus_state.is_moving:
+        prev_phase = bus_state.phase
+        if mission_phase == "truck_driving_to_bus":
+            # Gentle pre-transfer movement to keep the bus in the active lane.
+            bus_state.phase = "cruising"
+            bus_state.velocity_x = -BUS_CREEP_SPEED_PX_PER_SEC
+        else:
+            bus_state.elapsed_s += dt
+
+            # Ease in from rest based on elapsed time.
+            accel_factor = _smoothstep01(bus_state.elapsed_s / BUS_ACCEL_TIME_S)
+
+            # Ease out as we approach the final stop x.
+            distance_to_stop = max(0.0, bus_state.x - bus_state.stop_x)
+            decel_factor = _smoothstep01(distance_to_stop / BUS_DECEL_DISTANCE_PX)
+
+            # Determine which factor is limiting (acceleration vs deceleration)
+            if accel_factor < 1.0:
+                bus_state.phase = "accelerating"
+            elif decel_factor < accel_factor:
+                bus_state.phase = "decelerating"
+            else:
+                bus_state.phase = "cruising"
+
+            # Play sounds on phase transitions
+            if audio is not None:
+                if prev_phase == "accelerating" and bus_state.phase == "accelerating" and bus_state.elapsed_s < dt * 1.5:
+                    # Play acceleration sound once at start
+                    audio.play_bus_accelerate()
+                elif prev_phase != "decelerating" and bus_state.phase == "decelerating":
+                    # Play brake sound when entering deceleration
+                    audio.play_bus_brakes()
+
+            speed_factor = min(accel_factor, decel_factor)
+            bus_state.velocity_x = -BUS_SPEED_PX_PER_SEC * speed_factor
+
         bus_state.x += bus_state.velocity_x * dt
 
         # Snap to the final stop point when nearly there.
@@ -133,11 +294,49 @@ def update_bus_ai(bus_state: BusState, dt: float, audio=None) -> BusState:
             bus_state.velocity_x = 0.0
             bus_state.is_moving = False
             bus_state.phase = "stopped"
-    
+            bus_state.drive_mode = "parked"  # arrived at LZ
+
+    _run_bus_door_animation(bus_state, dt)
+    if prev_is_moving and not bool(getattr(bus_state, "is_moving", False)):
+        if audio is not None and hasattr(audio, "play_bus_brakes"):
+            audio.play_bus_brakes()
     return bus_state
 
 
-def draw_airport_bus(target: pygame.Surface, bus_state: BusState, camera_x: float) -> None:
+def open_bus_doors(bus_state: BusState, *, audio=None, auto_close_delay_s: float | None = None) -> None:
+    """Trigger bus door opening animation."""
+    current_state = getattr(bus_state, "door_state", "closed")
+    if auto_close_delay_s is not None:
+        bus_state.door_auto_close_timer_s = max(0.0, float(auto_close_delay_s))
+        bus_state.door_auto_close_armed = True
+    else:
+        bus_state.door_auto_close_timer_s = 0.0
+        bus_state.door_auto_close_armed = False
+    if current_state in ("closed", "closing"):
+        bus_state.door_state = "opening"
+        bus_state.door_animation_progress = 0.0
+        if audio is not None and hasattr(audio, "play_bus_door"):
+            audio.play_bus_door()
+
+
+def close_bus_doors(bus_state: BusState, *, audio=None) -> None:
+    """Trigger bus door closing animation."""
+    current_state = getattr(bus_state, "door_state", "closed")
+    bus_state.door_auto_close_timer_s = 0.0
+    bus_state.door_auto_close_armed = False
+    if current_state in ("open", "opening"):
+        bus_state.door_state = "closing"
+        bus_state.door_animation_progress = 0.0
+        if audio is not None and hasattr(audio, "play_bus_door"):
+            audio.play_bus_door()
+
+
+def are_bus_doors_open(bus_state: BusState) -> bool:
+    """Check if bus doors are fully open (transfer can occur)."""
+    return getattr(bus_state, "door_state", "closed") == "open"
+
+
+def draw_airport_bus(target: pygame.Surface, bus_state: BusState, camera_x: float, *, boarded_count: int = 0, tech_on_bus: bool = False) -> None:
     """
     Draw the bus on screen.
     
@@ -145,15 +344,32 @@ def draw_airport_bus(target: pygame.Surface, bus_state: BusState, camera_x: floa
         target: Pygame surface to draw on
         bus_state: Current bus state
         camera_x: Camera x position for world-to-screen conversion
+        boarded_count: Number of passengers currently boarded on bus
+        tech_on_bus: Whether mission tech has transferred onto bus
     """
     screen_x = int(bus_state.x - camera_x)
     screen_y = int(bus_state.y - bus_state.height)
     
-    # Try to load and render the bus sprite
-    sprite = _load_bus_sprite()
-    if sprite:
-        # Render the actual bus sprite (front already points left)
-        target.blit(sprite, (screen_x, screen_y))
+    closed_sprite = _load_bus_sprite()
+    open_sprite = _load_bus_sprite_doors_open()
+    blend_open = _bus_door_open_blend(bus_state)
+
+    if closed_sprite is not None and open_sprite is not None:
+        # Cross-fade bus door sprites during opening/closing animation.
+        base = closed_sprite.copy()
+        if blend_open >= 0.999:
+            target.blit(open_sprite, (screen_x, screen_y))
+        elif blend_open <= 0.001:
+            target.blit(base, (screen_x, screen_y))
+        else:
+            over = open_sprite.copy()
+            over.set_alpha(int(255.0 * blend_open))
+            base.blit(over, (0, 0))
+            target.blit(base, (screen_x, screen_y))
+    elif closed_sprite is not None:
+        target.blit(closed_sprite, (screen_x, screen_y))
+    elif open_sprite is not None:
+        target.blit(open_sprite, (screen_x, screen_y))
     else:
         # Fallback: Draw bus body (blue rectangle with darker border)
         bus_rect = pygame.Rect(screen_x, screen_y, bus_state.width, bus_state.height)
@@ -165,6 +381,29 @@ def draw_airport_bus(target: pygame.Surface, bus_state: BusState, camera_x: floa
         wheel_radius = 3
         pygame.draw.circle(target, (50, 50, 50), (screen_x + 12, wheel_y), wheel_radius)
         pygame.draw.circle(target, (50, 50, 50), (screen_x + 52, wheel_y), wheel_radius)
+
+    # Passenger count indicator above bus after transfer.
+    if int(boarded_count) > 0:
+        label = f"x{int(boarded_count)}"
+        try:
+            font = pygame.font.SysFont("Consolas", 16, bold=True)
+        except Exception:
+            font = pygame.font.Font(None, 20)
+        text = font.render(label, True, (255, 235, 205))
+        text_rect = text.get_rect(center=(screen_x + bus_state.width // 2, screen_y - 18))
+        bg_rect = text_rect.inflate(8, 4)
+        pygame.draw.rect(target, (20, 24, 30, 190), bg_rect, border_radius=4)
+        pygame.draw.rect(target, (90, 100, 120), bg_rect, 1, border_radius=4)
+        target.blit(text, text_rect)
+
+    # Mission Tech badge above bus once engineer has boarded.
+    if bool(tech_on_bus):
+        badge_center = (screen_x + bus_state.width // 2 + 28, screen_y - 18)
+        pygame.draw.circle(target, (24, 30, 26), badge_center, 8)
+        pygame.draw.circle(target, (140, 225, 140), badge_center, 8, 2)
+        # Tiny wrench-like icon.
+        pygame.draw.rect(target, (170, 235, 170), pygame.Rect(badge_center[0] - 1, badge_center[1] - 4, 2, 6))
+        pygame.draw.rect(target, (170, 235, 170), pygame.Rect(badge_center[0] - 4, badge_center[1] - 5, 6, 2))
 
 
 def apply_airport_bus_friendly_fire(bus_state: BusState | None, mission, *, logger=None) -> int:

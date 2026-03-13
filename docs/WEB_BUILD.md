@@ -21,7 +21,7 @@ Note:
   - `pygbag --build --disable-sound-format-error run.py`
 
 Note:
-- `pygbag` prefers `.ogg` for web audio. This project still includes WAV assets, so `--disable-sound-format-error` is used for compatibility.
+- `pygbag` prefers `.ogg` for web audio. The runtime SFX assets are now `.ogg`, so the browser audio path aligns with the packaged desktop assets.
 
 Notes:
 - If you run into asset-loading issues in the browser, ensure assets are referenced via package-relative paths.

@@ -81,6 +81,7 @@ def _try_load_asset_sound(path: Path) -> pygame.mixer.Sound | None:
 BusName = Literal["sfx", "ui", "music"]
 
 # Dedicated channels reserved outside bus pools for persistent/key sounds.
+DEDICATED_CH_WARNING_BEEPS = 7
 DEDICATED_CH_FLYING_LOOP = 14
 DEDICATED_CH_BARAK_DEPLOY = 16
 DEDICATED_CH_BARAK_LAUNCH = 17
@@ -113,7 +114,8 @@ class AudioMixer:
         pygame.mixer.set_num_channels(total_channels)
         # Keep 14/16/17 reserved for dedicated persistent/key sounds.
         bus_layout = {
-            "sfx": list(range(0, 8)),
+            # Keep channel 7 reserved for low-health warning beeps.
+            "sfx": list(range(0, 7)) + [15],
             "ui": list(range(8, 10)),
             "music": list(range(10, 14)),
         }
@@ -194,9 +196,9 @@ class AudioBank:
         try:
             if self.mixer is not None:
                 # Stop dedicated channel 7 (used for warning beeps)
-                pygame.mixer.Channel(7).stop()
+                pygame.mixer.Channel(DEDICATED_CH_WARNING_BEEPS).stop()
             elif self.chopper_warning_beeps is not None:
-                pygame.mixer.Channel(7).stop()
+                pygame.mixer.Channel(DEDICATED_CH_WARNING_BEEPS).stop()
         except Exception:
             pass
 
@@ -235,8 +237,8 @@ class AudioBank:
             import os
             module_dir = Path(__file__).resolve().parent
             asset_dir = module_dir / "assets"
-            male = _try_load_asset_sound(asset_dir / "male-scream.wav")
-            female = _try_load_asset_sound(asset_dir / "female-scream.wav")
+            male = _try_load_asset_sound(asset_dir / "male-scream.ogg")
+            female = _try_load_asset_sound(asset_dir / "female-scream.ogg")
             self._hostage_scream_sounds = [s for s in (male, female) if s is not None]
         if not self._hostage_scream_sounds:
             return
@@ -254,7 +256,7 @@ class AudioBank:
         if self.mixer is not None:
             self.mixer.play(self.chopper_warning_beeps, bus="sfx", dedicated_channel=7)
         elif self.chopper_warning_beeps is not None:
-            pygame.mixer.Channel(7).play(self.chopper_warning_beeps)
+            pygame.mixer.Channel(DEDICATED_CH_WARNING_BEEPS).play(self.chopper_warning_beeps)
     # Ducking state variables (for audio ducking/fading)
     _duck_remaining_s: float = field(default=0.0, init=False, repr=False)
     _duck_total_s: float = field(default=0.0, init=False, repr=False)
@@ -290,6 +292,9 @@ class AudioBank:
     bus_accelerate: pygame.mixer.Sound | None
     bus_brakes: pygame.mixer.Sound | None
     bus_door: pygame.mixer.Sound | None
+    hang_on_yall: pygame.mixer.Sound | None
+    carjacked_mealtruck: pygame.mixer.Sound | None
+    barak_explosion: pygame.mixer.Sound | None
 
     def play_barak_mrad_deploy(self) -> None:
         if self.barak_mrad_deploy is None:
@@ -304,6 +309,7 @@ class AudioBank:
         if self.barak_mrad_launch is None:
             return
         if self.mixer is not None:
+            # Separate dedicated lanes allow deploy and launch cues to overlap.
             self.mixer.play(self.barak_mrad_launch, bus="sfx", dedicated_channel=DEDICATED_CH_BARAK_LAUNCH)
         else:
             self.barak_mrad_launch.play()
@@ -463,8 +469,8 @@ class AudioBank:
 
             explosion = explosion_big
 
-            mine_explosion = _try_load_asset_sound(asset_dir / "mine-explosion.wav")
-            flare_defense = _try_load_asset_sound(asset_dir / "flare-defense.wav")
+            mine_explosion = _try_load_asset_sound(asset_dir / "mine-explosion.ogg")
+            flare_defense = _try_load_asset_sound(asset_dir / "flare-defense.ogg")
 
             door_o = _sine_pcm16(freq_hz=392.0, duration_s=0.06, volume=0.22, sample_rate=sample_rate)
             door_c = _sine_pcm16(freq_hz=294.0, duration_s=0.06, volume=0.22, sample_rate=sample_rate)
@@ -482,30 +488,30 @@ class AudioBank:
             crash_a = _sine_pcm16(freq_hz=48.0, duration_s=0.40, volume=0.42, sample_rate=sample_rate, fade_out_s=0.25)
             crash = pygame.mixer.Sound(buffer=crash_a)
 
-            artillery_shot = _try_load_asset_sound(asset_dir / "artillery-shot.wav")
-            artillery_impact_a = _try_load_asset_sound(asset_dir / "artillery-impact.wav")
-            artillery_impact_b = _try_load_asset_sound(asset_dir / "alternate-artillery-impact.wav")
+            artillery_shot = _try_load_asset_sound(asset_dir / "artillery-shot.ogg")
+            artillery_impact_a = _try_load_asset_sound(asset_dir / "artillery-impact.ogg")
+            artillery_impact_b = _try_load_asset_sound(asset_dir / "alternate-artillery-impact.ogg")
             jet_flyby = _try_load_asset_sound(asset_dir / "fighter-jet-flyby.ogg")
 
-            menu_select = _try_load_asset_sound(asset_dir / "menu-select.wav")
-            pause = _try_load_asset_sound(asset_dir / "pause.wav")
-            midair_collision = _try_load_asset_sound(asset_dir / "midair-collission.wav")
-            chopper_warning_beeps = _try_load_asset_sound(asset_dir / "chopper-warning-beeps.wav")
+            menu_select = _try_load_asset_sound(asset_dir / "menu-select.ogg")
+            pause = _try_load_asset_sound(asset_dir / "pause.ogg")
+            midair_collision = _try_load_asset_sound(asset_dir / "midair-collission.ogg")
+            chopper_warning_beeps = _try_load_asset_sound(asset_dir / "chopper-warning-beeps.ogg")
 
-            explosion_big = _try_load_asset_sound(asset_dir / "explosion_big.wav") or explosion_big
-            explosion_small = _try_load_asset_sound(asset_dir / "explosion_small.wav") or explosion_small
+            explosion_big = _try_load_asset_sound(asset_dir / "explosion_big.ogg") or explosion_big
+            explosion_small = _try_load_asset_sound(asset_dir / "explosion_small.ogg") or explosion_small
             shoot = (
-                _try_load_asset_sound(asset_dir / "gunfire.wav")
-                or _try_load_asset_sound(asset_dir / "shoot.wav")
+                _try_load_asset_sound(asset_dir / "gunfire.ogg")
+                or _try_load_asset_sound(asset_dir / "shoot.ogg")
                 or shoot
             )
-            bomb = _try_load_asset_sound(asset_dir / "bomb.wav") or bomb
-            rescue = _try_load_asset_sound(asset_dir / "rescue.wav") or rescue
-            crash = _try_load_asset_sound(asset_dir / "crash.wav") or crash
-            chopper_crash = _try_load_asset_sound(asset_dir / "chopper-crash.wav")
-            doors_open = _try_load_asset_sound(asset_dir / "doors_open.wav") or doors_open
-            doors_close = _try_load_asset_sound(asset_dir / "doors_close.wav") or doors_close
-            board = _try_load_asset_sound(asset_dir / "board.wav") or board
+            bomb = _try_load_asset_sound(asset_dir / "bomb.ogg") or bomb
+            rescue = _try_load_asset_sound(asset_dir / "rescue.ogg") or rescue
+            crash = _try_load_asset_sound(asset_dir / "crash.ogg") or crash
+            chopper_crash = _try_load_asset_sound(asset_dir / "chopper-crash.ogg")
+            doors_open = _try_load_asset_sound(asset_dir / "doors_open.ogg") or doors_open
+            doors_close = _try_load_asset_sound(asset_dir / "doors_close.ogg") or doors_close
+            board = _try_load_asset_sound(asset_dir / "board.ogg") or board
             flying_loop = _try_load_asset_sound(asset_dir / "chopper-flying.ogg")
 
             shoot.set_volume(0.35)
@@ -539,15 +545,11 @@ class AudioBank:
             if pause is not None:
                 pause.set_volume(0.55)
 
-            # Asset in repository is currently named barak-depoying.wav (typo preserved).
-            barak_mrad_deploy = (
-                _try_load_asset_sound(asset_dir / "barak-depoying.wav")
-                or _try_load_asset_sound(asset_dir / "barak-deploying.wav")
-            )
+            barak_mrad_deploy = _try_load_asset_sound(asset_dir / "barak-deploying.ogg")
             if barak_mrad_deploy is not None:
                 barak_mrad_deploy.set_volume(0.66)
 
-            barak_mrad_launch = _try_load_asset_sound(asset_dir / "barak-launched.wav")
+            barak_mrad_launch = _try_load_asset_sound(asset_dir / "barak-launched.ogg")
             if barak_mrad_launch is not None:
                 barak_mrad_launch.set_volume(0.58)
 
@@ -561,6 +563,18 @@ class AudioBank:
             bus_door = _try_load_asset_sound(asset_dir / "bus-door.ogg")
             if bus_door is not None:
                 bus_door.set_volume(0.50)
+            hang_on_yall = _try_load_asset_sound(asset_dir / "hang-on-yall.ogg")
+            if hang_on_yall is not None:
+                hang_on_yall.set_volume(0.58)
+            carjacked_mealtruck = _try_load_asset_sound(asset_dir / "carjacked-mealtruck.ogg")
+            if carjacked_mealtruck is not None:
+                carjacked_mealtruck.set_volume(0.62)
+            barak_explosion = (
+                _try_load_asset_sound(asset_dir / "barak-explosion.ogg")
+                or _try_load_asset_sound(asset_dir / "barrak-explosion.ogg")
+            )
+            if barak_explosion is not None:
+                barak_explosion.set_volume(0.72)
             return AudioBank(
                 mixer=mixer,
                 shoot=shoot,
@@ -590,6 +604,9 @@ class AudioBank:
                 bus_accelerate=bus_accelerate,
                 bus_brakes=bus_brakes,
                 bus_door=bus_door,
+                hang_on_yall=hang_on_yall,
+                carjacked_mealtruck=carjacked_mealtruck,
+                barak_explosion=barak_explosion,
             )
         except Exception as e:
             print(f"[AudioBank] Failed to initialize: {e}")
@@ -622,6 +639,9 @@ class AudioBank:
                 bus_accelerate=None,
                 bus_brakes=None,
                 bus_door=None,
+                hang_on_yall=None,
+                carjacked_mealtruck=None,
+                barak_explosion=None,
             )
             r2 = _sine_pcm16(freq_hz=988.0, duration_s=0.10, volume=0.22, sample_rate=sample_rate)
             rescue = pygame.mixer.Sound(buffer=_mix_pcm16([r1, r2], volume=0.85))
@@ -629,32 +649,32 @@ class AudioBank:
             crash_a = _sine_pcm16(freq_hz=48.0, duration_s=0.40, volume=0.42, sample_rate=sample_rate, fade_out_s=0.25)
             crash = pygame.mixer.Sound(buffer=crash_a)
 
-            artillery_shot = _try_load_asset_sound(asset_dir / "artillery-shot.wav")
-            artillery_impact_a = _try_load_asset_sound(asset_dir / "artillery-impact.wav")
-            artillery_impact_b = _try_load_asset_sound(asset_dir / "alternate-artillery-impact.wav")
+            artillery_shot = _try_load_asset_sound(asset_dir / "artillery-shot.ogg")
+            artillery_impact_a = _try_load_asset_sound(asset_dir / "artillery-impact.ogg")
+            artillery_impact_b = _try_load_asset_sound(asset_dir / "alternate-artillery-impact.ogg")
             jet_flyby = _try_load_asset_sound(asset_dir / "fighter-jet-flyby.ogg")
 
-            menu_select = _try_load_asset_sound(asset_dir / "menu-select.wav")
-            pause = _try_load_asset_sound(asset_dir / "pause.wav")
-            midair_collision = _try_load_asset_sound(asset_dir / "midair-collission.wav")
-            chopper_warning_beeps = _try_load_asset_sound(asset_dir / "chopper-warning-beeps.wav")
+            menu_select = _try_load_asset_sound(asset_dir / "menu-select.ogg")
+            pause = _try_load_asset_sound(asset_dir / "pause.ogg")
+            midair_collision = _try_load_asset_sound(asset_dir / "midair-collission.ogg")
+            chopper_warning_beeps = _try_load_asset_sound(asset_dir / "chopper-warning-beeps.ogg")
 
             # Override placeholders with external files if provided.
             # (These are optional: game stays playable without them.)
-            explosion_big = _try_load_asset_sound(asset_dir / "explosion_big.wav") or explosion_big
-            explosion_small = _try_load_asset_sound(asset_dir / "explosion_small.wav") or explosion_small
+            explosion_big = _try_load_asset_sound(asset_dir / "explosion_big.ogg") or explosion_big
+            explosion_small = _try_load_asset_sound(asset_dir / "explosion_small.ogg") or explosion_small
             shoot = (
-                _try_load_asset_sound(asset_dir / "gunfire.wav")
-                or _try_load_asset_sound(asset_dir / "shoot.wav")
+                _try_load_asset_sound(asset_dir / "gunfire.ogg")
+                or _try_load_asset_sound(asset_dir / "shoot.ogg")
                 or shoot
             )
-            bomb = _try_load_asset_sound(asset_dir / "bomb.wav") or bomb
-            rescue = _try_load_asset_sound(asset_dir / "rescue.wav") or rescue
-            crash = _try_load_asset_sound(asset_dir / "crash.wav") or crash
-            chopper_crash = _try_load_asset_sound(asset_dir / "chopper-crash.wav")
-            doors_open = _try_load_asset_sound(asset_dir / "doors_open.wav") or doors_open
-            doors_close = _try_load_asset_sound(asset_dir / "doors_close.wav") or doors_close
-            board = _try_load_asset_sound(asset_dir / "board.wav") or board
+            bomb = _try_load_asset_sound(asset_dir / "bomb.ogg") or bomb
+            rescue = _try_load_asset_sound(asset_dir / "rescue.ogg") or rescue
+            crash = _try_load_asset_sound(asset_dir / "crash.ogg") or crash
+            chopper_crash = _try_load_asset_sound(asset_dir / "chopper-crash.ogg")
+            doors_open = _try_load_asset_sound(asset_dir / "doors_open.ogg") or doors_open
+            doors_close = _try_load_asset_sound(asset_dir / "doors_close.ogg") or doors_close
+            board = _try_load_asset_sound(asset_dir / "board.ogg") or board
             flying_loop = _try_load_asset_sound(asset_dir / "chopper-flying.ogg")
 
             # Keep levels conservative.
@@ -716,7 +736,7 @@ class AudioBank:
                 pygame.mixer.Channel(DEDICATED_CH_FLYING_LOOP).set_volume(music_vol)
                 pygame.mixer.Channel(DEDICATED_CH_BARAK_DEPLOY).set_volume(sfx_vol)
                 pygame.mixer.Channel(DEDICATED_CH_BARAK_LAUNCH).set_volume(sfx_vol)
-                pygame.mixer.Channel(7).set_volume(sfx_vol)  # warning beeps
+                pygame.mixer.Channel(DEDICATED_CH_WARNING_BEEPS).set_volume(sfx_vol)
             except Exception:
                 pass
             return
@@ -888,3 +908,12 @@ class AudioBank:
 
     def play_bus_door(self) -> None:
         self._play(self.bus_door, bus="sfx")
+
+    def play_hang_on_yall(self) -> None:
+        self._play(self.hang_on_yall, bus="sfx")
+
+    def play_carjacked_mealtruck(self) -> None:
+        self._play(self.carjacked_mealtruck, bus="sfx")
+
+    def play_barak_explosion(self) -> None:
+        self._play(self.barak_explosion, bus="sfx")

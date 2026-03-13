@@ -12,6 +12,7 @@ from .fx.flares import FlareSystem
 from .fx.jet_trails import JetTrailSystem
 from .fx.dust_storm import DustStormSystem
 from .fx.helicopter_damage_fx import HelicopterDamageFxSystem
+from .fx.enemy_damage_fx import EnemyDamageFxSystem
 from .fx.explosions import ExplosionSystem
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "JetTrailSystem",
     "DustStormSystem",
     "HelicopterDamageFxSystem",
+    "EnemyDamageFxSystem",
     "ExplosionSystem",
 ]

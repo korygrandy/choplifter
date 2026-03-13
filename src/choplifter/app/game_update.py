@@ -167,7 +167,11 @@ def step_playing_helicopter(
         physics,
         heli_settings,
         world_width=float(getattr(mission, "world_width", 0.0)),
-        invulnerable=(float(getattr(mission, "invuln_seconds", 0.0)) > 0.0 or bool(getattr(mission, "ended", False))),
+        invulnerable=(
+            float(getattr(mission, "invuln_seconds", 0.0)) > 0.0
+            or bool(getattr(mission, "ended", False))
+            or bool(getattr(mission, "engineer_remote_control_active", False))
+        ),
     )
 
     is_grounded = bool(getattr(helicopter, "grounded", False))
@@ -213,6 +217,12 @@ def process_playing_progression(
             campaign_sentiment=playing_end.campaign_sentiment,
             boarded_now=0,
         )
+
+    # Keep warning beeps in sync with current health state even after heals/repairs.
+    if float(getattr(helicopter, "damage", 0.0)) < 70.0:
+        stop_warning_beeps = getattr(audio, "stop_chopper_warning_beeps", None)
+        if callable(stop_warning_beeps):
+            stop_warning_beeps()
 
     # Consume cinematic feedback impulses produced by mission damage events.
     consume_mission_feedback(

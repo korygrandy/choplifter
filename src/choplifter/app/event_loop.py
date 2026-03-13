@@ -1,410 +1,468 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable, Sequence
 import pygame
+from dataclasses import dataclass
+from typing import Any, Callable, Sequence
+
+from ..controls import matches_key
+from .gamepad_pause_flow import handle_gamepad_pause_flow
+from .gamepads import handle_joy_device_added, handle_joy_device_removed
+from .joybutton_events import handle_joybuttondown_event
+from .keydown_preflight import KeydownPreflightResult, handle_keydown_preflight
+from .keyboard_events import handle_keyboard_event
+from .mission_pause_transitions import PauseTransitionResult, apply_pause_transition, handle_mission_end_gamepad_navigation, handle_mission_end_keyboard_navigation
+from .nonpaused_gamepad_mode_flow import handle_nonpaused_gamepad_mode_flow
+from .pause_controls import handle_gamepad_pause_button, handle_pause_quit_confirm_gamepad
+from .pause_menu_effects import apply_paused_gameplay_shortcuts, apply_paused_menu_decision
+from .pause_menu_inputs import resolve_paused_mode_inputs
+from .paused_gamepad_mode_flow import handle_paused_gamepad_mode_flow
+from .playing_keyboard_inputs import handle_playing_keyboard_special_cases
+from .loop_state_updates import apply_keydown_result, apply_joybutton_result
 
 
-def handle_mission_end_keyboard_navigation(*, key: int, mode: str, mission_ended: bool, set_toast: Callable[[str], None]) -> tuple[bool, str]:
-    """Handle key navigation while the mission-end screen is active."""
-    if not (mode == "mission_end" or mission_ended):
-        return False, mode
-
-    if key in (pygame.K_ESCAPE, pygame.K_PAUSE, pygame.K_RETURN, pygame.K_KP_ENTER):
-        set_toast("Mission ended: returning to Mission Select")
-        return True, "select_mission"
-
-    # Consume all other keys while in mission-end state.
-    return True, mode
-
-
-def handle_mission_end_gamepad_navigation(*, button: int, mode: str, set_toast: Callable[[str], None]) -> tuple[bool, str]:
-    """Handle gamepad navigation while the mission-end screen is active."""
-    if mode != "mission_end":
-        return False, mode
-
-    if button == 7:  # Start button
-        set_toast("Mission ended: returning to Mission Select")
-        return True, "select_mission"
-
-    return True, mode
-
-
-def handle_pause_quit_confirm_keydown(*, mode: str, quit_confirm: bool, key: int) -> tuple[bool, bool, bool]:
-    """Handle paused quit-confirm keyboard flow.
-
-    Returns: (handled, running, quit_confirm)
-    """
-    if not (mode == "paused" and quit_confirm):
-        return False, True, quit_confirm
-
-    if key in (pygame.K_RETURN, pygame.K_SPACE):
-        return True, False, quit_confirm
-
-    if key == pygame.K_ESCAPE:
-        return True, True, False
-
-    return False, True, quit_confirm
-
-
-def handle_gamepad_pause_button(
-    *,
-    mode: str,
-    start_down: bool,
-    prev_btn_start_down: bool,
-    b_down: bool,
-    prev_btn_b_down: bool,
-    just_paused_with_start: bool,
-) -> tuple[str, bool, bool, bool]:
-    """Handle Start/B pause toggling.
-
-    Returns: (next_mode, next_just_paused_with_start, toggled_pause_state, clear_quit_confirm)
-    """
-    start_edge = bool(start_down and not prev_btn_start_down)
-    b_edge = bool(b_down and not prev_btn_b_down)
-
-    if mode == "playing" and start_edge:
-        return "paused", True, True, False
-
-    if mode == "paused":
-        if (start_edge and not just_paused_with_start) or b_edge:
-            return "playing", False, True, True
-        if (not start_down) and prev_btn_start_down and just_paused_with_start:
-            return mode, False, False, False
-
-    return mode, just_paused_with_start, False, False
-
-
-def should_skip_on_gamepad_buttons(
-    *,
-    a_down: bool,
-    prev_btn_a_down: bool,
-    b_down: bool,
-    prev_btn_b_down: bool,
-    x_down: bool,
-    prev_btn_x_down: bool,
-    y_down: bool,
-    prev_btn_y_down: bool,
-    start_down: bool,
-    prev_btn_start_down: bool,
-    rb_down: bool,
-    prev_btn_rb_down: bool,
-    lb_down: bool,
-    prev_btn_lb_down: bool,
-) -> bool:
-    """Return True when any skip-eligible gamepad button is newly pressed."""
-    return bool(
-        (a_down and not prev_btn_a_down)
-        or (b_down and not prev_btn_b_down)
-        or (x_down and not prev_btn_x_down)
-        or (y_down and not prev_btn_y_down)
-        or (start_down and not prev_btn_start_down)
-        or (rb_down and not prev_btn_rb_down)
-        or (lb_down and not prev_btn_lb_down)
-    )
-
-
-def handle_select_chopper_gamepad(
-    *,
-    menu_dir: int,
-    prev_menu_dir: int,
-    a_down: bool,
-    prev_btn_a_down: bool,
-    start_down: bool,
-    prev_btn_start_down: bool,
-    b_down: bool,
-    prev_btn_b_down: bool,
-    back_down: bool,
-    prev_btn_back_down: bool,
-    selected_chopper_index: int,
-    chopper_count: int,
-) -> tuple[str, int, bool, bool]:
-    """Handle select_chopper gamepad transitions.
-
-    Returns: (next_mode, next_selected_chopper_index, did_change_selection, did_confirm)
-    """
-    next_mode = "select_chopper"
-    next_index = int(selected_chopper_index)
-    did_change_selection = False
-    did_confirm = False
-
-    if menu_dir != 0 and menu_dir != prev_menu_dir:
-        next_index = (next_index + menu_dir) % max(1, int(chopper_count))
-        did_change_selection = True
-
-    if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
-        next_mode = "cutscene"
-        did_confirm = True
-    elif (b_down and not prev_btn_b_down) or (back_down and not prev_btn_back_down):
-        next_mode = "select_mission"
-
-    return next_mode, next_index, did_change_selection, did_confirm
-
-
-def handle_select_mission_gamepad(
-    *,
-    menu_dir: int,
-    prev_menu_dir: int,
-    a_down: bool,
-    prev_btn_a_down: bool,
-    start_down: bool,
-    prev_btn_start_down: bool,
-    selected_mission_index: int,
-    mission_count: int,
-) -> tuple[str, int, bool]:
-    """Handle select_mission gamepad transitions.
-
-    Returns: (next_mode, next_selected_mission_index, did_change_selection)
-    """
-    next_mode = "select_mission"
-    next_index = int(selected_mission_index)
-    did_change_selection = False
-
-    if menu_dir != 0 and menu_dir != prev_menu_dir:
-        next_index = (next_index + menu_dir) % max(1, int(mission_count))
-        did_change_selection = True
-
-    if (a_down and not prev_btn_a_down) or (start_down and not prev_btn_start_down):
-        next_mode = "select_chopper"
-
-    return next_mode, next_index, did_change_selection
-
-
-def handle_paused_focus_navigation(*, menu_vert: int, prev_menu_vert: int, pause_focus: str) -> tuple[str, bool]:
-    """Move pause focus when vertical menu input edges occur."""
-    if menu_vert == 0 or menu_vert == prev_menu_vert:
-        return pause_focus, False
-
-    order = ["choppers", "restart_mission", "restart_game", "mute", "quit"]
-    try:
-        idx = order.index(pause_focus)
-    except ValueError:
-        idx = 0
-    step = -1 if menu_vert < 0 else 1
-    next_focus = order[(idx + step) % len(order)]
-    return next_focus, next_focus != pause_focus
-
-
-def handle_paused_chopper_cycle(
-    *,
-    pause_focus: str,
-    menu_dir: int,
-    prev_menu_dir: int,
-    selected_chopper_index: int,
-    chopper_count: int,
-) -> tuple[int, bool]:
-    """Cycle chopper selection while pause focus is on choppers."""
-    if pause_focus != "choppers" or menu_dir == 0 or menu_dir == prev_menu_dir:
-        return selected_chopper_index, False
-    next_index = (int(selected_chopper_index) + int(menu_dir)) % max(1, int(chopper_count))
-    return next_index, next_index != selected_chopper_index
-
-
-def resolve_paused_a_action(
-    *,
-    a_down: bool,
-    prev_btn_a_down: bool,
-    pause_focus: str,
-    quit_confirm: bool,
-) -> tuple[str, bool, str]:
-    """Resolve paused-menu A-button behavior.
-
-    Returns: (action, next_quit_confirm, next_pause_focus)
-    """
-    if not (a_down and not prev_btn_a_down):
-        return "none", quit_confirm, pause_focus
-
-    if pause_focus == "restart_mission":
-        return "restart_mission", False, pause_focus
-    if pause_focus == "restart_game":
-        return "restart_game", False, "choppers"
-    if pause_focus == "mute":
-        return "toggle_mute", False, pause_focus
-    if pause_focus == "quit":
-        if quit_confirm:
-            return "quit_exit", True, pause_focus
-        return "quit_prompt", True, pause_focus
-
-    return "none", quit_confirm, pause_focus
-
-
-def resolve_paused_gameplay_shortcuts(
-    *,
-    b_down: bool,
-    prev_btn_b_down: bool,
-    a_down: bool,
-    prev_btn_a_down: bool,
-    y_down: bool,
-    prev_btn_y_down: bool,
-    back_down: bool,
-    prev_btn_back_down: bool,
-    x_down: bool,
-    prev_btn_x_down: bool,
-    crash_active: bool,
-    quit_confirm: bool,
-) -> tuple[bool, bool, bool, bool, bool, bool]:
-    """Resolve paused-mode gameplay shortcut flags.
-
-    Returns:
-    (cancel_quit_confirm, trigger_flare, toggle_doors, reverse_flip, cycle_facing, fire_weapon)
-    """
-    b_edge = bool(b_down and not prev_btn_b_down)
-    a_edge = bool(a_down and not prev_btn_a_down)
-    y_edge = bool(y_down and not prev_btn_y_down)
-    back_edge = bool(back_down and not prev_btn_back_down)
-    x_edge = bool(x_down and not prev_btn_x_down)
-
-    cancel_quit_confirm = bool(b_edge and quit_confirm)
-    trigger_flare = b_edge
-
-    if crash_active:
-        return cancel_quit_confirm, trigger_flare, False, False, False, False
-
-    return cancel_quit_confirm, trigger_flare, a_edge, y_edge, back_edge, x_edge
-
-
-def handle_debug_weather_keydown(
+def handle_global_debug_keydown(
     *,
     key: int,
-    debug_mode: bool,
-    debug_weather_index: int,
-    debug_weather_modes: Sequence[str],
-) -> tuple[bool, bool, int, str | None, str | None]:
-    """Handle F3/F5/F6 debug-weather key events.
+    mission: object,
+    set_toast: callable,
+    toggle_thermal_mode: callable,
+    enemy_kind_barak_mrad: object,
+    barak_state_deploy: str,
+) -> bool:
+    """Handle global debug and utility key presses before mode-specific routing."""
+    if key == pygame.K_t:
+        toggle_thermal_mode()
+        set_toast("Thermal mode toggled (T)")
+        return True
 
-    Returns: (handled, next_debug_mode, next_weather_index, toast_message, selected_weather_mode)
-    """
-    if key == pygame.K_F3:
-        next_debug_mode = not debug_mode
-        return True, next_debug_mode, debug_weather_index, f"Debug mode: {'ON' if next_debug_mode else 'OFF'} (F3)", None
+    if key == pygame.K_F9:
+        for enemy in getattr(mission, "enemies", []):
+            if getattr(enemy, "kind", None) == enemy_kind_barak_mrad and getattr(enemy, "alive", False):
+                enemy.vel.x = 0.0
+                enemy.mrad_state = barak_state_deploy
+                enemy.mrad_state_seconds = 0.0
+                enemy.mrad_reload_seconds = 0.0
+                enemy.launcher_angle = 0.0
+                enemy.launcher_ext_progress = 0.0
+                enemy.missile_fired = False
+                mission_audio = getattr(mission, "audio", None)
+                if mission_audio is not None and hasattr(mission_audio, "play_barak_mrad_deploy"):
+                    mission_audio.play_barak_mrad_deploy()
+                set_toast("DEBUG: BARAK missile launch sequence triggered (F9)")
+                return True
 
-    if debug_mode and key == pygame.K_F5:
-        next_index = (debug_weather_index + 1) % max(1, len(debug_weather_modes))
-        selected_mode = debug_weather_modes[next_index]
-        return True, debug_mode, next_index, f"Weather: {selected_mode}", selected_mode
-
-    if debug_mode and key == pygame.K_F6:
-        next_index = (debug_weather_index - 1) % max(1, len(debug_weather_modes))
-        selected_mode = debug_weather_modes[next_index]
-        return True, debug_mode, next_index, f"Weather: {selected_mode}", selected_mode
-
-    return False, debug_mode, debug_weather_index, None, None
+    return False
 
 
 @dataclass
-class PausedMenuDecision:
+class KeydownEventResult:
+    running: bool
+    mode: str
     pause_focus: str
-    quit_confirm: bool
+    muted: bool
+    selected_mission_index: int
+    selected_mission_id: str
     selected_chopper_index: int
-    play_menu_select: bool
-    action: str
-    toggle_particles: bool
-    toggle_flashes: bool
-    toggle_screenshake: bool
-    cancel_quit_confirm: bool
-    trigger_flare: bool
-    toggle_doors: bool
-    reverse_flip: bool
-    cycle_facing: bool
-    fire_weapon: bool
+    selected_chopper_asset: str
+    debug: object
+    quit_confirm: bool
+    meal_truck_driver_mode: bool
+    meal_truck_lift_command_extended: bool
+    bus_driver_mode: bool
 
 
-def resolve_paused_mode_inputs(
+def handle_keydown_event(
+    event: pygame.event.Event,
     *,
+    runtime: object,
+    mode: str,
+    mission: object,
+    controls: Any,
     pause_focus: str,
     quit_confirm: bool,
+    debug_mode: bool,
+    debug_weather_index: int,
+    debug_weather_modes: Sequence[str],
+    selected_mission_id: str,
+    meal_truck_driver_mode: bool,
+    meal_truck_lift_command_extended: bool,
+    bus_driver_mode: bool,
+    airport_meal_truck_state: object,
+    airport_bus_state: object,
+    airport_tech_state: object,
+    helicopter: object,
+    heli_ground_y: float,
+    audio: object,
+    logger: object,
+    set_toast: Callable[[str], None],
+    set_console_log_debug: Callable[[bool], None],
+    set_debug_weather_mode: Callable[[str], None],
+    chopper_choices: list,
+    mission_choices: list,
+    muted: bool,
+    reset_game: Callable[[], None],
+    apply_mission_preview: Callable[[], None],
+    skip_intro: Callable[[], None],
+    skip_mission_cutscene: Callable[[], None],
+    toggle_particles_wrapper: Callable[[], None],
+    toggle_flashes_wrapper: Callable[[], None],
+    toggle_screenshake_wrapper: Callable[[], None],
+    spawn_projectile_from_helicopter_logged: Callable[..., None],
+    try_start_flare_salvo: Callable[..., None],
+    toggle_doors_with_logging: Callable[..., None],
+    Facing: object,
+    DebugSettings: Any,
+    boarded_count: Callable[..., int],
+    flares: object,
+    selected_mission_index: int,
     selected_chopper_index: int,
-    chopper_count: int,
-    menu_vert: int,
-    prev_menu_vert: int,
-    menu_dir: int,
-    prev_menu_dir: int,
-    a_down: bool,
-    prev_btn_a_down: bool,
-    b_down: bool,
-    prev_btn_b_down: bool,
-    x_down: bool,
-    prev_btn_x_down: bool,
-    y_down: bool,
-    prev_btn_y_down: bool,
-    rb_down: bool,
-    prev_btn_rb_down: bool,
-    back_down: bool,
-    prev_btn_back_down: bool,
-    crash_active: bool,
-) -> PausedMenuDecision:
-    """Resolve all paused-mode gamepad decisions in one place."""
-    toggle_particles = bool(x_down and not prev_btn_x_down)
-    toggle_flashes = bool(y_down and not prev_btn_y_down)
-    toggle_screenshake = bool(rb_down and not prev_btn_rb_down)
-
+    selected_chopper_asset: str,
+    debug: object,
+    helicopter_weapon_locked: bool,
+) -> KeydownEventResult:
+    """Handle one KEYDOWN event end-to-end and return the updated runtime state."""
+    next_mode = mode
     next_pause_focus = pause_focus
+    next_muted = muted
+    next_selected_mission_index = selected_mission_index
+    next_selected_mission_id = selected_mission_id
+    next_selected_chopper_index = selected_chopper_index
+    next_selected_chopper_asset = selected_chopper_asset
+    next_debug = debug
     next_quit_confirm = quit_confirm
-    next_chopper_index = int(selected_chopper_index)
-    play_menu_select = False
+    next_meal_truck_driver_mode = meal_truck_driver_mode
+    next_meal_truck_lift_command_extended = meal_truck_lift_command_extended
+    next_bus_driver_mode = bus_driver_mode
+    running = True
 
-    next_pause_focus, focus_changed = handle_paused_focus_navigation(
-        menu_vert=menu_vert,
-        prev_menu_vert=prev_menu_vert,
-        pause_focus=next_pause_focus,
+    keydown_preflight = handle_keydown_preflight(
+        key=event.key,
+        mode=mode,
+        mission_ended=bool(getattr(mission, "ended", False)),
+        pause_focus=pause_focus,
+        quit_confirm=quit_confirm,
+        debug_mode=debug_mode,
+        debug_weather_index=debug_weather_index,
+        debug_weather_modes=debug_weather_modes,
+        set_toast=set_toast,
+        audio=audio,
+        logger=logger,
+        handle_mission_end_keyboard_navigation_fn=handle_mission_end_keyboard_navigation,
+        apply_pause_transition_fn=apply_pause_transition,
     )
-    if focus_changed:
-        play_menu_select = True
-        next_quit_confirm = False
+    next_mode = keydown_preflight.mode
+    next_pause_focus = keydown_preflight.pause_focus
+    next_quit_confirm = keydown_preflight.quit_confirm
+    next_debug_mode = keydown_preflight.debug_mode
+    next_debug_weather_index = keydown_preflight.debug_weather_index
+    if keydown_preflight.handled:
+        running = keydown_preflight.running
+        runtime.debug_mode = bool(next_debug_mode)
+        runtime.debug_weather_index = int(next_debug_weather_index)
+        set_console_log_debug(next_debug_mode)
+        if keydown_preflight.selected_weather_mode is not None:
+            set_debug_weather_mode(keydown_preflight.selected_weather_mode)
+        if keydown_preflight.debug_toast:
+            set_toast(keydown_preflight.debug_toast)
+        return KeydownEventResult(
+            running=running,
+            mode=next_mode,
+            pause_focus=next_pause_focus,
+            muted=next_muted,
+            selected_mission_index=next_selected_mission_index,
+            selected_mission_id=next_selected_mission_id,
+            selected_chopper_index=next_selected_chopper_index,
+            selected_chopper_asset=next_selected_chopper_asset,
+            debug=next_debug,
+            quit_confirm=next_quit_confirm,
+            meal_truck_driver_mode=next_meal_truck_driver_mode,
+            meal_truck_lift_command_extended=next_meal_truck_lift_command_extended,
+            bus_driver_mode=next_bus_driver_mode,
+        )
 
-    next_chopper_index, chopper_changed = handle_paused_chopper_cycle(
-        pause_focus=next_pause_focus,
-        menu_dir=menu_dir,
-        prev_menu_dir=prev_menu_dir,
-        selected_chopper_index=next_chopper_index,
-        chopper_count=chopper_count,
+    doors_key_pressed = next_mode == "playing" and matches_key(event.key, controls.doors) and not getattr(mission, "crash_active", False)
+    fire_key_pressed = next_mode == "playing" and matches_key(event.key, controls.fire) and not getattr(mission, "crash_active", False)
+    playing_keyboard = handle_playing_keyboard_special_cases(
+        selected_mission_id=selected_mission_id,
+        doors_key_pressed=doors_key_pressed,
+        fire_key_pressed=fire_key_pressed,
+        meal_truck_driver_mode=meal_truck_driver_mode,
+        meal_truck_lift_command_extended=meal_truck_lift_command_extended,
+        bus_driver_mode=bus_driver_mode,
+        airport_meal_truck_state=airport_meal_truck_state,
+        airport_bus_state=airport_bus_state,
+        airport_tech_state=airport_tech_state,
+        helicopter=helicopter,
+        heli_ground_y=heli_ground_y,
     )
-    if chopper_changed:
-        play_menu_select = True
-        next_quit_confirm = False
+    next_meal_truck_driver_mode = playing_keyboard.meal_truck_driver_mode
+    next_meal_truck_lift_command_extended = playing_keyboard.meal_truck_lift_command_extended
+    next_bus_driver_mode = playing_keyboard.bus_driver_mode
+    if not playing_keyboard.handled:
+        (
+            next_mode,
+            next_pause_focus,
+            next_muted,
+            next_selected_mission_index,
+            next_selected_mission_id,
+            next_selected_chopper_index,
+            next_selected_chopper_asset,
+            next_debug,
+            next_quit_confirm,
+        ) = handle_keyboard_event(
+            event,
+            mode=next_mode,
+            controls=controls,
+            mission=mission,
+            helicopter=helicopter,
+            audio=audio,
+            logger=logger,
+            chopper_choices=chopper_choices,
+            mission_choices=mission_choices,
+            pause_focus=next_pause_focus,
+            muted=next_muted,
+            set_toast=set_toast,
+            reset_game=reset_game,
+            apply_mission_preview=apply_mission_preview,
+            skip_intro=skip_intro,
+            skip_mission_cutscene=skip_mission_cutscene,
+            toggle_particles_wrapper=toggle_particles_wrapper,
+            toggle_flashes_wrapper=toggle_flashes_wrapper,
+            toggle_screenshake_wrapper=toggle_screenshake_wrapper,
+            spawn_projectile_from_helicopter_logged=spawn_projectile_from_helicopter_logged,
+            try_start_flare_salvo=try_start_flare_salvo,
+            toggle_doors_with_logging=toggle_doors_with_logging,
+            Facing=Facing,
+            DebugSettings=DebugSettings,
+            boarded_count=boarded_count,
+            flares=flares,
+            selected_mission_index=next_selected_mission_index,
+            selected_mission_id=next_selected_mission_id,
+            selected_chopper_index=next_selected_chopper_index,
+            selected_chopper_asset=next_selected_chopper_asset,
+            debug=next_debug,
+            quit_confirm=next_quit_confirm,
+            helicopter_weapon_locked=helicopter_weapon_locked,
+        )
 
-    action, next_quit_confirm, next_pause_focus = resolve_paused_a_action(
-        a_down=a_down,
-        prev_btn_a_down=prev_btn_a_down,
+    return KeydownEventResult(
+        running=running,
+        mode=next_mode,
         pause_focus=next_pause_focus,
+        muted=next_muted,
+        selected_mission_index=next_selected_mission_index,
+        selected_mission_id=next_selected_mission_id,
+        selected_chopper_index=next_selected_chopper_index,
+        selected_chopper_asset=next_selected_chopper_asset,
+        debug=next_debug,
         quit_confirm=next_quit_confirm,
+        meal_truck_driver_mode=next_meal_truck_driver_mode,
+        meal_truck_lift_command_extended=next_meal_truck_lift_command_extended,
+        bus_driver_mode=next_bus_driver_mode,
     )
 
-    (
-        cancel_quit_confirm,
-        trigger_flare,
-        toggle_doors,
-        reverse_flip,
-        cycle_facing,
-        fire_weapon,
-    ) = resolve_paused_gameplay_shortcuts(
-        b_down=b_down,
-        prev_btn_b_down=prev_btn_b_down,
-        a_down=a_down,
-        prev_btn_a_down=prev_btn_a_down,
-        y_down=y_down,
-        prev_btn_y_down=prev_btn_y_down,
-        back_down=back_down,
-        prev_btn_back_down=prev_btn_back_down,
-        x_down=x_down,
-        prev_btn_x_down=prev_btn_x_down,
-        crash_active=crash_active,
-        quit_confirm=next_quit_confirm,
+
+@dataclass
+class PygameEventDispatchResult:
+    running: bool
+    mode: str
+    selected_mission_index: int
+    selected_mission_id: str
+    selected_chopper_index: int
+    selected_chopper_asset: str
+    debug: object
+
+
+def process_pygame_events(
+    *,
+    running: bool,
+    mode: str,
+    runtime: object,
+    mission: object,
+    controls: object,
+    debug_weather_modes: Sequence[str],
+    selected_mission_index: int,
+    selected_mission_id: str,
+    selected_chopper_index: int,
+    selected_chopper_asset: str,
+    debug: object,
+    airport_runtime: object,
+    helicopter: object,
+    heli_ground_y: float,
+    chopper_choices: list,
+    mission_choices: list,
+    audio: object,
+    logger: object,
+    set_toast: Callable[[str], None],
+    set_console_log_debug: Callable[[bool], None],
+    set_debug_weather_mode: Callable[[str], None],
+    reset_game: Callable[[], None],
+    apply_mission_preview: Callable[[], None],
+    skip_intro: Callable[[], None],
+    skip_mission_cutscene: Callable[[], None],
+    toggle_particles_wrapper: Callable[[], None],
+    toggle_flashes_wrapper: Callable[[], None],
+    toggle_screenshake_wrapper: Callable[[], None],
+    spawn_projectile_from_helicopter_logged: Callable[..., None],
+    try_start_flare_salvo: Callable[..., None],
+    toggle_doors_with_logging: Callable[..., None],
+    facing_enum: object,
+    debug_settings: object,
+    boarded_count: Callable[..., int],
+    flares: object,
+    chopper_weapons_locked_fn: Callable[..., bool],
+    toggle_thermal_mode: Callable[[], None],
+    enemy_kind_barak_mrad: object,
+    barak_state_deploy: str,
+    joysticks: dict[int, pygame.joystick.Joystick],
+    gamepad_buttons: object,
+) -> PygameEventDispatchResult:
+    """Process pygame events for one frame and return updated loop state."""
+    next_running = bool(running)
+    next_mode = mode
+    next_selected_mission_index = selected_mission_index
+    next_selected_mission_id = selected_mission_id
+    next_selected_chopper_index = selected_chopper_index
+    next_selected_chopper_asset = selected_chopper_asset
+    next_debug = debug
+
+    for event in pygame.event.get():
+        if event.type == pygame.KEYDOWN and handle_global_debug_keydown(
+            key=event.key,
+            mission=mission,
+            set_toast=set_toast,
+            toggle_thermal_mode=toggle_thermal_mode,
+            enemy_kind_barak_mrad=enemy_kind_barak_mrad,
+            barak_state_deploy=barak_state_deploy,
+        ):
+            continue
+        if event.type == pygame.QUIT:
+            next_running = False
+            continue
+        if event.type == pygame.JOYDEVICEADDED:
+            handle_joy_device_added(event.device_index, joysticks=joysticks, logger=logger, set_toast=set_toast)
+            continue
+        if event.type == pygame.JOYDEVICEREMOVED:
+            handle_joy_device_removed(event.instance_id, joysticks=joysticks, logger=logger, set_toast=set_toast)
+            gamepad_buttons.clear_on_disconnect()
+            continue
+        if event.type == pygame.KEYDOWN:
+            keydown_result = handle_keydown_event(
+                event,
+                runtime=runtime,
+                mode=next_mode,
+                mission=mission,
+                controls=controls,
+                pause_focus=runtime.pause_focus,
+                quit_confirm=runtime.quit_confirm,
+                debug_mode=runtime.debug_mode,
+                debug_weather_index=runtime.debug_weather_index,
+                debug_weather_modes=debug_weather_modes,
+                selected_mission_id=next_selected_mission_id,
+                meal_truck_driver_mode=runtime.meal_truck_driver_mode,
+                meal_truck_lift_command_extended=runtime.meal_truck_lift_command_extended,
+                bus_driver_mode=runtime.bus_driver_mode,
+                airport_meal_truck_state=airport_runtime.meal_truck_state,
+                airport_bus_state=airport_runtime.bus_state,
+                airport_tech_state=airport_runtime.tech_state,
+                helicopter=helicopter,
+                heli_ground_y=heli_ground_y,
+                audio=audio,
+                logger=logger,
+                set_toast=set_toast,
+                set_console_log_debug=set_console_log_debug,
+                set_debug_weather_mode=set_debug_weather_mode,
+                chopper_choices=chopper_choices,
+                mission_choices=mission_choices,
+                muted=runtime.muted,
+                reset_game=reset_game,
+                apply_mission_preview=apply_mission_preview,
+                skip_intro=skip_intro,
+                skip_mission_cutscene=skip_mission_cutscene,
+                toggle_particles_wrapper=toggle_particles_wrapper,
+                toggle_flashes_wrapper=toggle_flashes_wrapper,
+                toggle_screenshake_wrapper=toggle_screenshake_wrapper,
+                spawn_projectile_from_helicopter_logged=spawn_projectile_from_helicopter_logged,
+                try_start_flare_salvo=try_start_flare_salvo,
+                toggle_doors_with_logging=toggle_doors_with_logging,
+                Facing=facing_enum,
+                DebugSettings=debug_settings,
+                boarded_count=boarded_count,
+                flares=flares,
+                selected_mission_index=next_selected_mission_index,
+                selected_chopper_index=next_selected_chopper_index,
+                selected_chopper_asset=next_selected_chopper_asset,
+                debug=next_debug,
+                helicopter_weapon_locked=chopper_weapons_locked_fn(
+                    meal_truck_driver_mode=bool(runtime.meal_truck_driver_mode),
+                    bus_driver_mode=bool(runtime.bus_driver_mode),
+                    engineer_remote_control_active=bool(getattr(mission, "engineer_remote_control_active", False)),
+                ),
+            )
+            (
+                next_running,
+                next_mode,
+                next_selected_mission_index,
+                next_selected_mission_id,
+                next_selected_chopper_index,
+                next_selected_chopper_asset,
+                next_debug,
+            ) = apply_keydown_result(
+                running=next_running,
+                mode=next_mode,
+                runtime=runtime,
+                selected_mission_index=next_selected_mission_index,
+                selected_mission_id=next_selected_mission_id,
+                selected_chopper_index=next_selected_chopper_index,
+                selected_chopper_asset=next_selected_chopper_asset,
+                debug=next_debug,
+                keydown_result=keydown_result,
+            )
+            if not next_running:
+                continue
+            continue
+        if event.type == pygame.JOYBUTTONDOWN:
+            if logger:
+                logger.debug("GAMEPAD BUTTONDOWN: button=%s", event.button)
+            joybutton_result = handle_joybuttondown_event(
+                button=event.button,
+                mode=next_mode,
+                pause_focus=runtime.pause_focus,
+                set_toast=set_toast,
+                audio=audio,
+                selected_mission_id=next_selected_mission_id,
+                mission=mission,
+                helicopter=helicopter,
+                logger=logger,
+                flares=flares,
+                meal_truck_driver_mode=runtime.meal_truck_driver_mode,
+                meal_truck_lift_command_extended=runtime.meal_truck_lift_command_extended,
+                bus_driver_mode=runtime.bus_driver_mode,
+                airport_meal_truck_state=airport_runtime.meal_truck_state,
+                airport_bus_state=airport_runtime.bus_state,
+                airport_tech_state=airport_runtime.tech_state,
+                heli_ground_y=heli_ground_y,
+                spawn_projectile_from_helicopter_logged=spawn_projectile_from_helicopter_logged,
+                try_start_flare_salvo=try_start_flare_salvo,
+                toggle_doors_with_logging=toggle_doors_with_logging,
+                boarded_count=boarded_count,
+                chopper_weapons_locked=chopper_weapons_locked_fn,
+                Facing=facing_enum,
+            )
+            next_mode = apply_joybutton_result(
+                mode=next_mode,
+                runtime=runtime,
+                joybutton_result=joybutton_result,
+            )
+
+    return PygameEventDispatchResult(
+        running=next_running,
+        mode=next_mode,
+        selected_mission_index=next_selected_mission_index,
+        selected_mission_id=next_selected_mission_id,
+        selected_chopper_index=next_selected_chopper_index,
+        selected_chopper_asset=next_selected_chopper_asset,
+        debug=next_debug,
     )
 
-    return PausedMenuDecision(
-        pause_focus=next_pause_focus,
-        quit_confirm=next_quit_confirm,
-        selected_chopper_index=next_chopper_index,
-        play_menu_select=play_menu_select,
-        action=action,
-        toggle_particles=toggle_particles,
-        toggle_flashes=toggle_flashes,
-        toggle_screenshake=toggle_screenshake,
-        cancel_quit_confirm=cancel_quit_confirm,
-        trigger_flare=trigger_flare,
-        toggle_doors=toggle_doors,
-        reverse_flip=reverse_flip,
-        cycle_facing=cycle_facing,
-        fire_weapon=fire_weapon,
-    )
+

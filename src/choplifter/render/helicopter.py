@@ -10,6 +10,74 @@ from ..helicopter import Facing, Helicopter
 _CHOPPER_ORIG: dict[str, pygame.Surface] = {}
 _CHOPPER_LOAD_FAILED: set[str] = set()
 _CHOPPER_SCALED: dict[tuple[str, int], pygame.Surface] = {}
+_CHOPPER_VARIANT: dict[tuple[str, int, str, bool, bool], pygame.Surface] = {}
+_CHOPPER_ROTATED: dict[tuple[str, int, str, bool, bool, int], pygame.Surface] = {}
+_CHOPPER_ROTATED_MAX = 256
+_DAMAGE_FLASH_SURFACE: dict[tuple[int, int], pygame.Surface] = {}
+_DOOR_PANEL_CACHE: dict[tuple[int, int], pygame.Surface] = {}
+
+
+def _bounded_put(cache: dict, key: object, value: pygame.Surface, *, max_size: int) -> None:
+    """Insert into a small transform cache and cap memory growth."""
+    cache[key] = value
+    if len(cache) > max_size:
+        # Keep cache maintenance cheap; these surfaces are quickly repopulated.
+        cache.clear()
+
+
+def _get_door_panel(width: int, height: int) -> pygame.Surface:
+    """Get a cached door panel surface with US flag pattern (stripes + blue canton).
+    
+    Args:
+        width, height: Dimensions of the door panel
+        
+    Returns:
+        A cached pygame.Surface with the door panel pattern drawn on it.
+    """
+    width = max(1, int(width))
+    height = max(1, int(height))
+    key = (width, height)
+    cached = _DOOR_PANEL_CACHE.get(key)
+    if cached is not None:
+        return cached
+    
+    door_radius = 3
+    door_panel = pygame.Surface((width, height), pygame.SRCALPHA)
+    
+    # Red/white horizontal stripes (US flag vibe)
+    stripe_h = max(1, height // 7)
+    y0 = 0
+    stripe_index = 0
+    while y0 < height:
+        h_stripe = min(stripe_h, height - y0)
+        color = (200, 30, 30, 200) if (stripe_index % 2 == 0) else (245, 245, 245, 200)
+        pygame.draw.rect(door_panel, color, pygame.Rect(0, y0, width, h_stripe))
+        y0 += stripe_h
+        stripe_index += 1
+    
+    # Blue canton in the upper corner + tiny white dots to suggest stars
+    canton_w = max(2, int(width * 0.45))
+    canton_h = max(2, int(height * 0.45))
+    canton = pygame.Rect(0, 0, canton_w, canton_h)
+    pygame.draw.rect(door_panel, (20, 60, 160, 220), canton)
+    for sx, sy in (
+        (canton.left + canton.width // 3, canton.top + canton.height // 3),
+        (canton.left + (2 * canton.width) // 3, canton.top + canton.height // 3),
+        (canton.left + canton.width // 2, canton.top + (2 * canton.height) // 3),
+    ):
+        pygame.draw.circle(door_panel, (245, 245, 245, 230), (sx, sy), 1)
+    
+    # Apply a rounded-rect alpha mask so the fill has rounded edges too
+    mask = pygame.Surface((width, height), pygame.SRCALPHA)
+    pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=door_radius)
+    door_panel.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+    
+    _DOOR_PANEL_CACHE[key] = door_panel
+    if len(_DOOR_PANEL_CACHE) > 64:
+        _DOOR_PANEL_CACHE.clear()
+        _DOOR_PANEL_CACHE[key] = door_panel
+    
+    return door_panel
 
 
 def draw_damage_flash(screen: pygame.Surface, helicopter: Helicopter) -> None:
@@ -24,7 +92,14 @@ def draw_damage_flash(screen: pygame.Surface, helicopter: Helicopter) -> None:
         return
 
     r, g, b = helicopter.damage_flash_rgb
-    overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+    size_key = (int(screen.get_width()), int(screen.get_height()))
+    overlay = _DAMAGE_FLASH_SURFACE.get(size_key)
+    if overlay is None:
+        overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+        _DAMAGE_FLASH_SURFACE[size_key] = overlay
+        if len(_DAMAGE_FLASH_SURFACE) > 8:
+            _DAMAGE_FLASH_SURFACE.clear()
+            _DAMAGE_FLASH_SURFACE[size_key] = overlay
     overlay.fill((int(r), int(g), int(b), alpha))
     screen.blit(overlay, (0, 0))
 
@@ -83,36 +158,9 @@ def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x:
             pygame.draw.rect(out, (0, 0, 0, 170), door_rect, border_radius=door_radius)
             pygame.draw.rect(out, (235, 235, 235, 160), door_rect, 1, border_radius=door_radius)
         else:
-            # Closed: red/white horizontal stripes (US flag vibe) with rounded corners.
-            door_panel = pygame.Surface((door_rect.width, door_rect.height), pygame.SRCALPHA)
-            stripe_h = max(1, door_rect.height // 7)
-            y0 = 0
-            stripe_index = 0
-            while y0 < door_rect.height:
-                h_stripe = min(stripe_h, door_rect.height - y0)
-                color = (200, 30, 30, 200) if (stripe_index % 2 == 0) else (245, 245, 245, 200)
-                pygame.draw.rect(door_panel, color, pygame.Rect(0, y0, door_rect.width, h_stripe))
-                y0 += stripe_h
-                stripe_index += 1
-
-            # Blue canton in the upper corner + tiny white dots to suggest stars.
-            canton_w = max(2, int(door_rect.width * 0.45))
-            canton_h = max(2, int(door_rect.height * 0.45))
-            canton = pygame.Rect(0, 0, canton_w, canton_h)
-            pygame.draw.rect(door_panel, (20, 60, 160, 220), canton)
-            for sx, sy in (
-                (canton.left + canton.width // 3, canton.top + canton.height // 3),
-                (canton.left + (2 * canton.width) // 3, canton.top + canton.height // 3),
-                (canton.left + canton.width // 2, canton.top + (2 * canton.height) // 3),
-            ):
-                pygame.draw.circle(door_panel, (245, 245, 245, 230), (sx, sy), 1)
-
-            # Apply a rounded-rect alpha mask so the fill has rounded edges too.
-            mask = pygame.Surface((door_rect.width, door_rect.height), pygame.SRCALPHA)
-            pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=door_radius)
-            door_panel.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+            # Closed: use cached door panel with US flag pattern
+            door_panel = _get_door_panel(door_rect.width, door_rect.height)
             out.blit(door_panel, door_rect.topleft)
-
             pygame.draw.rect(out, (20, 20, 20, 140), door_rect, 1, border_radius=door_radius)
 
         # Passenger indicator: a small "occupied" light that appears only when carrying someone.
@@ -127,16 +175,29 @@ def draw_helicopter(screen: pygame.Surface, helicopter: Helicopter, *, camera_x:
         return out
 
     skin = getattr(helicopter, "skin_asset", "chopper-one.png")
-    sprite = _get_chopper_scaled(skin, width_px=120)
+    width_px = 120
+    sprite = _get_chopper_scaled(skin, width_px=width_px)
     if sprite is not None:
-        s = sprite
-        # The base sprite is authored facing LEFT; flip for RIGHT-facing.
-        if helicopter.facing is Facing.RIGHT:
-            s = pygame.transform.flip(s, True, False)
+        facing_name = str(getattr(helicopter.facing, "name", "LEFT"))
+        occupied = bool(boarded > 0)
+        variant_key = (skin, width_px, facing_name, bool(helicopter.doors_open), occupied)
+        variant = _CHOPPER_VARIANT.get(variant_key)
+        if variant is None:
+            variant = sprite
+            # The base sprite is authored facing LEFT; flip for RIGHT-facing.
+            if helicopter.facing is Facing.RIGHT:
+                variant = pygame.transform.flip(variant, True, False)
+            variant = _with_door_overlay(variant)
+            _CHOPPER_VARIANT[variant_key] = variant
 
-        s = _with_door_overlay(s)
+        # Quantize roll for cache reuse while keeping animation smooth.
+        angle_bucket = int(round(float(roll_deg) * 2.0))  # 0.5 degree buckets
+        rotated_key = variant_key + (angle_bucket,)
+        rotated = _CHOPPER_ROTATED.get(rotated_key)
+        if rotated is None:
+            rotated = pygame.transform.rotate(variant, -(angle_bucket / 2.0))
+            _bounded_put(_CHOPPER_ROTATED, rotated_key, rotated, max_size=_CHOPPER_ROTATED_MAX)
 
-        rotated = pygame.transform.rotate(s, -roll_deg)
         rect = rotated.get_rect(center=(x, y))
         screen.blit(rotated, rect)
         return
@@ -265,4 +326,7 @@ def _get_chopper_scaled(asset_filename: str, *, width_px: int) -> pygame.Surface
         scaled.set_colorkey(key, pygame.RLEACCEL)
 
     _CHOPPER_SCALED[cache_key] = scaled
+    # Asset reload can invalidate dependent transformed caches.
+    _CHOPPER_VARIANT.clear()
+    _CHOPPER_ROTATED.clear()
     return scaled

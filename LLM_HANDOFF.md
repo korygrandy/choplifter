@@ -1,6 +1,22 @@
 # LLM Handoff (Current Engineering State)
 
-Last updated: 2026-03-07
+Last updated: 2026-03-12 (session 5)
+
+**Session 5 Changes:**
+- P1 render-performance backlog closure: temp-surface reuse and off-screen draw culling are now complete.
+  - Files: `src/choplifter/render/world.py`, `src/choplifter/render/helicopter.py`, `src/choplifter/render/hud.py`, `src/choplifter/render/overlays.py`, `src/choplifter/debug_overlay.py`, `src/choplifter/render/particles.py`
+  - Status: import smoke pass; volatile surface reuse fixed to clear cached alpha surfaces before redraw to prevent persistence artifacts.
+- World render cleanup: cached world fonts added for repeated placard/LZ/end-screen text.
+  - Files: `src/choplifter/render/world.py`
+  - Status: no gameplay behavior change; removes repeated `pygame.font.SysFont(...)` creation in hot paths.
+
+**Session 4 Changes:**
+- Vehicle boundary enforcement: meal truck + bus clamped to viewport (matching helicopter), with AI exception allowing bus 200px overage for sequence completion.
+  - Files: `src/choplifter/app/airport_tick.py` (new `_apply_vehicle_boundary_clamps` helper), `tests/test_vehicle_boundary_clamps.py`
+  - Status: 5 unit tests + airport smoke pass.
+- Chopper warning beep recovery fix: beeps now stop when health recovers above 70% threshold (e.g., after supply drop pickup).
+  - Files: `src/choplifter/app/game_update.py`, `tests/test_chopper_warning_beep_recovery.py`
+  - Status: 2 unit tests + audio suite pass.
 
 This file is the canonical engineering handoff for future AI/dev sessions.
 
@@ -8,7 +24,7 @@ This file is the canonical engineering handoff for future AI/dev sessions.
 
 - Runtime: Python 3.13 + Pygame 2.6.1
 - Entry point: `run.py` -> `src.choplifter.main:run`
-- Branch context: refactor follow-up on `feature/missile-flare-diversion` with packaging-doc sync and fresh onefile/onedir rebuild.
+- Branch context: active gameplay + mission iteration on `feature/airport-special-ops-mission`.
 
 ## What Is Implemented
 
@@ -75,7 +91,7 @@ Main contributors:
 - `src/choplifter/assets/intro.mpg` (very large)
 - `src/choplifter/assets/hostage-rescue-cutscene.mpg`
 - bundled `imageio-ffmpeg` executable (about `83.58 MB`)
-- large WAV assets
+- audio assets are now primarily compressed OGG
 
 Current script behavior (`scripts/build_windows_exe.ps1`):
 - Stages runtime assets into `pyinstaller-build/asset-staging` using explicit extension allow-list.
@@ -87,8 +103,379 @@ Current script behavior (`scripts/build_windows_exe.ps1`):
 
 1. Optimize PNG/JPG assets losslessly and re-measure package outputs.
 2. Add optional "lite media" packaging mode if distribution size needs major further reduction.
-3. Convert heavy WAV effects to OGG where acceptable.
+3. Re-measure package outputs after the OGG SFX migration and decide whether further audio compression changes are still worth pursuing.
 4. Keep the explicit asset-manifest staging approach and update docs when include rules change.
+
+## Recent Changes (Session 3 — 2026-03-12)
+
+All items below were implemented and validated with import smoke, `tests/test_pause_audio_behavior.py`, and airport smoke suite.
+
+### Main loop context synchronization stabilization
+
+- **Problem:** follow-on context refactor introduced state overwrite timing regressions (mission-state bleed, occasional frozen chopper movement, and airport artifact contamination).
+- **Fix (`main.py`):**
+  - Reordered wrapper-to-local synchronization so context reads happen after input handlers.
+  - Added a `context_swapped` guard so frame-local values are only refreshed from context when reset/preview wrappers actually replaced mission/session objects.
+  - Prevented stale accumulator rollback that starved fixed-step simulation.
+
+### Driver input orchestration extraction
+
+- **New module:** `src/choplifter/app/driver_inputs.py`
+  - Added `build_driver_inputs(...)` and `DriverInputBuildResult` to centralize:
+    - truck/bus driver input derivation from keyboard/gamepad tilt state
+    - helicopter control gating while driving meal truck or bus
+- **Main loop change (`main.py`):** replaced duplicated inline vehicle input/gating block with one helper call.
+- **Goal:** keep `main.py` focused on orchestration and reduce error-prone duplicated state logic.
+
+### Event-result assignment extraction
+
+- **New module:** `src/choplifter/app/loop_state_updates.py`
+  - Added helper functions:
+    - `apply_keydown_result(...)`
+    - `apply_joybutton_result(...)`
+    - `apply_nonpaused_gamepad_result(...)`
+- **Main loop change (`main.py`):** extracted repetitive result-to-runtime/selection assignment blocks for keyboard/gamepad event handlers.
+- **Goal:** reduce assignment boilerplate in `main.py` and keep event handling code focused on dispatch rather than state copy logic.
+
+### Main-loop context sync helper extraction
+
+- **New module:** `src/choplifter/app/main_loop_context_sync.py`
+  - Added:
+    - `load_frame_locals_from_context(...)`
+    - `store_frame_locals_to_context(...)`
+- **Main loop change (`main.py`):** replaced inline field-by-field context load/store code with helper calls.
+- **Goal:** keep context synchronization explicit and centralized, reducing risk of future state-threading regressions.
+
+### Weather runtime apply extraction
+
+- **Module update:** `src/choplifter/app/frame_update.py`
+  - Added `apply_weather_runtime_update(...)` to centralize:
+    - runtime weather field updates (`weather_mode`, `weather_timer`, `weather_duration`, `hud_disabled_timer`)
+    - lightning HUD-disable toast emission.
+- **Main loop change (`main.py`):** replaced inline weather-runtime assignment/toast block with one helper call.
+- **Goal:** reduce per-frame orchestration noise in `main.py` and keep weather runtime side effects in the frame-update boundary.
+
+### Mode/camera apply extraction
+
+- **Module updates:**
+  - `src/choplifter/app/mode_update.py`: added `apply_mode_transition_effects(...)`.
+  - `src/choplifter/app/frame_update.py`: added `apply_camera_update(...)`.
+- **Main loop change (`main.py`):** replaced inline mode-transition side-effect block and camera result assignment block with helper calls.
+- **Goal:** keep `main.py` orchestration focused while consolidating side-effect application logic in module boundaries.
+
+### Gamepad state sync extraction
+
+- **New module:** `src/choplifter/app/gamepad_state_sync.py`
+  - Added `sync_gamepad_state(...)` to centralize button snapshot persistence and previous menu-axis sync.
+- **Main loop change (`main.py`):** replaced inline `gamepad_buttons.snapshot(...)` + `runtime.prev_menu_*` assignment block with helper call.
+- **Goal:** reduce repetitive edge-trigger state bookkeeping in `main.py` and keep gamepad state-sync behavior consistent.
+
+### Frame render preparation extraction
+
+- **Module update:** `src/choplifter/app/frame_update.py`
+  - Added `prepare_frame_render_state(...)` to centralize per-frame weather effects, camera update/apply, cinematic audio update, and screenshake render-target resolution.
+- **Main loop change (`main.py`):** replaced inline block for weather/camera/audio/screenshake preparation with one helper call.
+- **Goal:** keep late-frame orchestration in `main.py` compact while preserving behavior through a single preparation boundary.
+
+### World render branch extraction
+
+- **Module update:** `src/choplifter/app/frame_render.py`
+  - Added `render_world_branch(...)` to centralize the shared non-intro/non-cutscene world render path, including world layers, airport overlays, storm black-cloud layer, HUD/mode overlays, and mission-end overlay ordering.
+- **Main loop change (`main.py`):** replaced the large inline world render branch with one helper call returning updated overlay timers.
+- **Goal:** reduce render orchestration complexity in `main.py` while preserving draw order and overlay timing behavior.
+
+### Mode-frame render dispatch extraction
+
+- **Module update:** `src/choplifter/app/frame_render.py`
+  - Added `render_mode_frame(...)` to centralize render-path dispatch for `intro`, `cutscene`, and world-mode rendering while preserving prior post-FX behavior boundaries.
+- **Main loop change (`main.py`):** replaced inline `if intro / elif cutscene / else world+postfx` render branch with one helper call that returns updated overlay timers.
+- **Goal:** keep `main.py` focused on loop orchestration and reduce conditional render branching in the main loop body.
+
+### Runtime-aware frame render wrapper extraction
+
+- **Module update:** `src/choplifter/app/frame_render.py`
+  - Added `render_mode_frame_from_runtime(...)` to adapt grouped runtime/menu settings into `render_mode_frame(...)`.
+- **Main loop change (`main.py`):** switched the large `render_mode_frame(...)` kwarg bundle to a shorter `render_mode_frame_from_runtime(...)` call.
+- **Goal:** reduce main-loop render call-site parameter noise while preserving rendering behavior and timer threading.
+
+### Pygame event-dispatch extraction
+
+- **Module update:** `src/choplifter/app/event_loop.py`
+  - Added `process_pygame_events(...)` and `PygameEventDispatchResult` to centralize per-frame pygame event routing (global debug keys, QUIT/device events, KEYDOWN flow, JOYBUTTONDOWN flow).
+- **Main loop change (`main.py`):** replaced inline `for event in pygame.event.get()` dispatch block with one helper call and result assignment.
+- **Goal:** reduce main-loop event-routing complexity while preserving event ordering and runtime side effects.
+
+### Active-gamepad frame-flow extraction
+
+- **New module:** `src/choplifter/app/gamepad_frame_flow.py`
+  - Added `process_active_gamepad_frame(...)` and `ActiveGamepadFrameResult` to centralize the non-event active-gamepad per-frame block (pause toggle flow, paused/nonpaused mode routing, debug overlay toggle, and state snapshot sync).
+- **Main loop change (`main.py`):** replaced inline `if active_gamepad is not None:` gamepad mode-routing block with one helper call and result assignment.
+- **Goal:** reduce main-loop gamepad orchestration size while preserving edge-trigger behavior and mode/state side effects.
+
+### Frame input-read extraction
+
+- **New module:** `src/choplifter/app/frame_inputs.py`
+  - Added `read_frame_input_snapshot(...)` and `FrameInputSnapshot` to centralize keyboard polling and active gamepad snapshot acquisition, including haptics active-joystick synchronization.
+- **Main loop change (`main.py`):** replaced inline keyboard polling and active-gamepad snapshot/read block with one helper call.
+- **Goal:** reduce per-frame input-read boilerplate in `main.py` while preserving input state semantics.
+
+### Fixed-step preamble extraction
+
+- **New module:** `src/choplifter/app/fixed_step_preamble.py`
+  - Added `prepare_fixed_step_preamble(...)` and `FixedStepPreambleResult` to centralize pre-fixed-step loop preparation:
+    - optional frame-local context reload when `context_swapped`
+    - helicopter input build
+    - mission/runtime airport-flag sync
+    - driver input build
+    - accumulator clamp before fixed-step loop
+- **Main loop change (`main.py`):** replaced inline context-reload/input-build/accumulator-clamp block with one helper call and result assignment.
+- **Goal:** reduce fixed-step setup orchestration noise in `main.py` while preserving execution order and behavior.
+
+### Playing fixed-step iteration extraction
+
+- **New module:** `src/choplifter/app/fixed_step_iteration.py`
+  - Added `run_playing_fixed_step_iteration(...)` and `PlayingFixedStepIterationResult` to encapsulate one fixed-step playing iteration plus airport per-tick update wiring.
+- **Main loop change (`main.py`):** replaced inline `run_playing_fixed_step(...)` + airport tick-update branch with one helper call and result assignment.
+- **Goal:** reduce fixed-step inner-loop complexity in `main.py` while preserving update order, mission-end routing, and airport runtime synchronization.
+
+### Post-fixed-step phase extraction
+
+- **New module:** `src/choplifter/app/post_fixed_step_phase.py`
+  - Added `run_post_fixed_step_phase(...)` to centralize the per-frame post-fixed-step phase:
+    - toast tick and intro/cutscene completion checks
+    - post-frame mode transition resolution + side effects
+    - frame prep and mode-frame rendering
+    - display present + frame-local context persistence
+- **Main loop change (`main.py`):** replaced inline post-fixed-step phase block with one helper call returning next mode.
+- **Goal:** keep `main.py` focused on high-level loop orchestration by moving late-frame rendering/transition plumbing behind a dedicated boundary.
+
+### Fixed-step loop driver extraction
+
+- **New module:** `src/choplifter/app/fixed_step_loop.py`
+  - Added `run_fixed_step_loop(...)` and `FixedStepLoopResult` to own the accumulator-driven fixed-step loop and per-step state threading.
+- **Main loop change (`main.py`):** replaced inline `while accumulator >= tick.dt` loop with one helper call and result assignment.
+- **Goal:** reduce core loop control-flow noise in `main.py` while preserving fixed-step semantics and runtime state updates.
+
+### Preview/reset setup-wrapper extraction
+
+- **New module:** `src/choplifter/app/setup_wrappers.py`
+  - Added `apply_mission_preview_to_context(...)` and `reset_game_to_context(...)` to centralize heavy context/runtime mutation logic previously in `main.py` wrapper bodies.
+- **Main loop change (`main.py`):** reduced `apply_mission_preview_wrapper()` and `reset_game_wrapper()` to thin delegators plus `context_swapped = True`.
+- **Goal:** shrink `main.py` setup/reset wrapper complexity while preserving wrapper call signatures used by event/gamepad paths.
+
+### Startup bootstrap extraction
+
+- **New module:** `src/choplifter/app/run_bootstrap.py`
+  - Added `initialize_run_bootstrap(...)` and `RunBootstrapState` to centralize startup system initialization and initial menu/runtime state wiring.
+- **Main loop change (`main.py`):** replaced large startup/setup block with one bootstrap helper call and field assignment.
+- **Goal:** reduce `run()` bootstrap noise in `main.py` and keep startup orchestration behind a dedicated boundary.
+
+### Shutdown teardown extraction
+
+- **New module:** `src/choplifter/app/run_shutdown.py`
+  - Added `finalize_run_shutdown(...)` to centralize persistent audio stop, mixer shutdown, and final `pygame.quit()` handling.
+- **Main loop change (`main.py`):** replaced inline mixer/quit block with one shutdown helper call.
+- **Goal:** keep `run()` symmetric at the lifecycle edges by moving exit cleanup behind a dedicated boundary.
+
+### Main-loop context initialization extraction
+
+- **Updated module:** `src/choplifter/app/session.py`
+  - Added `initialize_main_loop_context(...)` to create the initial mission/helicopter pair, stats snapshot, airport runtime, and shared `MainLoopContext`.
+- **Main loop change (`main.py`):** replaced inline mission/session setup block with one context-initialization helper call.
+- **Goal:** reduce pre-loop setup noise in `run()` and keep mission-start state assembly in the existing session helper module.
+
+### Frame preamble extraction
+
+- **Updated module:** `src/choplifter/app/frame_update.py`
+  - Added `run_frame_preamble(...)` and `FramePreambleResult` to own per-frame VIP overlay update, weather runtime advancement/application, and skip-hint generation.
+- **Main loop change (`main.py`):** replaced the inline VIP/weather/skip-hint block at the top of the frame loop with one helper call.
+- **Goal:** keep the main loop focused on event/input/fixed-step orchestration rather than frame-start bookkeeping.
+
+### Joypad startup regression fix (NameError)
+
+- **Problem:** startup/event-loop crash on joystick device events: `NameError: handle_joy_device_added is not defined`.
+- **Fix:** restored missing joy-device imports in `src/choplifter/app/event_loop.py`.
+- **Validation:** event-loop handler globals include both `handle_joy_device_added` and `handle_joy_device_removed`; import smoke passes.
+
+### P0 perf: duplicate weather simulation elimination
+
+- **Change:** removed duplicate rain/fog/dust/lightning simulation from render-prep path so those systems advance once per frame.
+- **Module:** `src/choplifter/app/frame_update.py`
+- **Detail:** `update_weather_effects(...)` now advances only visual-only layers that are not part of gameplay weather simulation.
+
+### P0 perf: frame-phase timing instrumentation
+
+- **Change:** added lightweight moving-average timing counters for frame phases and exposed them in debug overlay.
+- **Modules:**
+  - `src/choplifter/main.py` (phase timers + EMA aggregation)
+  - `src/choplifter/app/post_fixed_step_phase.py` (frame-prep and render/present timings)
+  - `src/choplifter/app/runtime_state.py` (perf runtime fields)
+  - `src/choplifter/debug_overlay.py` + `src/choplifter/app/frame_render.py` (perf counter display path)
+
+### P1 perf: transformed sprite caching (initial implementation)
+
+- **Change:** added bounded transform caches to reduce repeated `flip/rotate` work in hot render paths.
+- **Modules:**
+  - `src/choplifter/render/helicopter.py`
+    - Added cached helicopter variants keyed by `(skin, size, facing, doors_open, occupied)`.
+    - Added bounded rotated-surface cache with quantized roll buckets (0.5 deg).
+  - `src/choplifter/vehicle_assets.py`
+    - Added facing-flip cache for meal truck body/box sprites so `pygame.transform.flip(...)` is not repeated every frame.
+- **Goal:** lower per-frame CPU cost in helicopter/vehicle rendering without visual behavior changes.
+
+### P1 perf: temporary surface reuse (initial slice)
+
+- **Change:** added reusable scratch/panel surfaces in hot render paths to reduce per-frame `pygame.Surface(...)` allocations.
+- **Modules:**
+  - `src/choplifter/render/helicopter.py`
+    - Cached full-screen damage flash overlay by screen size.
+  - `src/choplifter/debug_overlay.py`
+    - Reused debug panel surfaces by dimensions via a small bounded cache.
+  - `src/choplifter/render/overlays.py`
+    - Added shared scratch surface cache and replaced repeated dim/panel/confirm allocations.
+- **Note:** later sessions extended this work into HUD/world render paths and closed the backlog item.
+
+### P1 perf: temporary surface reuse (HUD extension)
+
+- **Change:** extended temp-surface reuse into HUD rendering to reduce per-frame panel/toast/crown allocations.
+- **Module:** `src/choplifter/render/hud.py`
+  - Added bounded scratch-surface caches for CRT stat panels and toast backgrounds.
+  - Reused VIP crown surfaces by dimensions instead of allocating per draw.
+  - Updated CRT wash step to use blend fill on reused surface instead of a transient wash surface.
+- **Validation:** import smoke, focused pause-audio regression, and airport smoke suite all pass.
+
+### P1 perf: temporary surface reuse (particle extension)
+
+- **Change:** added cached reusable particle shape sprites to reduce transient surface creation in particle draw loops.
+- **Module:** `src/choplifter/render/particles.py`
+  - Added caches for rain streak sprites by length.
+  - Added caches for fog puffs by radius.
+  - Added caches for wind-dust cloud circles by `(radius, color)`.
+  - Added cache for fire-plume polygons by `(width, height)`.
+- **Behavior note:** per-particle alpha is still applied at draw time, preserving fade/decay behavior while reducing allocations.
+- **Validation:** import smoke, focused pause-audio regression, and airport smoke suite all pass.
+
+### P1 perf: temporary surface reuse (closure)
+
+- **Change:** completed the temp-surface reuse backlog item in remaining hot render paths and fixed the reuse safety issue that initially caused persistence artifacts.
+- **Modules:**
+  - `src/choplifter/render/world.py`
+    - Added bounded volatile-surface cache for smoke/ring/panel/missile/launcher helper surfaces.
+    - Added cached world fonts for repeated placard/LZ/end-screen text.
+    - Cleared reused volatile surfaces before each draw to prevent stale alpha content from persisting across pans.
+  - `src/choplifter/render/helicopter.py`
+    - Added cached closed-door panel surfaces keyed by dimensions.
+- **Validation:** import smoke pass after volatile-surface clear fix; no remaining smoke-layer persistence after panning.
+
+### P1 perf: off-screen draw culling (closure)
+
+- **Change:** completed the draw-culling backlog item for high-frequency world render paths.
+- **Modules:**
+  - `src/choplifter/render/world.py`
+    - Added `_is_on_screen(...)` helper.
+    - Culls hostages, projectiles, enemies, compounds, and airport tower rendering when outside camera view plus padding.
+- **Goal/result:** reduce unnecessary transform/composite work in dense scenes without visible edge pop-in.
+
+### Manual visual sanity checklist (P0 weather/perf)
+
+- **Status:** pending manual in-game verification.
+- **Run setup:** launch game, enable debug overlay, run each weather mode for ~30-60s (`clear`, `rain`, `fog`, `dust`, `storm`).
+- **Checkpoints:**
+  - Weather motion pacing looks stable (no doubled-speed rain/fog/dust/strikes).
+  - Storm clouds still animate smoothly and lightning strike cadence looks believable.
+  - No visual hitching during mode transitions (`select_chopper -> cutscene -> playing`).
+  - Debug perf counters appear only with overlay enabled and update continuously.
+  - No UI overlap/regression from added perf rows in debug panel.
+- **Observation log template:**
+  - `mode=<weather> | visual=<ok/minor issue/major issue> | perf_frame_ms=<value> | notes=<short note>`
+  - `mode=storm | visual=<...> | prep_ms=<value> render_ms=<value> | lightning cadence=<ok/not ok>`
+
+### City Siege satellite SFX timing fix
+
+- **Problem:** `satellite-reallocating.ogg` could fire at City mission launch trigger time (before intro cutscene completed) on gamepad flow.
+- **Fix:** deferred playback until gameplay mode begins after mission intro cutscene (or skip) using post-input mode adjustment logic and runtime pending flag.
+- **Touched modules:** `main.py`, `app/nonpaused_gamepad_mode_flow.py`, `app/runtime_state.py`, `app/loop_mode_adjustments.py`.
+
+### Validation status (session 3)
+
+- Import smoke: PASS (`from src.choplifter.main import run`)
+- Focused regression: PASS (`tests/test_pause_audio_behavior.py`)
+- Airport smoke suite: PASS (`scripts/run_airport_smoke.ps1`)
+
+## Recent Changes (Session 2 — 2026-03-11)
+
+All items below were implemented, validated with import-ok, and tests pass.
+
+### BARAK MRAD — deploy SFX on all state paths
+
+- **Problem:** The fail-safe state-transition path entered `DEPLOY` without calling the deploy sound effect.
+- **Fix:** Added `_enter_barak_deploy(mission, e, *, logger, reason, fx_strength)` helper in `enemy_update.py`. All three DEPLOY entry points (arrived, already_in_position, fail_safe) now route through it.
+- **Test:** `tests/test_barak_mrad_state_cycle.py` — `test_fail_safe_invalid_state_enters_deploy_and_plays_deploy_sfx` added; 4/4 pass.
+
+### Airport terminal window flicker — warm amber
+
+- **Problem:** Old pale-blue glow was barely visible and non-thematic.
+- **Fix (in `render/world.py`):**
+  - Door-glass windows: warm amber double-layer (`breath * 0.6 + stutter * 0.4`) when occupied; dim `(52,62,76)` when empty.
+  - New porthole row (2–4 portholes) per elevated terminal: independent per-porthole flicker, amber when occupied, `(44,52,66)` when empty.
+
+### Fuselage wreck visual under left elevated compound
+
+- **New function `_draw_fuselage_wreck(screen, r, t)` in `render/world.py`:**
+  - Draws a wrecked plane underlay behind the leftmost elevated terminal when ≥2 elevated terminals are present.
+  - Includes: fuselage body, tail fin, nose cone, broken wing stub, animated engine fire.
+  - Flag: `is_fuselage_terminal` (left-most elevated compound when `len(elevated) >= 2`).
+
+### Cutscene re-trigger per terminal
+
+- **Problem:** Old `meal_truck_extend_triggered: bool` one-shot would only fire the airport cutscene cue once per mission.
+- **Fix (`cutscene_manager.py`):** Replaced with `last_cued_terminal_index: int = -1`. Cue fires whenever `active_terminal_index != last_cued_terminal_index` and truck is extended + tech deployed, enabling re-fire on each new compound (fuselage → jetway).
+- **Tests:** `tests/test_airport_terminal_messaging.py` — 4/4 pass (includes `test_cue_fires_for_fuselage_then_re_fires_for_jetway`).
+
+### Passengers — white everywhere
+
+- `hostage_logic.py` `_draw_stick_figure_passenger`: body `(250,250,250)`, head `(255,255,255)`.
+- Elevated door-burst boarding silhouettes in `render/world.py`: pure white.
+- Truck passenger count text, badge border, and fallback circle indicator: pure white.
+
+### Raider sprite swap
+
+- **Asset:** `src/choplifter/assets/nazir-robot-tank.png` (60×40 native, rendered 36×24).
+- **Implementation (`enemy_spawns.py`):**
+  - Module-level `_RAIDER_SPRITE / _RAIDER_SPRITE_TRIED / _RAIDER_RENDER_W / _RAIDER_RENDER_H` globals.
+  - `_get_raider_sprite()` lazy-loads, scales to 36×24, pre-flips horizontally (tank faces left), caches.
+  - Draw branch: sprite blit bottom-aligned centered; red triangle polygon is silent fallback.
+
+### Sprite preloader — zero disk I/O after mission start
+
+- **New module `src/choplifter/sprite_preloader.py`** with `preload_mission_sprites(mission_id, chopper_asset)`.
+- Eagerly warms every lazy sprite cache (enemy images, chopper skin, HUD icons, life strip icons, bus sprites, meal-truck sprites, raider sprite) at mission-start time.
+- Called at the end of `reset_game_wrapper()` in `main.py` — the single choke-point for initial start, restart, and post-pause restart.
+- Asset scope: common assets always loaded; airport-only assets gated on `mission_id == "airport"`.
+
+### Mission Select Pre-check UI (Planned)
+
+Implementation checklist for the new Mission Select onboarding overlay:
+
+1. Add a `precheck` mode/overlay state that can be entered from Mission Select before mission launch.
+2. Render a helicopter blowout panel with labeled gameplay/control icons and a short objective summary.
+3. Add `Skip` and `Start Mission` actions with explicit keyboard/gamepad mappings.
+4. Add a Mission Select reopen affordance (for example `Controls/Pre-check`) so players can revisit the overlay.
+5. Ensure mission launch handoff preserves existing selected mission/chopper state.
+
+Suggested file touchpoints:
+
+- `src/choplifter/main.py`: mode transition wiring and launch handoff.
+- `src/choplifter/app/event_loop.py`: keyboard/gamepad confirm/back handling for pre-check actions.
+- `src/choplifter/render/hud.py` or mission-select overlay render path: panel composition for the blowout diagram and icon labels.
+- `src/choplifter/rendering.py`: exports if new draw helper(s) are added.
+
+Acceptance gates:
+
+1. Works on keyboard and gamepad with parity for navigate/confirm/back.
+2. `Skip` and `Start Mission` both start mission reliably without losing selected mission/chopper.
+3. Overlay scales/readability hold at common window sizes and does not clip long labels.
+4. Smoke pass remains green and import smoke test passes.
 
 ## Validation Commands
 
@@ -97,11 +484,162 @@ Current script behavior (`scripts/build_windows_exe.ps1`):
 - Run game:
   - `& .\.venv\Scripts\python.exe .\run.py`
 
-## Current Work: Airport Special Ops Mission (In Progress)
+### Automated Airport Smoke Workflow
+
+- Smoke suite marker is registered in `pytest.ini` as `airport_smoke`.
+- One-command runner script: `scripts/run_airport_smoke.ps1`.
+- Playtest guide and smoke report template: `docs/AIRPORT_MISSION_PLAYTEST_GUIDE.md`.
+
+Primary command:
+
+- `powershell -ExecutionPolicy Bypass -File .\scripts\run_airport_smoke.ps1`
+
+Optional verbose command:
+
+- `powershell -ExecutionPolicy Bypass -File .\scripts\run_airport_smoke.ps1 -VerboseOutput`
+
+Direct pytest equivalent:
+
+- `.\.venv\Scripts\python.exe -m pytest -q -m airport_smoke`
+
+Expected behavior:
+
+- Runs the curated airport mission smoke subset only.
+- Prints `Airport smoke suite passed.` on success.
+- Returns non-zero exit code on failure (CI-friendly gating).
+
+Current baseline (as of this handoff update):
+
+- `29 passed, 75 deselected`.
+
+Recommended usage per cycle:
+
+1. Run automated smoke suite before manual playtest.
+2. If green, run 10-minute manual smoke in `docs/AIRPORT_MISSION_PLAYTEST_GUIDE.md`.
+3. Submit smoke-pass report using the command card template.
+
+## Current Work: Airport Special Ops Mission
 
 ### Branch: `feature/airport-special-ops-mission`
 
-**Status:** Phase 1 integration complete - base structure and placeholders working
+**Status:** Implemented and playable with split rescue paths.
+
+### Current Gameplay Truth (Supersedes Older Notes)
+
+1. Airport mission rescue target is a combined total of `16` civilians per run.
+2. Civilian allocation is randomized on mission start/reset between:
+   - lower terminal compounds (rescued by normal helicopter loop)
+   - elevated jetway compound (rescued by meal-truck -> bus -> LZ transfer)
+3. Lower-level civilians can only be rescued via chopper compound workflow.
+4. Elevated civilians are tracked by airport hostage state and require truck/bus transfer.
+5. Airport mission success is based on combined rescued total reaching `16`.
+6. Generic mission auto-win (`saved >= 20`) is disabled for airport missions.
+7. Passenger presentation has been shifted toward animated stick-figure visuals.
+
+### Player Flow (Current)
+
+1. Deploy Mission Tech from chopper to meal truck near truck position.
+2. Use truck to extract elevated jetway civilians.
+3. Transfer elevated civilians from truck to bus, then escort bus to LZ stop.
+4. Independently open lower compounds and rescue lower-level civilians via chopper.
+5. Mission ends in success when lower + elevated rescued total reaches 16.
+
+### Planned Pivot: Dual Elevated Extraction (Not Yet Implemented)
+
+Goal: add a second elevated compound on the left (`elevated_fuselage_passenger_compound`) while keeping the existing jetway compound, then distribute elevated civilians across both.
+
+Risk-first implementation order:
+
+1. Data model + allocation updates:
+  - represent two elevated pickup points in airport hostage state.
+  - distribute elevated civilians across both terminals at mission start/reset.
+2. Sequence/state-machine updates:
+  - update meal-truck + mission-tech flow so extraction can iterate terminal A/B without soft-locking.
+  - hold transfer-complete gate until both elevated terminals are emptied.
+3. Objective/cutscene/hint updates:
+  - identify active elevated terminal in objective text and markers.
+4. Art integration:
+  - add burning fuselage base art + raised compound overlay composition for the left elevated terminal.
+5. Indicator modernization:
+  - replace procedural icon markers with PNG assets; include fallback path.
+
+Known placeholder indicator to replace:
+
+- The ground-moving red chevron-like marker is currently a procedural raider triangle in `src/choplifter/enemy_spawns.py` inside `draw_airport_enemies(...)`.
+
+### Airport Modules With Active Ownership
+
+- `src/choplifter/main.py`: airport setup/reset distribution logic, mission-end aggregation.
+- `src/choplifter/hostage_logic.py`: elevated-hostage flow, transfer state, airport passenger rendering (white passengers + count UI).
+- `src/choplifter/mission_tech.py`: tech lifecycle and transfer completion gating.
+- `src/choplifter/objective_manager.py`: objective phase labels/status progression.
+- `src/choplifter/render/world.py`: airport scene, terminals, tower, on-foot passenger rendering; fuselage wreck; amber porthole/window flicker.
+- `src/choplifter/enemy_update.py`: BARAK MRAD state machine; `_enter_barak_deploy()` centralizes all DEPLOY entries.
+- `src/choplifter/enemy_spawns.py`: airport ground/air enemy waves; raider sprite loader and draw path.
+- `src/choplifter/cutscene_manager.py`: airport cutscene cue trigger; `last_cued_terminal_index` re-trigger logic.
+- `src/choplifter/sprite_preloader.py`: eager sprite cache warmer; called once per mission-start via `reset_game_wrapper`.
+
+### Verification Commands Used
+
+- Import smoke test:
+  - `./.venv/Scripts/python.exe -c "from src.choplifter.main import run; print('import-ok')"`
+- Run game:
+  - `& .\.venv\Scripts\python.exe .\run.py`
+
+### Notes
+
+- Legacy design notes below are preserved for context, but the "Current Gameplay Truth" section above is authoritative.
+
+**Mission Flow (Redesigned):**
+
+1. **Mission Start:**
+   - Helicopter starts WITH Mission Tech engineer on board
+   - Visual indicator above chopper (wrench or colored symbol) shows tech is on board
+   - Bus starts on right side, begins driving LEFT
+   - Yellow diamond indicator above bus shows it's the objective
+
+2. **Tech Deployment:**
+   - Player lands chopper near meal truck (parked at start position)
+   - Opens doors (E key / A button)
+   - Tech EXITS chopper, ENTERS meal truck
+   - Indicator disappears from chopper, appears on meal truck
+   - Chopper is now free to move and defend
+
+3. **Meal Truck Extraction Phase:**
+   - Tech drives meal truck to elevated jetway (second-to-last bunker, x=~1232)
+   - Jetway floor is elevated to match bottom of airport-meal-cart-box.png
+   - When truck reaches extraction LZ:
+     - Box extension animation begins:
+       - `airport-meal-cart-box.png` moves UP 53 pixels (animated)
+       - Simultaneously, `airport-meal-cart-extended.png` fades IN
+       - Both complete at same time
+     - Once fully extended, hostages board the meal truck
+     - Passenger indicators render on truck (at position 31, 21 when extended)
+   
+4. **Box Retraction:**
+   - Once all available hostages board:
+     - `airport-meal-cart-extended.png` fades OUT
+     - `airport-meal-cart-box.png` moves DOWN 53 pixels
+     - Returns to base `airport-meal-cart.png` sprite
+     - Passenger indicators persist, move down with box (render at position 31, 74 when retracted)
+
+5. **Transfer to Bus:**
+   - Meal truck drives LEFT to rendezvous with bus
+   - Bus has already driven past rescue operation
+   - When truck reaches bus vicinity:
+     - Bus stops, doors open (new sprite: `city-bus-doors-open.png`)
+     - Passengers transfer from meal truck to bus
+     - Passenger indicators update to show on bus
+
+6. **Escort Phase:**
+   - Once passengers are on bus, it becomes vulnerable to enemy attacks
+   - Player must defend bus from UAV drones, enemy fire, etc.
+   - Bus takes damage from enemy projectiles (and friendly fire from player)
+   - Bus drives to safe LZ on RIGHT side of screen
+
+7. **Mission Success:**
+   - If bus reaches safe LZ with passengers alive: SUCCESS
+   - If bus is destroyed or all passengers KIA: FAILURE
 
 **What's Done:**
 - Mission selection menu includes "Airport Special Ops"
@@ -109,36 +647,40 @@ Current script behavior (`scripts/build_windows_exe.ps1`):
 - Seven new module scaffolds created in `src/choplifter/`:
   - `bus_ai.py`, `hostage_logic.py`, `enemy_spawns.py`, `mission_tech.py`
   - `vehicle_assets.py`, `objective_manager.py`, `cutscene_manager.py`
-- Integration into `main.py`:
-  - Imports for all new modules (using `from .module import *`)
-  - Placeholder state variables initialized after mission creation
-  - Conditional update logic in fixed-step loop (currently just `pass` placeholder)
-  - Conditional rendering: `draw_mission()` always runs, then airport placeholders drawn on top
-- Placeholder shapes render at specific world coordinates (x=1200-1320):
-  - Blue rectangle = bus, white circle = hostage, red triangle = enemy
-  - Green square = tech, gold circle = objective, yellow star = cutscene trigger
-- Base game fully functional: helicopter physics, enemies, projectiles, all working
+- Integration into `main.py` for all airport objects
+- Basic bus AI (drives left, stops for obstacles)
+- Enemy spawns (UAV drones with weaving/dive behavior)
+- Friendly fire detection on bus
+- Objective tracking with timer
+- UAV enemy type implemented
 
-**What's Not Done:**
-- All module logic (bus AI, hostage boarding, enemy spawns, etc.) - just TODOs
-- Actual vehicle sprites/assets
-- Collision detection for bus
-- Damage model for bus
-- New enemy types (UAV, Merkava)
-- Mission Tech repair mechanic
-- Cutscene integration
-- Objective tracking system
+**What Needs Refactoring (New Design):**
+- Mission Tech state machine (currently deploys when grounded near bus, needs to track: on_chopper → deployed_to_truck → driving → extracting → transferring → returned)
+- Meal truck animation system (box extension/retraction with 53px movement + sprite fade)
+- Passenger indicator positioning (must move with box: 31,21 extended / 31,74 retracted)
+- Tech visual indicators (wrench/symbol above chopper when tech on board, above truck when deployed)
+- Bus doors sprite system (add `city-bus-doors-open.png` sprite)
+- Transfer LZ detection (meal truck proximity to bus)
+- Mission phases (tech_deployment → extraction → transfer → escort → success/failure)
 
 **Next Session Should:**
-1. Pick one module to implement first (recommend `bus_ai.py` for visible progress)
-2. Add basic bus movement along a path
-3. Test collision with obstacles
-4. Iterate on one feature at a time
+1. Refactor `mission_tech.py` to track tech state (on_chopper → in_truck → returned)
+2. Update `vehicle_assets.py` for box animation (53px movement + fade)
+3. Add passenger indicator positioning logic (moves with box)
+4. Implement transfer LZ detection and bus door opening
+5. Update objective phases to match new flow
+6. Add tech visual indicators (wrench above chopper/truck)
 
 **Testing:**
 - Select "Airport Special Ops" from mission menu
-- Fly helicopter to x=1200-1320 to see placeholders
-- All base game features working (enemies, shooting, compounds, etc.)
+- Land near meal truck, open doors (E / A button)
+- Verify tech exits chopper, enters truck
+- Watch meal truck drive to jetway
+- Verify box extends 53px with fade animation
+- Verify hostages board and indicators render at 31,21
+- Verify box retracts with indicators moving to 31,74
+- Verify truck drives to bus and transfer occurs
+- Verify escort phase begins and bus can be defended
 
 ## Notes for Future Refactors
 
@@ -146,4 +688,30 @@ Current script behavior (`scripts/build_windows_exe.ps1`):
 - Prefer small extraction steps with immediate diagnostics and smoke tests.
 - Avoid broad behavior changes during structural refactors.
 - If changing controls or mode flow, update `README.md` and this file in the same change.
-- Airport mission modules use wildcard imports (`from .module import *`) - may need cleanup later.
+
+## Long-Term Strategy: Keep `main.py` Modular and Manageable
+
+Purpose: keep `src/choplifter/main.py` functional as the game orchestrator without letting it become a monolith that blocks feature velocity.
+
+### Target Boundaries
+
+1. Keep `main.py` focused on composition/orchestration only (wiring, mode transitions, top-level frame loop).
+2. Keep feature logic in domain modules (`app/`, `mission_*`, and airport-specific modules).
+3. Maintain a soft line budget target for `main.py` (aim <= `1400` lines, hard warning at `1600+`).
+
+### Extraction Plan (Priority Order)
+
+1. `P0` DONE: Airport mission setup/reset/config blocks extracted from `main.py` into `app/airport_session.py`.
+2. `P0` DONE: Airport per-tick update pipeline extracted into `app/airport_update.py` (bus, hostages, tech, truck, enemies, objectives, cutscene state).
+3. `P1` DONE: Airport render orchestration hooks extracted into `app/airport_render.py`.
+4. `P1` DONE: Airport imports in `main.py` use explicit module imports (no wildcard airport imports remain).
+5. `P2` DONE: Added internal `MainLoopContext`/`AirportRuntimeContext` structures to reduce long mutable state threading and wrapper `nonlocal` rebinding.
+
+### Governance Rules
+
+1. Any new feature branch that adds `>80` lines to `main.py` should include at least one compensating extraction.
+2. Refactors must be behavior-preserving by default; pair each extraction with focused tests.
+3. Run after each extraction step:
+  - import smoke: `./.venv/Scripts/python.exe -c "from src.choplifter.main import run; print('import-ok')"`
+  - targeted airport smoke subset (`-m airport_smoke`)
+4. Keep docs in sync: update this handoff when ownership boundaries move.

@@ -19,10 +19,51 @@ _HUD_SMALL_FONT: pygame.font.Font | None = None
 _TOAST_FONT: pygame.font.Font | None = None
 _HUD_ICON_CACHE: dict[tuple[str, int], pygame.Surface | None] = {}
 _LIFE_ICON_CACHE: dict[tuple[str, int, bool], pygame.Surface | None] = {}
+_HUD_PANEL_SCRATCH: dict[tuple[int, int], pygame.Surface] = {}
+_TOAST_PANEL_SCRATCH: dict[tuple[int, int], pygame.Surface] = {}
+_VIP_CROWN_CACHE: dict[tuple[int, int], pygame.Surface] = {}
+
+
+def _scratch_surface(cache: dict[tuple[int, int], pygame.Surface], *, width: int, height: int, max_size: int) -> pygame.Surface:
+    key = (max(1, int(width)), max(1, int(height)))
+    surf = cache.get(key)
+    if surf is not None:
+        return surf
+
+    surf = pygame.Surface(key, pygame.SRCALPHA)
+    cache[key] = surf
+    if len(cache) > max_size:
+        cache.clear()
+        cache[key] = surf
+    return surf
 
 
 def _assets_ui_dir() -> Path:
     return Path(__file__).resolve().parent.parent / "assets" / "ui"
+
+
+def _create_crt_panel(width: int, height: int, *, panel_color: tuple[int, int, int, int]) -> pygame.Surface:
+    """Create a subtle 80s CRT-looking panel with phosphor tint, flicker, and scan lines."""
+    t = pygame.time.get_ticks() / 1000.0
+    flicker = 0.88 + 0.12 * (0.5 + 0.5 * math.sin(t * 21.0 + width * 0.03))
+
+    br, bg, bb, ba = panel_color
+    panel = _scratch_surface(_HUD_PANEL_SCRATCH, width=width, height=height, max_size=24)
+    panel.fill((br, bg, bb, max(0, min(255, int(ba * flicker)))))
+
+    # Gentle phosphor wash.
+    panel.fill((18, 58, 26, 26), special_flags=pygame.BLEND_RGBA_ADD)
+
+    # Subtle vertical lines to mimic old terminal glass.
+    for x in range(2, width, 4):
+        pygame.draw.line(panel, (26, 82, 34, 26), (x, 1), (x, height - 2), 1)
+
+    # Faint horizontal scanlines.
+    for y in range(1, height, 3):
+        pygame.draw.line(panel, (10, 28, 14, 16), (1, y), (width - 2, y), 1)
+
+    pygame.draw.rect(panel, (28, 90, 38, 70), (0, 0, width, height), 1, border_radius=2)
+    return panel
 
 
 def _load_hud_icon(name: str, size: int) -> pygame.Surface | None:
@@ -82,7 +123,15 @@ def _draw_vip_crown_indicator(target: pygame.Surface, *, x: int, y: int, size: i
 
     crown_w = max(10, int(size * 0.95))
     crown_h = max(7, int(size * 0.62))
-    crown = pygame.Surface((crown_w, crown_h), pygame.SRCALPHA)
+    crown_key = (crown_w, crown_h)
+    crown = _VIP_CROWN_CACHE.get(crown_key)
+    if crown is None:
+        crown = pygame.Surface((crown_w, crown_h), pygame.SRCALPHA)
+        _VIP_CROWN_CACHE[crown_key] = crown
+        if len(_VIP_CROWN_CACHE) > 16:
+            _VIP_CROWN_CACHE.clear()
+            _VIP_CROWN_CACHE[crown_key] = crown
+    crown.fill((0, 0, 0, 0))
     points = [
         (1, crown_h - 2),
         (max(2, crown_w // 4), max(1, crown_h // 3)),
@@ -118,8 +167,7 @@ def _draw_stat_chip(
     chip_w = 198
     chip_h = 34
     icon_size = 18
-    panel = pygame.Surface((chip_w, chip_h), pygame.SRCALPHA)
-    panel.fill(panel_color)
+    panel = _create_crt_panel(chip_w, chip_h, panel_color=panel_color)
 
     ix = 8
     iy = (chip_h - icon_size) // 2
@@ -139,6 +187,26 @@ def _draw_stat_chip(
     screen.blit(panel, (x, y))
 
 
+def _airport_vehicle_onboard_count(mission: MissionState) -> int:
+    """Count passengers currently onboard airport ground vehicles (truck or bus)."""
+    airport_hostage_state = getattr(mission, "airport_hostage_state", None)
+    if airport_hostage_state is None:
+        return 0
+
+    state_name = str(getattr(airport_hostage_state, "state", "waiting"))
+    meal_truck_loaded = max(0, int(getattr(airport_hostage_state, "meal_truck_loaded_hostages", 0)))
+    boarded_on_bus = max(0, int(getattr(airport_hostage_state, "boarded_hostages", 0)))
+
+    # During transfer, one batch is split between truck and bus; use the batch total
+    # so the HUD remains stable and avoids double-counting mid-animation fields.
+    if state_name == "transferring_to_bus":
+        transfer_base = max(0, int(getattr(airport_hostage_state, "truck_load_base", 0)))
+        transfer_total = max(0, int(getattr(airport_hostage_state, "transferring_hostages", 0)))
+        return transfer_base + transfer_total
+
+    return meal_truck_loaded + boarded_on_bus
+
+
 def _draw_fuel_gauge_chip(
     screen: pygame.Surface,
     *,
@@ -153,8 +221,7 @@ def _draw_fuel_gauge_chip(
     chip_h = 34
     icon_size = 18
 
-    panel = pygame.Surface((chip_w, chip_h), pygame.SRCALPHA)
-    panel.fill(panel_color)
+    panel = _create_crt_panel(chip_w, chip_h, panel_color=panel_color)
 
     icon = _load_hud_icon("hud_fuel", icon_size)
     ix = 8
@@ -208,8 +275,7 @@ def _draw_health_icons_chip(
     chip_h = 34
     icon_size = 18
 
-    panel = pygame.Surface((chip_w, chip_h), pygame.SRCALPHA)
-    panel.fill(panel_color)
+    panel = _create_crt_panel(chip_w, chip_h, panel_color=panel_color)
 
     icon = _load_hud_icon("hud_health", icon_size)
     ix = 8
@@ -304,8 +370,7 @@ def _draw_lives_strip(screen: pygame.Surface, mission: MissionState, helicopter:
 
     panel_w = 198
     panel_h = 38
-    panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-    panel.fill((0, 0, 0, 152))
+    panel = _create_crt_panel(panel_w, panel_h, panel_color=(0, 0, 0, 152))
 
     icon_w = 60
     gap = 8
@@ -328,7 +393,7 @@ def _draw_lives_strip(screen: pygame.Surface, mission: MissionState, helicopter:
     screen.blit(panel, (x, y))
 
 
-def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopter) -> None:
+def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopter, *, driver_mode_active: bool = False, debug_mode: bool = False) -> None:
     global _HUD_FONT, _HUD_SMALL_FONT
     if _HUD_FONT is None:
         pygame.font.init()
@@ -339,6 +404,13 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
 
     font = _HUD_FONT
     small = _HUD_SMALL_FONT
+    hud_t = pygame.time.get_ticks() / 1000.0
+    hud_flicker = 0.90 + 0.10 * (0.5 + 0.5 * math.sin(hud_t * 16.0))
+    hud_text_color = (
+        int(148 * hud_flicker),
+        int(214 * hud_flicker),
+        int(148 * hud_flicker),
+    )
 
     boarding_ux = compute_boarding_ux_status(mission, helicopter)
     boarding_visual = get_boarding_ux_visual(boarding_ux)
@@ -347,8 +419,48 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
     doors_state = "OPEN" if helicopter.doors_open else "CLOSED"
     grounded_state = "YES" if helicopter.grounded else "NO"
     rescue_ready = "READY" if helicopter.grounded and helicopter.doors_open else "NOT READY"
-    boarding_status = f"{boarding_ux.state.upper()}: {boarding_ux.detail}"
-    boarding_line = f"Boarding: {boarding_visual.symbol} {boarding_status}"
+
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    is_airport = mission_id in ("airport", "airport_special_ops", "airportspecialops", "mission2", "m2")
+    airport_target_total = 16
+    airport_elevated_rescued = 0
+    airport_combined_rescued = saved
+    airport_vehicle_onboard = 0
+    if is_airport:
+        airport_hostage_state = getattr(mission, "airport_hostage_state", None)
+        airport_meal_truck_state = getattr(mission, "airport_meal_truck_state", None)
+        airport_elevated_rescued = int(getattr(airport_hostage_state, "rescued_hostages", 0)) if airport_hostage_state is not None else 0
+        airport_combined_rescued = int(saved) + int(airport_elevated_rescued)
+        airport_vehicle_onboard = _airport_vehicle_onboard_count(mission)
+        if airport_hostage_state is not None and airport_meal_truck_state is not None:
+            truck_x = float(getattr(airport_meal_truck_state, "x", 0.0))
+            pickup_x = float(getattr(airport_hostage_state, "pickup_x", 1500.0))
+            pickup_radius = float(getattr(airport_hostage_state, "pickup_radius_px", 28.0))
+            pickup_offset = float(getattr(airport_hostage_state, "pickup_passed_offset_px", 6.0))
+            boarding_center_x = pickup_x + pickup_offset
+            in_lz = abs(truck_x - boarding_center_x) <= pickup_radius
+            truck_extended = bool(
+                float(getattr(airport_meal_truck_state, "extension_progress", 0.0)) >= 0.92
+                or str(getattr(airport_meal_truck_state, "box_state", "idle")) == "extended"
+            )
+            host_state = str(getattr(airport_hostage_state, "state", "waiting"))
+            dist_px = int(abs(truck_x - boarding_center_x))
+
+            if host_state == "truck_loading":
+                boarding_line = "Boarding: + AIRPORT LOADING"
+            elif host_state == "truck_loaded":
+                boarding_line = "Boarding: [] PASSENGERS LOADED"
+            elif in_lz and truck_extended:
+                boarding_line = "Boarding: + JETWAY LZ READY"
+            elif in_lz and not truck_extended:
+                boarding_line = "Boarding: ! IN LZ - EXTEND LIFT"
+            else:
+                boarding_line = f"Boarding: >> DRIVE TO JETWAY ({dist_px}px)"
+        else:
+            boarding_line = "Boarding: >> DRIVE TO JETWAY"
+    else:
+        boarding_status = f"{boarding_ux.state.upper()}: {boarding_ux.detail}"
+        boarding_line = f"Boarding: {boarding_visual.symbol} {boarding_status}"
 
     hud_x = 12
     lives_y = 8
@@ -387,8 +499,21 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
         screen,
         x=hud_x,
         y=hud_y + 114,
-        label="SAVED / TARGET",
-        value=f"{saved}/20",
+        label="AIRPORT RESCUE" if is_airport else "SAVED / TARGET",
+        value=f"{airport_combined_rescued}/{airport_target_total}" if is_airport else f"{saved}/20",
+        icon_name="hud_saved",
+        icon_kind="saved",
+        label_font=small,
+        value_font=font,
+    )
+    chopper_onboard = max(0, int(boarded))
+    onboard_now = chopper_onboard + (airport_vehicle_onboard if is_airport else 0)
+    _draw_stat_chip(
+        screen,
+        x=hud_x,
+        y=hud_y + 152,
+        label="ONBOARD NOW",
+        value=str(onboard_now),
         icon_name="hud_saved",
         icon_kind="saved",
         label_font=small,
@@ -414,7 +539,7 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
         _draw_stat_chip(
             screen,
             x=hud_x,
-            y=hud_y + 152,
+            y=hud_y + 190,
             label="VIP",
             value=vip_status,
             icon_name="hud_vip",
@@ -431,11 +556,22 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
             f"Rescue flow: Open compound -> land -> doors (E) -> load {boarded}/16",
             "Unload flow: land at base flag -> doors (E)",
             f"LZ status: {rescue_ready} | Grounded: {grounded_state} | Doors: {doors_state}",
+            (
+                f"Onboard now: {onboard_now} (chopper {chopper_onboard} + vehicle {airport_vehicle_onboard})"
+                if is_airport
+                else f"Onboard now: {onboard_now}"
+            ),
             boarding_line,
         ]
     else:
         lines = [
-            f"Objective: Save 20 hostages (saved {saved}/20)",
+            (
+                f"Objective: Rescue all {airport_target_total} civilians "
+                f"(total {airport_combined_rescued}/{airport_target_total} | "
+                f"lower {saved} + elevated {airport_elevated_rescued})"
+                if is_airport
+                else f"Objective: Save 20 hostages (saved {saved}/20)"
+            ),
             f"Rescue flow: Open compound -> land -> doors (E) -> load {boarded}/16",
             "Unload flow: land at base flag -> doors (E)",
             f"LZ status: {rescue_ready} | Grounded: {grounded_state} | Doors: {doors_state}",
@@ -444,6 +580,10 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
 
     if mission.invuln_seconds > 0.0:
         lines.append(f"INVULN: {mission.invuln_seconds:0.1f}s")
+    
+    if driver_mode_active:
+        lines.append(">>> TRUCK DRIVER MODE ACTIVE <<< (E/A toggles lift)")
+        lines.append("To return engineer: land near truck, open heli doors, press E/A")
 
     if float(getattr(mission, "tank_warning_seconds", 0.0)) > 0.0:
         tank_dir = "->" if bool(getattr(mission, "tank_warning_from_right", False)) else "<-"
@@ -456,6 +596,9 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
     if float(getattr(mission, "mine_warning_seconds", 0.0)) > 0.0:
         mine_dist = int(float(getattr(mission, "mine_warning_distance", 0.0)))
         lines.append(f"[MINE] * PROXIMITY ({mine_dist}px)")
+
+    if not debug_mode:
+        return
 
     x = 12
     y = screen.get_height() - 12 - len(lines) * 20
@@ -473,7 +616,7 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
             surf = font.render(line, True, boarding_visual.color)
             screen.blit(surf, (x + 20, line_y))
         else:
-            surf = font.render(line, True, (240, 240, 240))
+            surf = font.render(line, True, hud_text_color)
             screen.blit(surf, (x, line_y))
 
 
@@ -494,7 +637,7 @@ def draw_toast(screen: pygame.Surface, message: str) -> None:
     w = text.get_width() + padding_x * 2
     h = text.get_height() + padding_y * 2
 
-    panel = pygame.Surface((w, h), pygame.SRCALPHA)
+    panel = _scratch_surface(_TOAST_PANEL_SCRATCH, width=w, height=h, max_size=12)
     panel.fill((0, 0, 0, 160))
     panel.blit(text, (padding_x, padding_y))
 

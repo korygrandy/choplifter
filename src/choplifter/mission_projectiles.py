@@ -6,6 +6,7 @@ import random
 from typing import Callable
 
 from . import haptics
+from .entities import Projectile
 from .game_types import EnemyKind, HostageState, ProjectileKind
 from .helicopter import Facing, Helicopter
 from .math2d import Vec2, clamp
@@ -17,11 +18,78 @@ from .mission_helpers import (
 )
 from .mission_state import MissionState
 from .settings import HelicopterSettings
+from .app.escort_risk import airport_escort_damage_multiplier
 
 
 def _barak_should_apply_damage(*, grounded: bool, in_lz: bool) -> bool:
     """BARAK missiles are safe only while grounded inside the LZ/base zone."""
     return not (grounded and in_lz)
+
+
+def _tick_pending_barak_cookoff_bursts(mission: MissionState, dt: float) -> None:
+    """Advance queued BARAK cook-off events and launch delayed cook-off missiles."""
+    pending = list(getattr(mission, "_pending_barak_cookoff_bursts", []))
+    if not pending:
+        return
+
+    still_pending: list[dict[str, object]] = []
+    for item in pending:
+        remaining = float(item.get("delay_s", 0.0)) - float(dt)
+        pos = item.get("pos", None)
+        if remaining <= 0.0 and isinstance(pos, Vec2):
+            try:
+                side_sign = -1.0 if random.random() < 0.5 else 1.0
+                launch_origin = Vec2(float(pos.x), float(pos.y) - 6.0)
+                p = Projectile(
+                    kind=ProjectileKind.ENEMY_ARTILLERY,
+                    pos=launch_origin,
+                    vel=Vec2(0.0, -340.0),
+                    ttl=1.2,
+                    source=EnemyKind.BARAK_MRAD,
+                    is_barak_missile=True,
+                    missile_state="cookoff_spiral",
+                    current_angle=math.pi / 2,
+                )
+                p.barak_cookoff_missile = True
+                p.barak_cookoff_age_s = 0.0
+                p.barak_cookoff_origin_x = float(launch_origin.x)
+                p.barak_cookoff_spiral_amp_px = random.uniform(10.0, 15.0)
+                p.barak_cookoff_spiral_freq_hz = random.uniform(6.5, 8.2)
+                p.barak_cookoff_detonate_s = random.uniform(0.34, 0.46)
+                p.barak_cookoff_side_sign = side_sign
+                mission.projectiles.append(p)
+
+                audio = getattr(mission, "audio", None)
+                if audio is not None and hasattr(audio, "play_barak_mrad_launch"):
+                    try:
+                        audio.play_barak_mrad_launch()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        else:
+            item["delay_s"] = remaining
+            still_pending.append(item)
+
+    mission._pending_barak_cookoff_bursts = still_pending
+
+
+def _barak_is_in_lz_zone(*, mission: MissionState, helicopter: Helicopter) -> bool:
+    """Return True when helicopter is inside either airport LZ or the mission base LZ."""
+    base = getattr(mission, "base", None)
+    if base is not None and bool(base.contains_point(helicopter.pos)):
+        return True
+
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    if mission_id not in ("airport", "airport_special_ops"):
+        return False
+
+    # Tower LZ band aligns with airport rescue/deboard zone around stop_x.
+    tower_stop_x = 500.0
+    bus_state = getattr(mission, "airport_bus_state", None)
+    if bus_state is not None:
+        tower_stop_x = float(getattr(bus_state, "stop_x", tower_stop_x))
+    return float(getattr(helicopter.pos, "x", 0.0)) <= tower_stop_x + 140.0
 
 
 def _barak_ground_impact_can_damage(*, grounded: bool, in_lz: bool, impact_hits_helicopter: bool) -> bool:
@@ -38,6 +106,41 @@ def _barak_target_point(helicopter: Helicopter) -> Vec2:
     else:
         x_off = 10.0
     return Vec2(helicopter.pos.x + x_off, helicopter.pos.y + 2.0)
+
+
+def _barak_player_driving_vehicle(mission: MissionState) -> bool:
+    return bool(getattr(mission, "player_driving_vehicle", False))
+
+
+def _barak_bus_target_point(mission: MissionState) -> Vec2 | None:
+    bus_state = getattr(mission, "airport_bus_state", None)
+    if bus_state is None:
+        return None
+    if float(getattr(bus_state, "health", 0.0)) <= 0.0:
+        return None
+    return Vec2(float(getattr(bus_state, "x", 0.0)), float(getattr(bus_state, "y", 0.0)) - 10.0)
+
+
+def _barak_collision_prefers_bus(*, mission: MissionState, diverted_collision: bool) -> bool:
+    # Player expectation: missiles prioritize the helicopter unless the player is actively driving a vehicle.
+    return (not diverted_collision) and _barak_player_driving_vehicle(mission) and (_barak_bus_target_point(mission) is not None)
+
+
+def _hits_circle_or_swept(*, previous: Vec2, current: Vec2, center: Vec2, radius: float) -> bool:
+    """Return True when either endpoint or the movement segment intersects the circle."""
+    if _hits_circle(current, center, radius=radius) or _hits_circle(previous, center, radius=radius):
+        return True
+
+    dx = current.x - previous.x
+    dy = current.y - previous.y
+    seg_len2 = dx * dx + dy * dy
+    if seg_len2 <= 1e-6:
+        return False
+
+    t = ((center.x - previous.x) * dx + (center.y - previous.y) * dy) / seg_len2
+    t = clamp(t, 0.0, 1.0)
+    closest = Vec2(previous.x + dx * t, previous.y + dy * t)
+    return _hits_circle(closest, center, radius=radius)
 
 
 def _angle_diff(current: float, target: float) -> float:
@@ -250,6 +353,8 @@ def _update_projectiles(
 ) -> None:
     gravity = 28.0
 
+    _tick_pending_barak_cookoff_bursts(mission, dt)
+
     for p in mission.projectiles:
         if not p.alive:
             continue
@@ -259,9 +364,14 @@ def _update_projectiles(
             p.alive = False
             continue
 
+        # Airport engineer safety window: keep BARAK missiles frozen while suppressed.
+        if getattr(p, "is_barak_missile", False) and bool(getattr(mission, "barak_suppressed", False)):
+            continue
+
         if p.kind is ProjectileKind.BOMB:
             p.vel.y += gravity * dt
 
+        prev_pos = Vec2(float(p.pos.x), float(p.pos.y))
         p.pos.x += p.vel.x * dt
         p.pos.y += p.vel.y * dt
 
@@ -275,6 +385,30 @@ def _update_projectiles(
                 missile=p,
                 helicopter=helicopter,
             )
+
+            if bool(getattr(p, "barak_cookoff_missile", False)):
+                # Destruction cook-off missile: spiral upward, then pop into a sideways-biased airburst.
+                p.barak_cookoff_age_s = float(getattr(p, "barak_cookoff_age_s", 0.0)) + float(dt)
+                age = float(getattr(p, "barak_cookoff_age_s", 0.0))
+                amp = float(getattr(p, "barak_cookoff_spiral_amp_px", 14.0))
+                freq_hz = float(getattr(p, "barak_cookoff_spiral_freq_hz", 6.3))
+                omega = 2.0 * math.pi * freq_hz
+                origin_x = float(getattr(p, "barak_cookoff_origin_x", p.pos.x))
+                p.pos.x = origin_x + math.sin(age * omega) * amp
+                lateral_v = math.cos(age * omega) * amp * omega
+                p.vel.y = min(-120.0, float(p.vel.y) + (320.0 * dt))
+                p.current_angle = math.atan2(float(p.vel.y), lateral_v)
+
+                detonate_s = float(getattr(p, "barak_cookoff_detonate_s", 0.40))
+                if age >= detonate_s:
+                    side_sign = 1.0 if float(getattr(p, "barak_cookoff_side_sign", 1.0)) >= 0.0 else -1.0
+                    mission.explosions.emit_fire_plume(p.pos, strength=1.0)
+                    mission.explosions.emit_explosion(p.pos, strength=0.88)
+                    mission.impact_sparks.emit_hit(p.pos, Vec2(240.0 * side_sign, -18.0), strength=1.35)
+                    mission.impact_sparks.emit_hit(p.pos, Vec2(-220.0 * side_sign, -24.0), strength=1.22)
+                    mission.burning.add_site(p.pos, intensity=0.42)
+                    p.alive = False
+                continue
 
             if p.missile_state == "liftoff":
                 if p.launch_pos is None:
@@ -361,17 +495,61 @@ def _update_projectiles(
             for e in mission.enemies:
                 if not e.alive:
                     continue
-                if _projectile_hits_enemy(p, e, heli, mission.tuning):
+                if _projectile_hits_enemy(p, e, heli, mission.tuning, previous_pos=prev_pos):
+                    if p.kind is ProjectileKind.BULLET and e.kind in (EnemyKind.TANK, EnemyKind.BARAK_MRAD):
+                        sparks = getattr(mission, "impact_sparks", None)
+                        if sparks is not None and hasattr(sparks, "emit_hit"):
+                            try:
+                                sparks.emit_hit(
+                                    Vec2(float(p.pos.x), float(p.pos.y)),
+                                    Vec2(float(p.vel.x), float(p.vel.y)),
+                                    strength=0.85,
+                                )
+                            except Exception:
+                                pass
+                    enemy_damage_fx = getattr(mission, "enemy_damage_fx", None)
                     if p.kind is ProjectileKind.BULLET:
                         e.health -= 10.0
                     else:
                         e.health -= 40.0
+                    if e.kind is EnemyKind.BARAK_MRAD and e.health > 0.0 and enemy_damage_fx is not None and hasattr(enemy_damage_fx, "emit_hit_puff"):
+                        try:
+                            enemy_damage_fx.emit_hit_puff(
+                                Vec2(float(p.pos.x), float(p.pos.y)),
+                                incoming_vel=Vec2(float(p.vel.x), float(p.vel.y)),
+                                strength=0.55 if p.kind is ProjectileKind.BULLET else 0.78,
+                            )
+                        except Exception:
+                            pass
                     if e.health <= 0.0:
                         e.alive = False
                         mission.stats.enemies_destroyed += 1
-                        if e.kind is EnemyKind.TANK:
-                            mission.stats.tanks_destroyed += 1
-                            # Persist a burning effect at the destroyed cannon/tank location.
+                        if e.kind in (EnemyKind.TANK, EnemyKind.BARAK_MRAD):
+                            if e.kind is EnemyKind.TANK:
+                                mission.stats.tanks_destroyed += 1
+                            if e.kind is EnemyKind.BARAK_MRAD:
+                                # Two-stage BARAK destruction: immediate blast, then delayed cook-off.
+                                mission.explosions.emit_fire_plume(e.pos, strength=0.86)
+                                mission.explosions.emit_explosion(e.pos, strength=0.72)
+                                mission.impact_sparks.emit_hit(e.pos, p.vel, strength=1.0)
+                                audio = getattr(mission, "audio", None)
+                                if audio is not None and hasattr(audio, "play_barak_explosion"):
+                                    try:
+                                        audio.play_barak_explosion()
+                                    except Exception:
+                                        pass
+                                pending = list(getattr(mission, "_pending_barak_cookoff_bursts", []))
+                                pending.append(
+                                    {
+                                        "delay_s": float(getattr(mission.tuning, "barak_destroy_second_burst_delay_s", 0.24)),
+                                        "pos": Vec2(
+                                            float(e.pos.x) + random.uniform(-8.0, 8.0),
+                                            float(e.pos.y) + random.uniform(-4.0, 4.0),
+                                        ),
+                                    }
+                                )
+                                mission._pending_barak_cookoff_bursts = pending
+                            # Persist a burning effect at the destroyed vehicle location.
                             mission.burning.add_site(e.pos, intensity=1.0)
                         if logger is not None:
                             logger.info("ENEMY_DOWN: %s", e.kind.name)
@@ -396,23 +574,40 @@ def _update_projectiles(
                 )
                 diverted_collision = _barak_is_successfully_diverted(p)
                 hit_radius = 14.0 if diverted_collision else 22.0
+                barak_damage_target = "helicopter"
+                if _barak_collision_prefers_bus(mission=mission, diverted_collision=diverted_collision):
+                    bus_target = _barak_bus_target_point(mission)
+                    if bus_target is not None:
+                        barak_target = bus_target
+                        bus_state = getattr(mission, "airport_bus_state", None)
+                        bus_w = float(getattr(bus_state, "width", 64.0)) if bus_state is not None else 64.0
+                        hit_radius = max(24.0, bus_w * 0.35)
+                        barak_damage_target = "bus"
+                elif (not diverted_collision) and (not bool(helicopter.grounded)):
+                    # While airborne, center hits on the airframe for overlap reliability.
+                    barak_target = Vec2(float(helicopter.pos.x), float(helicopter.pos.y))
+                    hit_radius = max(hit_radius, 28.0)
             else:
                 barak_target = helicopter.pos
                 hit_radius = 26.0
-            if _hits_circle(p.pos, barak_target, radius=hit_radius):
+            if _hits_circle_or_swept(previous=prev_pos, current=p.pos, center=barak_target, radius=hit_radius):
                 if getattr(p, "is_barak_missile", False):
-                    in_lz = bool(mission.base.contains_point(helicopter.pos))
-                    apply_damage = (not diverted_collision) and _barak_should_apply_damage(
-                        grounded=bool(helicopter.grounded),
-                        in_lz=in_lz,
-                    )
+                    in_lz = _barak_is_in_lz_zone(mission=mission, helicopter=helicopter)
+                    if barak_damage_target == "bus":
+                        apply_damage = not diverted_collision
+                    else:
+                        apply_damage = (not diverted_collision) and _barak_should_apply_damage(
+                            grounded=bool(helicopter.grounded),
+                            in_lz=in_lz,
+                        )
                     if logger is not None:
                         logger.debug(
-                            "BARAK_COLLISION: mode=direct_hit diverted=%s grounded=%s in_lz=%s apply_damage=%s target=(%.1f,%.1f)",
+                            "BARAK_COLLISION: mode=direct_hit diverted=%s grounded=%s in_lz=%s apply_damage=%s target=%s point=(%.1f,%.1f)",
                             diverted_collision,
                             bool(helicopter.grounded),
                             in_lz,
                             apply_damage,
+                            barak_damage_target,
                             barak_target.x,
                             barak_target.y,
                         )
@@ -421,7 +616,14 @@ def _update_projectiles(
                     mission.impact_sparks.emit_hit(barak_target, p.vel, strength=1.35)
                     mission.burning.add_site(barak_target, intensity=0.55)
                     if apply_damage:
-                        damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
+                        if barak_damage_target == "bus":
+                            bus_state = getattr(mission, "airport_bus_state", None)
+                            if bus_state is not None:
+                                health = float(getattr(bus_state, "health", 100.0))
+                                damage = 18.0 * airport_escort_damage_multiplier(mission)
+                                setattr(bus_state, "health", max(0.0, health - damage))
+                        else:
+                            damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
                 elif p.kind is ProjectileKind.ENEMY_ARTILLERY:
                     mission.stats.artillery_hits += 1
                     mission.impact_sparks.emit_hit(p.pos, p.vel, strength=1.25)
@@ -435,7 +637,7 @@ def _update_projectiles(
         # Ground collision.
         if p.pos.y >= heli.ground_y - 6.0:
             if getattr(p, "is_barak_missile", False):
-                in_lz = bool(mission.base.contains_point(helicopter.pos))
+                in_lz = _barak_is_in_lz_zone(mission=mission, helicopter=helicopter)
                 _barak_apply_last_chance_flare_override(
                     mission=mission,
                     missile=p,
@@ -447,22 +649,39 @@ def _update_projectiles(
                     helicopter=helicopter,
                 )
                 diverted_collision = _barak_is_successfully_diverted(p)
+                barak_damage_target = "helicopter"
+                if _barak_collision_prefers_bus(mission=mission, diverted_collision=diverted_collision):
+                    bus_target = _barak_bus_target_point(mission)
+                    if bus_target is not None:
+                        barak_target = bus_target
+                        barak_damage_target = "bus"
+                elif (not diverted_collision) and (not bool(helicopter.grounded)):
+                    barak_target = Vec2(float(helicopter.pos.x), float(helicopter.pos.y))
                 near_ground_radius = 22.0 if diverted_collision else 36.0
-                near_ground_impact = _hits_circle(p.pos, barak_target, radius=near_ground_radius)
-                apply_damage = (not diverted_collision) and _barak_ground_impact_can_damage(
-                    grounded=bool(helicopter.grounded),
-                    in_lz=in_lz,
-                    impact_hits_helicopter=near_ground_impact,
+                near_ground_impact = _hits_circle_or_swept(
+                    previous=prev_pos,
+                    current=p.pos,
+                    center=barak_target,
+                    radius=near_ground_radius,
                 )
+                if barak_damage_target == "bus":
+                    apply_damage = (not diverted_collision) and near_ground_impact
+                else:
+                    apply_damage = (not diverted_collision) and _barak_ground_impact_can_damage(
+                        grounded=bool(helicopter.grounded),
+                        in_lz=in_lz,
+                        impact_hits_helicopter=near_ground_impact,
+                    )
                 impact_pos = barak_target if apply_damage else p.pos
                 if logger is not None:
                     logger.debug(
-                        "BARAK_COLLISION: mode=ground_impact diverted=%s grounded=%s in_lz=%s near=%s apply_damage=%s target=(%.1f,%.1f)",
+                        "BARAK_COLLISION: mode=ground_impact diverted=%s grounded=%s in_lz=%s near=%s apply_damage=%s target=%s point=(%.1f,%.1f)",
                         diverted_collision,
                         bool(helicopter.grounded),
                         in_lz,
                         near_ground_impact,
                         apply_damage,
+                        barak_damage_target,
                         barak_target.x,
                         barak_target.y,
                     )
@@ -471,7 +690,14 @@ def _update_projectiles(
                 mission.impact_sparks.emit_hit(impact_pos, p.vel, strength=1.20)
                 mission.burning.add_site(impact_pos, intensity=0.40)
                 if apply_damage:
-                    damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
+                    if barak_damage_target == "bus":
+                        bus_state = getattr(mission, "airport_bus_state", None)
+                        if bus_state is not None:
+                            health = float(getattr(bus_state, "health", 100.0))
+                            damage = 18.0 * airport_escort_damage_multiplier(mission)
+                            setattr(bus_state, "health", max(0.0, health - damage))
+                    else:
+                        damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
             elif p.kind is ProjectileKind.BOMB:
                 _bomb_explode(mission, p.pos, logger)
             p.alive = False
@@ -549,8 +775,9 @@ def _bomb_explode(mission: MissionState, pos: Vec2, logger: logging.Logger | Non
             if e.health <= 0.0:
                 e.alive = False
                 mission.stats.enemies_destroyed += 1
-                if e.kind is EnemyKind.TANK:
-                    mission.stats.tanks_destroyed += 1
+                if e.kind in (EnemyKind.TANK, EnemyKind.BARAK_MRAD):
+                    if e.kind is EnemyKind.TANK:
+                        mission.stats.tanks_destroyed += 1
                     mission.burning.add_site(e.pos, intensity=1.0)
                     haptics.rumble_tank_destroyed(logger=logger)
                 if logger is not None:

@@ -17,7 +17,7 @@ class IntroVideoPlayer:
     Uses `imageio` (ffmpeg backend) to decode frames and blit them with
     letterboxing.
 
-    If the container has an audio track, it is extracted to a temporary WAV
+    If the container has an audio track, it is extracted to a temporary OGG
     (via `imageio-ffmpeg`'s bundled ffmpeg) and played with
     `pygame.mixer.music`.
     """
@@ -35,7 +35,7 @@ class IntroVideoPlayer:
     _scaled: pygame.Surface | None = None
     _scaled_size: tuple[int, int] | None = None
     _scaled_screen: tuple[int, int] | None = None
-    _audio_wav: Path | None = None
+    _audio_path: Path | None = None
     _audio_started: bool = False
     _audio_failed: bool = False
     done: bool = False
@@ -82,12 +82,12 @@ class IntroVideoPlayer:
 
     def close(self, *, immediate: bool = False) -> None:
         self._stop_audio(immediate=immediate)
-        if self._audio_wav is not None:
+        if self._audio_path is not None:
             try:
-                self._audio_wav.unlink(missing_ok=True)
+                self._audio_path.unlink(missing_ok=True)
             except Exception:
                 pass
-            self._audio_wav = None
+            self._audio_path = None
 
         try:
             self._reader.close()
@@ -122,10 +122,10 @@ class IntroVideoPlayer:
             self._audio_failed = True
             return
 
-        # Extract audio to temp WAV (Windows: keep file path, don't rely on delete-on-close semantics).
+        # Extract audio to temp OGG (Windows: keep file path, don't rely on delete-on-close semantics).
         try:
             ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-            tmp = tempfile.NamedTemporaryFile(prefix="choplifter-intro-", suffix=".wav", delete=False)
+            tmp = tempfile.NamedTemporaryFile(prefix="choplifter-intro-", suffix=".ogg", delete=False)
             tmp_path = Path(tmp.name)
             tmp.close()
 
@@ -136,7 +136,7 @@ class IntroVideoPlayer:
                 str(self.path),
                 "-vn",
                 "-acodec",
-                "pcm_s16le",
+                "libvorbis",
                 "-ar",
                 "44100",
                 "-ac",
@@ -163,13 +163,13 @@ class IntroVideoPlayer:
                 self._audio_failed = True
                 return
 
-            self._audio_wav = tmp_path
+            self._audio_path = tmp_path
         except Exception:
             self._audio_failed = True
             return
 
         try:
-            pygame.mixer.music.load(str(self._audio_wav))
+            pygame.mixer.music.load(str(self._audio_path))
             pygame.mixer.music.set_volume(1.0)
             pygame.mixer.music.play()
             self._audio_started = True
