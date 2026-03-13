@@ -97,6 +97,7 @@ class AirportFuselageDamageTests(unittest.TestCase):
         start_health = FUSELAGE_DAMAGE_THRESHOLD_TOTAL + 30.0
         mission = SimpleNamespace(
             mission_id="airport",
+            enforce_fuselage_boarding_gate=True,
             compounds=[
                 _make_compound(x=1000.0, y=220.0, health=start_health),
                 _make_compound(x=1300.0, y=220.0, health=start_health),
@@ -145,6 +146,7 @@ class AirportFuselageDamageTests(unittest.TestCase):
         start_health = FUSELAGE_DAMAGE_THRESHOLD_TOTAL + 30.0
         mission = SimpleNamespace(
             mission_id="airport",
+            enforce_fuselage_boarding_gate=True,
             compounds=[
                 _make_compound(x=1000.0, y=220.0, health=start_health, is_open=False),
                 _make_compound(x=1300.0, y=220.0, health=start_health, is_open=False),
@@ -195,6 +197,7 @@ class AirportFuselageDamageTests(unittest.TestCase):
         start_health = FUSELAGE_DAMAGE_THRESHOLD_TOTAL + 30.0
         mission = SimpleNamespace(
             mission_id="airport",
+            enforce_fuselage_boarding_gate=True,
             compounds=[
                 _make_compound(x=1000.0, y=220.0, health=start_health, is_open=True),
                 _make_compound(x=1300.0, y=220.0, health=start_health, is_open=False),
@@ -240,6 +243,80 @@ class AirportFuselageDamageTests(unittest.TestCase):
             tech_state=tech_state,
         )
         self.assertEqual(hostage_state.state, "truck_loading")
+
+    def test_unlock_beep_plays_once_per_terminal_when_terminal_opens(self) -> None:
+        mission = SimpleNamespace(
+            mission_id="airport",
+            compounds=[
+                _make_compound(x=1000.0, y=220.0, health=100.0, is_open=False),
+                _make_compound(x=1300.0, y=220.0, health=100.0, is_open=False),
+            ],
+            elapsed_seconds=10.0,
+        )
+        hostage_state = create_airport_hostage_state(total_hostages=4, pickup_points=[1000.0, 1300.0])
+        hostage_state.terminal_remaining = [2, 2]
+
+        bus_state = SimpleNamespace(x=1600.0, stop_x=500.0)
+        helicopter = SimpleNamespace()
+
+        class _Audio:
+            def __init__(self) -> None:
+                self.bus_door_calls = 0
+
+            def play_bus_door(self) -> None:
+                self.bus_door_calls += 1
+
+        audio = _Audio()
+
+        hostage_state = update_airport_hostage_logic(
+            hostage_state,
+            0.016,
+            bus_state=bus_state,
+            helicopter=helicopter,
+            mission=mission,
+            audio=audio,
+            meal_truck_state=None,
+            tech_state=None,
+        )
+        self.assertEqual(audio.bus_door_calls, 0)
+
+        mission.compounds[0].is_open = True
+        hostage_state = update_airport_hostage_logic(
+            hostage_state,
+            0.016,
+            bus_state=bus_state,
+            helicopter=helicopter,
+            mission=mission,
+            audio=audio,
+            meal_truck_state=None,
+            tech_state=None,
+        )
+        self.assertEqual(audio.bus_door_calls, 1)
+
+        mission.compounds[1].is_open = True
+        hostage_state = update_airport_hostage_logic(
+            hostage_state,
+            0.016,
+            bus_state=bus_state,
+            helicopter=helicopter,
+            mission=mission,
+            audio=audio,
+            meal_truck_state=None,
+            tech_state=None,
+        )
+        self.assertEqual(audio.bus_door_calls, 2)
+
+        hostage_state = update_airport_hostage_logic(
+            hostage_state,
+            0.016,
+            bus_state=bus_state,
+            helicopter=helicopter,
+            mission=mission,
+            audio=audio,
+            meal_truck_state=None,
+            tech_state=None,
+        )
+        self.assertEqual(audio.bus_door_calls, 2)
 
 
 if __name__ == "__main__":

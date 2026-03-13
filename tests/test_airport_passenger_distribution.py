@@ -35,6 +35,7 @@ class AirportPassengerDistributionTests(unittest.TestCase):
         self.assertEqual(len(pickup_points), 2)
         self.assertGreaterEqual(elevated_total, 1)
         self.assertGreaterEqual(lower_total, 1)
+        self.assertTrue(all(int(getattr(c, "hostage_count", 0)) >= 1 for c in mission.compounds))
         self.assertEqual(total, 16)
 
     def test_same_height_compounds_still_reserve_lower_lane(self) -> None:
@@ -56,6 +57,7 @@ class AirportPassengerDistributionTests(unittest.TestCase):
         self.assertEqual(len(pickup_points), 2)
         self.assertGreaterEqual(elevated_total, 1)
         self.assertGreaterEqual(lower_total, 1)
+        self.assertTrue(all(int(getattr(c, "hostage_count", 0)) >= 1 for c in mission.compounds))
         self.assertEqual(total, 16)
 
 

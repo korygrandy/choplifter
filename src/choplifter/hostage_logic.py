@@ -35,6 +35,7 @@ class AirportHostageState:
 	terminal_pickup_xs: tuple[float, ...] = ()
 	terminal_remaining: list[int] | None = None
 	terminal_kia: list[int] | None = None
+	terminal_unlock_beeped: list[bool] | None = None
 	active_terminal_index: int = 0
 	loading_terminal_index: int = -1
 	loading_terminal_initial_count: int = 0
@@ -199,12 +200,37 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 	if len(terminal_kia) != len(pickup_xs):
 		terminal_kia = (terminal_kia + [0 for _ in pickup_xs])[: len(pickup_xs)]
 	hostage_state.terminal_kia = terminal_kia
+	prev_open_for_boarding = list(getattr(hostage_state, "terminal_open_for_boarding", []) or [])
 	hostage_state.terminal_open_for_boarding = _compute_terminal_open_for_boarding(mission, pickup_xs)
+	has_prev_open_snapshot = len(prev_open_for_boarding) == len(pickup_xs)
+
+	unlock_beeped = list(getattr(hostage_state, "terminal_unlock_beeped", []) or [])
+	if len(unlock_beeped) != len(pickup_xs):
+		unlock_beeped = (unlock_beeped + [False for _ in pickup_xs])[: len(pickup_xs)]
+	for i in range(len(pickup_xs)):
+		is_open_now = bool(hostage_state.terminal_open_for_boarding[i])
+		was_open = bool(prev_open_for_boarding[i]) if i < len(prev_open_for_boarding) else False
+		if not is_open_now:
+			unlock_beeped[i] = False
+			continue
+		if not has_prev_open_snapshot:
+			continue
+		if unlock_beeped[i]:
+			continue
+		if was_open:
+			continue
+		if _remaining_at_terminal(hostage_state, i) <= 0:
+			continue
+		if audio is not None and hasattr(audio, "play_bus_door"):
+			audio.play_bus_door()
+		unlock_beeped[i] = True
+	hostage_state.terminal_unlock_beeped = unlock_beeped
 
 	tech_operating = bool(tech_state is not None and getattr(tech_state, "is_deployed", False))
 	tech_on_truck = bool(meal_truck_state is not None and getattr(meal_truck_state, "tech_has_deployed", False))
 	tech_available_for_boarding = tech_operating or tech_on_truck
-	boarding_unlocked = is_airport_fuselage_boarding_unlocked(mission)
+	enforce_fuselage_gate = bool(getattr(mission, "enforce_fuselage_boarding_gate", False)) if mission is not None else False
+	boarding_unlocked = is_airport_fuselage_boarding_unlocked(mission) if enforce_fuselage_gate else True
 	truck_extended = bool(
 		meal_truck_state is not None
 		and (
@@ -214,7 +240,13 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 	)
 	truck_retracted = bool(meal_truck_state is not None and float(getattr(meal_truck_state, "extension_progress", 0.0)) <= 0.05)
 	truck_x = float(getattr(meal_truck_state, "x", 0.0)) if meal_truck_state is not None else 0.0
-	pickup_radius = float(getattr(hostage_state, "pickup_radius_px", 28.0))
+	base_pickup_radius = float(getattr(hostage_state, "pickup_radius_px", 28.0))
+	pickup_radius = base_pickup_radius
+	# Make near-terminal detection slightly more forgiving for dual elevated terminals,
+	# but keep boundary cutoffs based on the base radius.
+	pickup_xs = list(getattr(hostage_state, "terminal_pickup_xs", ()) or ())
+	if len(pickup_xs) >= 2:
+		pickup_radius = max(pickup_radius, 48.0)
 	passed_offset = float(getattr(hostage_state, "pickup_passed_offset_px", 66.0))
 	near_terminal_index = _find_near_terminal_index(hostage_state, truck_x, pickup_radius, passed_offset)
 
@@ -257,7 +289,7 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 				hostage_state,
 				terminal_x,
 				near_terminal_index,
-				pickup_radius,
+				base_pickup_radius,
 				passed_offset,
 			)
 			can_start_loading = float(truck_x) <= float(right_boundary_x)
@@ -282,7 +314,7 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 				hostage_state,
 				terminal_x,
 				loading_index,
-				pickup_radius,
+				base_pickup_radius,
 				passed_offset,
 			)
 			if float(getattr(meal_truck_state, "x", 0.0)) > right_boundary_x:
@@ -325,7 +357,7 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 				hostage_state,
 				terminal_x,
 				near_terminal_index,
-				pickup_radius,
+				base_pickup_radius,
 				passed_offset,
 			)
 			can_restart_loading = float(truck_x) <= float(right_boundary_x)

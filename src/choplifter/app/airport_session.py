@@ -41,12 +41,13 @@ def create_empty_airport_runtime() -> AirportRuntimeState:
     )
 
 
-def configure_airport_passenger_distribution(*, mission: object, total_passengers: int = 16) -> tuple[list[float], int, float]:
+def configure_airport_passenger_distribution(*, mission: object, total_passengers: int = 16) -> tuple[list[float], int, int, float]:
     """Split airport civilians between lower compounds and elevated terminals."""
     compounds = list(getattr(mission, "compounds", []))
     if not compounds:
         fallback_x = 1500.0
-        return [fallback_x], int(total_passengers), fallback_x
+        total = max(1, int(total_passengers))
+        return [fallback_x], total, 0, fallback_x
 
     # Airport flow assumes two elevated extraction terminals and at least one
     # lower-compound rescue lane when 3+ compounds are present.
@@ -67,15 +68,27 @@ def configure_airport_passenger_distribution(*, mission: object, total_passenger
     lower_indices = [i for i in range(len(compounds)) if i not in elevated_indices]
     total = max(1, int(total_passengers))
 
-    # Ensure at least 1 passenger per compound if possible
-    min_per_compound = 1 if len(compounds) >= 3 and total >= len(compounds) else 0
-    base_assignment = [min_per_compound] * len(compounds)
-    remaining = total - sum(base_assignment)
+    base_assignment = [0] * len(compounds)
 
-    # Distribute remaining passengers randomly among all compounds
-    for _ in range(remaining):
-        idx = random.randint(0, len(compounds) - 1)
-        base_assignment[idx] += 1
+    # Airport Special Ops has three active rescue terminals:
+    # two elevated + one lower lane. Guarantee >=1 each when total allows.
+    active_terminal_indices = list(elevated_indices)
+    if lower_indices:
+        active_terminal_indices.append(lower_indices[0])
+    active_terminal_indices = sorted(set(active_terminal_indices))
+
+    if active_terminal_indices and total >= len(active_terminal_indices):
+        for idx in active_terminal_indices:
+            base_assignment[idx] = 1
+        remaining = total - len(active_terminal_indices)
+        for _ in range(remaining):
+            idx = random.choice(active_terminal_indices)
+            base_assignment[idx] += 1
+    elif active_terminal_indices:
+        # Not enough total passengers to guarantee one per terminal.
+        # Fill terminals left-to-right until we run out.
+        for idx in active_terminal_indices[:total]:
+            base_assignment[idx] += 1
 
     # Assign hostage counts
     for idx, c in enumerate(compounds):

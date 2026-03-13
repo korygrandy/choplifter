@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
+from ..airport_fuselage import is_airport_fuselage_boarding_unlocked
 from ..app.boarding_status import compute_boarding_ux_status, get_boarding_ux_visual
 from ..game_types import HostageState
 from ..helicopter import Helicopter
@@ -426,9 +427,11 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
     airport_elevated_rescued = 0
     airport_combined_rescued = saved
     airport_vehicle_onboard = 0
+    boarding_block_line = ""
     if is_airport:
         airport_hostage_state = getattr(mission, "airport_hostage_state", None)
         airport_meal_truck_state = getattr(mission, "airport_meal_truck_state", None)
+        tech_state = getattr(mission, "mission_tech", None)
         airport_elevated_rescued = int(getattr(airport_hostage_state, "rescued_hostages", 0)) if airport_hostage_state is not None else 0
         airport_combined_rescued = int(saved) + int(airport_elevated_rescued)
         airport_vehicle_onboard = _airport_vehicle_onboard_count(mission)
@@ -445,6 +448,32 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
             )
             host_state = str(getattr(airport_hostage_state, "state", "waiting"))
             dist_px = int(abs(truck_x - boarding_center_x))
+            tech_available_for_boarding = bool(
+                bool(getattr(tech_state, "is_deployed", False))
+                or bool(getattr(airport_meal_truck_state, "tech_has_deployed", False))
+            )
+            enforce_fuselage_gate = bool(getattr(mission, "enforce_fuselage_boarding_gate", False))
+            boarding_unlocked = is_airport_fuselage_boarding_unlocked(mission) if enforce_fuselage_gate else True
+
+            terminal_pickup_xs = list(getattr(airport_hostage_state, "terminal_pickup_xs", ()) or ())
+            if not terminal_pickup_xs:
+                terminal_pickup_xs = [pickup_x]
+            terminal_open_for_boarding = list(getattr(airport_hostage_state, "terminal_open_for_boarding", []) or [])
+            terminal_remaining = list(getattr(airport_hostage_state, "terminal_remaining", []) or [])
+            near_terminal_index = -1
+            best_d = 1e9
+            for i, px in enumerate(terminal_pickup_xs):
+                remaining_here = int(terminal_remaining[i]) if i < len(terminal_remaining) else 0
+                if remaining_here <= 0:
+                    continue
+                d = abs(float(truck_x) - (float(px) + pickup_offset))
+                if d <= pickup_radius and d < best_d:
+                    best_d = d
+                    near_terminal_index = i
+
+            terminal_open = True
+            if 0 <= near_terminal_index < len(terminal_open_for_boarding):
+                terminal_open = bool(terminal_open_for_boarding[near_terminal_index])
 
             if host_state == "truck_loading":
                 boarding_line = "Boarding: + AIRPORT LOADING"
@@ -456,8 +485,30 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
                 boarding_line = "Boarding: ! IN LZ - EXTEND LIFT"
             else:
                 boarding_line = f"Boarding: >> DRIVE TO JETWAY ({dist_px}px)"
+
+            if debug_mode:
+                if host_state in ("truck_loading", "truck_loaded"):
+                    boarding_block_line = f"BOARDING GATE: ACTIVE ({host_state})"
+                else:
+                    reasons: list[str] = []
+                    if near_terminal_index < 0:
+                        reasons.append("not-in-lz")
+                    if not truck_extended:
+                        reasons.append("lift-retracted")
+                    if not tech_available_for_boarding:
+                        reasons.append("tech-not-deployed")
+                    if near_terminal_index >= 0 and not terminal_open:
+                        reasons.append("terminal-closed")
+                    if not boarding_unlocked:
+                        reasons.append("fuselage-locked")
+                    if reasons:
+                        boarding_block_line = f"BOARDING GATE: BLOCKED ({', '.join(reasons)})"
+                    else:
+                        boarding_block_line = "BOARDING GATE: READY"
         else:
             boarding_line = "Boarding: >> DRIVE TO JETWAY"
+            if debug_mode:
+                boarding_block_line = "BOARDING GATE: BLOCKED (airport-runtime-missing)"
     else:
         boarding_status = f"{boarding_ux.state.upper()}: {boarding_ux.detail}"
         boarding_line = f"Boarding: {boarding_visual.symbol} {boarding_status}"
@@ -609,6 +660,21 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
 
         # Airport-only feedback gate visibility for flash/screenshake playtesting.
         if debug_mode:
+            mission_time_s = float(getattr(mission, "elapsed_seconds", 0.0))
+            if mission_time_s <= 10.0:
+                airport_hostage_state = getattr(mission, "airport_hostage_state", None)
+                compound_counts = [int(getattr(c, "hostage_count", 0)) for c in (getattr(mission, "compounds", []) or [])]
+                if compound_counts:
+                    comp_text = "/".join(str(v) for v in compound_counts)
+                    lines.append(f"AIRPORT ALLOC: C[{comp_text}] TOTAL={sum(compound_counts)}")
+                elif airport_hostage_state is not None:
+                    terminal_remaining = [int(v) for v in (getattr(airport_hostage_state, "terminal_remaining", []) or [])]
+                    if terminal_remaining:
+                        term_text = "/".join(str(v) for v in terminal_remaining)
+                        lines.append(f"AIRPORT ALLOC: T[{term_text}] TOTAL={sum(terminal_remaining)}")
+
+            if boarding_block_line:
+                lines.append(boarding_block_line)
             feedback_gates: list[str] = []
             if float(getattr(mission, "invuln_seconds", 0.0)) > 0.0:
                 feedback_gates.append("invuln")

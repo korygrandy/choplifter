@@ -5,6 +5,8 @@ import math
 import random
 from typing import Callable
 
+import pygame
+
 from .entities import Enemy, Projectile
 from .game_types import EnemyKind, ProjectileKind
 from .helicopter import Facing, Helicopter
@@ -58,6 +60,14 @@ def _barak_next_reload_seconds(tuning: object) -> float:
     hi = float(getattr(tuning, "barak_reload_max_seconds", getattr(tuning, "barak_reload_seconds", 4.0)))
     lo, hi = min(lo, hi), max(lo, hi)
     return max(0.25, random.uniform(lo, hi))
+
+
+def _intro_audio_still_playing() -> bool:
+    """Return True while intro/cutscene audio on mixer.music is still active."""
+    try:
+        return bool(pygame.mixer.get_init()) and bool(pygame.mixer.music.get_busy())
+    except Exception:
+        return False
 
 
 def _tank_turret_muzzle_pos(mission: MissionState, e: Enemy) -> Vec2:
@@ -292,6 +302,10 @@ def _update_enemies(
             elif e.mrad_state == BARAK_STATE_LAUNCH:
                 e.launcher_ext_progress = 1.0
                 if not e.missile_fired:
+                    first_missile_released = bool(getattr(mission, "_barak_first_missile_released", False))
+                    if not first_missile_released and _intro_audio_still_playing():
+                        # Hold launch posture until opening intro audio is complete.
+                        continue
                     launcher_length = 44.0 * e.launcher_ext_progress
                     missile_pos = Vec2(
                         e.pos.x - 40 + launcher_length * math.cos(e.launcher_angle),
@@ -315,6 +329,7 @@ def _update_enemies(
                         )
                     )
                     e.missile_fired = True
+                    mission._barak_first_missile_released = True
                     if logger is not None:
                         logger.debug("BARAK MRAD missile launched at %s", missile_pos)
                     # Play Barak MRAD missile launch SFX
