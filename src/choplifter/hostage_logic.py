@@ -34,6 +34,7 @@ class AirportHostageState:
 	rescue_completed_s: float = 0.0
 	terminal_pickup_xs: tuple[float, ...] = ()
 	terminal_remaining: list[int] | None = None
+	terminal_kia: list[int] | None = None
 	active_terminal_index: int = 0
 	loading_terminal_index: int = -1
 	loading_terminal_initial_count: int = 0
@@ -173,6 +174,7 @@ def create_airport_hostage_state(*, total_hostages: int = 16, pickup_x: float = 
 		pickup_x=float(pickups[active_index]),
 		terminal_pickup_xs=tuple(pickups),
 		terminal_remaining=counts,
+		terminal_kia=[0 for _ in pickups],
 		active_terminal_index=int(active_index),
 	)
 
@@ -193,6 +195,10 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 		remaining = [0 for _ in pickup_xs]
 		remaining[0] = int(getattr(hostage_state, "total_hostages", 16))
 	hostage_state.terminal_remaining = remaining
+	terminal_kia = list(getattr(hostage_state, "terminal_kia", []) or [])
+	if len(terminal_kia) != len(pickup_xs):
+		terminal_kia = (terminal_kia + [0 for _ in pickup_xs])[: len(pickup_xs)]
+	hostage_state.terminal_kia = terminal_kia
 	hostage_state.terminal_open_for_boarding = _compute_terminal_open_for_boarding(mission, pickup_xs)
 
 	tech_operating = bool(tech_state is not None and getattr(tech_state, "is_deployed", False))

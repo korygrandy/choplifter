@@ -168,6 +168,74 @@ def _draw_fuselage_damage_particles(screen: pygame.Surface, fuselage_rect: pygam
         screen.blit(puff_layer, (0, 0))
 
 
+def _draw_airport_terminal_impact_events(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+    """Draw short-lived elevated-terminal sparks at exact projectile impact points."""
+    events = list(getattr(mission, "airport_terminal_impact_sparks", []) or [])
+    if not events:
+        return
+
+    now_s = float(getattr(mission, "elapsed_seconds", 0.0))
+    alive_events: list[dict[str, float]] = []
+    spark_layer = get_volatile_surface(screen.get_width(), screen.get_height(), pygame.SRCALPHA)
+
+    for ev in events:
+        try:
+            born_s = float(ev.get("born_s", 0.0))
+            duration_s = max(0.05, float(ev.get("duration_s", 0.20)))
+            x = float(ev.get("x", 0.0))
+            y = float(ev.get("y", 0.0))
+        except Exception:
+            continue
+
+        age_s = max(0.0, now_s - born_s)
+        if age_s > duration_s:
+            continue
+
+        life = max(0.0, min(1.0, 1.0 - (age_s / duration_s)))
+        alive_events.append(ev)
+
+        sx = int(x - float(camera_x))
+        sy = int(y)
+        if sx < -24 or sx > screen.get_width() + 24 or sy < -24 or sy > screen.get_height() + 24:
+            continue
+
+        spark_len = 4 + int(4.0 * life)
+        spark_alpha = int(120 + 120.0 * life)
+        for j in range(4):
+            a = (j * (math.tau / 4.0)) + age_s * 18.0
+            ex = int(sx + math.cos(a) * spark_len)
+            ey = int(sy + math.sin(a) * spark_len)
+            pygame.draw.line(spark_layer, (255, 216, 108, spark_alpha), (sx, sy), (ex, ey), 2)
+        pygame.draw.circle(spark_layer, (255, 240, 168, min(255, spark_alpha + 20)), (sx, sy), 2)
+
+    mission.airport_terminal_impact_sparks = alive_events
+    screen.blit(spark_layer, (0, 0))
+
+
+def _draw_terminal_kia_dots(
+    screen: pygame.Surface,
+    roof_rect: pygame.Rect,
+    *,
+    kia_count: int,
+    max_slots: int,
+) -> None:
+    if kia_count <= 0 or max_slots <= 0:
+        return
+
+    visible = min(max(0, int(kia_count)), max_slots)
+    span_left = roof_rect.x + 8
+    span_right = roof_rect.right - 8
+    if visible <= 1:
+        positions = [roof_rect.centerx]
+    else:
+        spacing = (span_right - span_left) / float(max(1, visible - 1))
+        positions = [int(span_left + i * spacing) for i in range(visible)]
+    y = roof_rect.bottom - 3
+    for px in positions:
+        # Match lower-terminal KIA marker size/style for consistency.
+        pygame.draw.circle(screen, (80, 0, 0), (px, y), 4)
+
+
 def _draw_fuselage_damage_overlay(screen: pygame.Surface, fuselage_rect: pygame.Rect, stage: int, t: float) -> None:
     if stage <= 0:
         return
@@ -295,8 +363,8 @@ def _countdown_seconds_label(remaining_seconds: float) -> str:
     seconds = max(0.0, float(remaining_seconds))
     if seconds <= 0.0:
         return ""
-    display = max(1, int(math.ceil(seconds)))
-    return f"Returning to Mission Select in {display}s"
+    display_tenths = math.ceil(seconds * 10.0) / 10.0
+    return f"Returning to Mission Select in {display_tenths:0.1f}s"
 
 
 def _draw_base(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
@@ -562,6 +630,7 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
     pickup_x = float(getattr(airport_hostage_state, "pickup_x", 1500.0)) if airport_hostage_state is not None else 1500.0
     terminal_pickup_xs = list(getattr(airport_hostage_state, "terminal_pickup_xs", ()) or ()) if airport_hostage_state is not None else []
     terminal_remaining = list(getattr(airport_hostage_state, "terminal_remaining", []) or []) if airport_hostage_state is not None else []
+    terminal_kia = list(getattr(airport_hostage_state, "terminal_kia", []) or []) if airport_hostage_state is not None else []
     loading_terminal_index = int(getattr(airport_hostage_state, "loading_terminal_index", -1)) if airport_hostage_state is not None else -1
     truck_load_base = int(getattr(airport_hostage_state, "truck_load_base", 0)) if airport_hostage_state is not None else 0
     loaded_now = int(getattr(airport_hostage_state, "meal_truck_loaded_hostages", 0)) if airport_hostage_state is not None else 0
@@ -598,6 +667,9 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
             terminal_remaining_count = 0
             if 0 <= terminal_index < len(terminal_remaining):
                 terminal_remaining_count = max(0, int(terminal_remaining[terminal_index]))
+            terminal_kia_count = 0
+            if 0 <= terminal_index < len(terminal_kia):
+                terminal_kia_count = max(0, int(terminal_kia[terminal_index]))
             if airport_hostage_state_name == "truck_loading" and terminal_index == loading_terminal_index:
                 terminal_remaining_count = max(terminal_remaining_count, loading_left)
             is_loading_terminal = terminal_index >= 0 and terminal_index == loading_terminal_index
@@ -883,6 +955,21 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                             t,
                         )
 
+                _draw_terminal_kia_dots(
+                    screen,
+                    roof,
+                    kia_count=terminal_kia_count,
+                    max_slots=max_roof_slots,
+                )
+            elif is_elevated_terminal and terminal_kia_count > 0:
+                max_roof_slots = max(2, min(6, int(r.width // 14)))
+                _draw_terminal_kia_dots(
+                    screen,
+                    roof,
+                    kia_count=terminal_kia_count,
+                    max_slots=max_roof_slots,
+                )
+
             # During elevated boarding, release passengers only through open jetway doors.
             if boarding_active and airport_hostage_state is not None:
                 rate = max(0.2, float(getattr(airport_hostage_state, "transfer_rate_s", 0.5)))
@@ -933,6 +1020,9 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                 pygame.draw.rect(screen, (52, 48, 42), breach)
                 pygame.draw.rect(screen, (92, 84, 70), breach, 1)
             continue
+
+    if is_airport_special:
+        _draw_airport_terminal_impact_events(screen, mission, camera_x=camera_x)
 
         color = (150, 112, 68) if not c.is_open else (118, 92, 58)
 

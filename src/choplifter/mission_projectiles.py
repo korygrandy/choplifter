@@ -188,6 +188,107 @@ def _apply_airport_spawn_enemy_hits(*, mission: MissionState, projectile: Projec
     return False
 
 
+def _apply_airport_elevated_passenger_hit(*, mission: MissionState, compound: object, projectile: Projectile) -> bool:
+    """Apply collateral passenger KIA when bullets strike elevated airport terminals."""
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    if mission_id not in ("airport", "airport_special_ops"):
+        return False
+    if projectile.kind not in (ProjectileKind.BULLET, ProjectileKind.ENEMY_BULLET):
+        return False
+    if not bool(getattr(compound, "is_open", False)):
+        return False
+
+    hostage_state = getattr(mission, "airport_hostage_state", None)
+    if hostage_state is None:
+        return False
+
+    pickup_xs = list(getattr(hostage_state, "terminal_pickup_xs", ()) or ())
+    remaining = list(getattr(hostage_state, "terminal_remaining", []) or [])
+    if not pickup_xs or not remaining:
+        return False
+
+    compounds = list(getattr(mission, "compounds", []) or [])
+    if not compounds:
+        return False
+    elevated_y = min(float(getattr(c.pos, "y", 0.0)) for c in compounds if getattr(c, "pos", None) is not None)
+    compound_y = float(getattr(getattr(compound, "pos", None), "y", 0.0))
+    if abs(compound_y - elevated_y) > 1.0:
+        return False
+
+    compound_width = float(getattr(compound, "width", 0.0))
+    compound_center_x = float(getattr(getattr(compound, "pos", None), "x", 0.0)) + compound_width * 0.5
+    terminal_index = -1
+    best_d = 1e9
+    for i, tx in enumerate(pickup_xs):
+        d = abs(float(tx) - compound_center_x)
+        if d < best_d:
+            best_d = d
+            terminal_index = i
+
+    if terminal_index < 0:
+        return False
+    if best_d > max(90.0, compound_width * 0.9):
+        return False
+    if terminal_index >= len(remaining):
+        return False
+    if int(remaining[terminal_index]) <= 0:
+        return False
+
+    remaining[terminal_index] = max(0, int(remaining[terminal_index]) - 1)
+    hostage_state.terminal_remaining = remaining
+
+    terminal_kia = list(getattr(hostage_state, "terminal_kia", []) or [])
+    if len(terminal_kia) < len(pickup_xs):
+        terminal_kia.extend([0] * (len(pickup_xs) - len(terminal_kia)))
+    terminal_kia[terminal_index] = max(0, int(terminal_kia[terminal_index]) + 1)
+    hostage_state.terminal_kia = terminal_kia
+
+    if projectile.kind is ProjectileKind.ENEMY_BULLET:
+        mission.stats.kia_by_enemy += 1
+    else:
+        mission.stats.kia_by_player += 1
+
+    audio = getattr(mission, "audio", None)
+    if audio is not None and hasattr(audio, "play_hostage_scream"):
+        try:
+            audio.play_hostage_scream()
+        except Exception:
+            pass
+    return True
+
+
+def _record_airport_elevated_terminal_impact(*, mission: MissionState, compound: object, projectile: Projectile) -> None:
+    """Queue a short-lived elevated-terminal spark burst at the exact projectile impact point."""
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    if mission_id not in ("airport", "airport_special_ops"):
+        return
+    if projectile.kind not in (ProjectileKind.BULLET, ProjectileKind.BOMB):
+        return
+
+    compounds = list(getattr(mission, "compounds", []) or [])
+    if not compounds:
+        return
+    elevated_y = min(float(getattr(c.pos, "y", 0.0)) for c in compounds if getattr(c, "pos", None) is not None)
+    compound_y = float(getattr(getattr(compound, "pos", None), "y", 0.0))
+    if abs(compound_y - elevated_y) > 1.0:
+        return
+
+    now_s = float(getattr(mission, "elapsed_seconds", 0.0))
+    duration_s = 0.20 if projectile.kind is ProjectileKind.BULLET else 0.30
+    events = list(getattr(mission, "airport_terminal_impact_sparks", []) or [])
+    events.append(
+        {
+            "x": float(projectile.pos.x),
+            "y": float(projectile.pos.y),
+            "born_s": now_s,
+            "duration_s": duration_s,
+        }
+    )
+    if len(events) > 32:
+        events = events[-32:]
+    mission.airport_terminal_impact_sparks = events
+
+
 def _hits_circle_or_swept(*, previous: Vec2, current: Vec2, center: Vec2, radius: float) -> bool:
     """Return True when either endpoint or the movement segment intersects the circle."""
     if _hits_circle(current, center, radius=radius) or _hits_circle(previous, center, radius=radius):
@@ -828,6 +929,8 @@ def _update_projectiles(
                     c.health -= 40.0
                 else:
                     continue
+                _record_airport_elevated_terminal_impact(mission=mission, compound=c, projectile=p)
+                _apply_airport_elevated_passenger_hit(mission=mission, compound=c, projectile=p)
                 _log_compound_health_if_needed(c, logger, reason="hit")
                 p.alive = False
                 break

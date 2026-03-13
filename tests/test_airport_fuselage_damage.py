@@ -70,6 +70,29 @@ class AirportFuselageDamageTests(unittest.TestCase):
         mission.compounds[0].health = start_health - FUSELAGE_DAMAGE_THRESHOLD_TOTAL
         self.assertTrue(is_airport_fuselage_boarding_unlocked(mission))
 
+    def test_open_fuselage_forces_visible_half_stage_before_total(self) -> None:
+        mission = SimpleNamespace(
+            mission_id="airport",
+            elapsed_seconds=10.0,
+            compounds=[
+                _make_compound(x=1000.0, y=220.0, health=130.0, is_open=False),
+                _make_compound(x=1300.0, y=220.0, health=130.0, is_open=False),
+            ],
+        )
+
+        # Opening at low damage should still show half stage first.
+        mission.compounds[0].health = 110.0
+        mission.compounds[0].is_open = True
+        self.assertEqual(get_airport_fuselage_damage_stage(mission), FUSELAGE_DAMAGE_STAGE_HALF)
+
+        # During the hold window, stage remains half.
+        mission.elapsed_seconds = 10.2
+        self.assertEqual(get_airport_fuselage_damage_stage(mission), FUSELAGE_DAMAGE_STAGE_HALF)
+
+        # After the hold window, open fuselage can advance to total stage.
+        mission.elapsed_seconds = 10.9
+        self.assertEqual(get_airport_fuselage_damage_stage(mission), FUSELAGE_DAMAGE_STAGE_TOTAL)
+
     def test_waiting_state_does_not_start_loading_until_stage_two(self) -> None:
         start_health = FUSELAGE_DAMAGE_THRESHOLD_TOTAL + 30.0
         mission = SimpleNamespace(

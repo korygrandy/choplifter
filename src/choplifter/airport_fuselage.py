@@ -6,8 +6,9 @@ from typing import Any
 FUSELAGE_DAMAGE_STAGE_INTACT = 0
 FUSELAGE_DAMAGE_STAGE_HALF = 1
 FUSELAGE_DAMAGE_STAGE_TOTAL = 2
-FUSELAGE_DAMAGE_THRESHOLD_HALF = 200.0
-FUSELAGE_DAMAGE_THRESHOLD_TOTAL = 400.0
+FUSELAGE_DAMAGE_THRESHOLD_HALF = 100.0
+FUSELAGE_DAMAGE_THRESHOLD_TOTAL = 175.0
+FUSELAGE_HALF_STAGE_MIN_SECONDS = 0.65
 
 
 def _is_airport_mission(mission: Any | None) -> bool:
@@ -36,8 +37,8 @@ def get_airport_fuselage_damage_stage(mission: Any | None) -> int:
     """Return monotonic fuselage damage stage: 0 intact, 1 half, 2 total.
 
     Stage thresholds use absolute damage on the fuselage compound:
-    - stage 1 at >= 200 damage taken
-    - stage 2 at >= 400 total damage taken
+    - stage 1 at >= FUSELAGE_DAMAGE_THRESHOLD_HALF
+    - stage 2 at >= FUSELAGE_DAMAGE_THRESHOLD_TOTAL
     """
     if mission is None or not _is_airport_mission(mission):
         return FUSELAGE_DAMAGE_STAGE_TOTAL
@@ -62,14 +63,31 @@ def get_airport_fuselage_damage_stage(mission: Any | None) -> int:
     setattr(mission, "airport_fuselage_max_health", max_health)
 
     damage_taken = max(0.0, max_health - current_health)
+    mission_time = float(getattr(mission, "elapsed_seconds", 0.0))
     stage_now = FUSELAGE_DAMAGE_STAGE_INTACT
     if damage_taken >= float(FUSELAGE_DAMAGE_THRESHOLD_HALF):
         stage_now = FUSELAGE_DAMAGE_STAGE_HALF
-    if (
-        damage_taken >= float(FUSELAGE_DAMAGE_THRESHOLD_TOTAL)
-        or bool(getattr(fuselage_compound, "is_open", False))
-    ):
+
+    reached_total_damage = damage_taken >= float(FUSELAGE_DAMAGE_THRESHOLD_TOTAL)
+    is_open = bool(getattr(fuselage_compound, "is_open", False))
+    half_hold_until = float(getattr(mission, "airport_fuselage_half_stage_hold_until_s", -1.0))
+
+    if reached_total_damage:
         stage_now = FUSELAGE_DAMAGE_STAGE_TOTAL
+    elif is_open:
+        # If the fuselage opens before total threshold damage, force a visible
+        # half-damaged phase before allowing full-damaged stage.
+        if cached_stage < FUSELAGE_DAMAGE_STAGE_HALF:
+            stage_now = FUSELAGE_DAMAGE_STAGE_HALF
+            setattr(
+                mission,
+                "airport_fuselage_half_stage_hold_until_s",
+                mission_time + float(FUSELAGE_HALF_STAGE_MIN_SECONDS),
+            )
+        elif cached_stage == FUSELAGE_DAMAGE_STAGE_HALF and mission_time < half_hold_until:
+            stage_now = FUSELAGE_DAMAGE_STAGE_HALF
+        else:
+            stage_now = FUSELAGE_DAMAGE_STAGE_TOTAL
 
     stage = max(cached_stage, stage_now)
     setattr(mission, "airport_fuselage_damage_stage", stage)
