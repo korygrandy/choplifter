@@ -11,6 +11,10 @@ from .hostage_logic import get_active_airport_terminal_label
 
 
 CITY_MISSION_IDS = ("city", "city_center", "citycenter", "mission1", "m1")
+AIRPORT_MISSION_IDS = ("airport", "airport_special_ops", "airportspecialops", "mission2", "m2")
+
+ELEVATED_FIRST_SENTIMENT_BONUS = 3.0
+LOWER_FIRST_SENTIMENT_BONUS = 2.0
 
 
 # Top-center objective strip typewriter state.
@@ -26,6 +30,7 @@ class AirportObjectiveState:
 	deadline_failed: bool = False
 	mission_phase: str = "waiting_for_tech_deploy"
 	status_text: str = "Deploy mission tech to meal truck"
+	route_tip_shown: bool = False
 
 
 def create_airport_objective_state(*, hostage_deadline_s: float = 120.0) -> AirportObjectiveState:
@@ -69,6 +74,27 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 	elevated_rescued = int(getattr(hostage_state, "rescued_hostages", 0)) if hostage_state is not None else 0
 	combined_rescued = lower_rescued + elevated_rescued
 
+	mission_id = str(getattr(mission, "mission_id", "")).strip().lower() if mission is not None else ""
+	is_airport = mission_id in AIRPORT_MISSION_IDS
+	if is_airport and mission is not None:
+		first_route = str(getattr(mission, "airport_first_rescue_route", "")).strip().lower()
+		if first_route not in ("lower", "elevated"):
+			if elevated_rescued > 0 and lower_rescued <= 0:
+				first_route = "elevated"
+			elif lower_rescued > 0 and elevated_rescued <= 0:
+				first_route = "lower"
+			if first_route:
+				setattr(mission, "airport_first_rescue_route", first_route)
+
+		if elevated_rescued > 0 and lower_rescued > 0 and not bool(getattr(mission, "airport_route_bonus_awarded", False)):
+			first_route = str(getattr(mission, "airport_first_rescue_route", "")).strip().lower()
+			bonus = LOWER_FIRST_SENTIMENT_BONUS
+			if first_route == "elevated":
+				bonus = ELEVATED_FIRST_SENTIMENT_BONUS
+			mission.sentiment = min(100.0, float(getattr(mission, "sentiment", 50.0)) + float(bonus))
+			setattr(mission, "airport_route_bonus_awarded", True)
+			setattr(mission, "airport_route_bonus_value", float(bonus))
+
 	if rescued and combined_rescued >= total_target:
 		objective_state.mission_phase = "mission_complete"
 		objective_state.status_text = "All civilians rescued"
@@ -82,6 +108,10 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 	elif waiting and interrupted_transfers > 0 and not tech_operating and not tech_on_bus:
 		objective_state.mission_phase = "auto_reset"
 		objective_state.status_text = "Bus resetting to standby"
+	elif waiting and remaining_elevated > 0 and lower_rescued <= 0 and not bool(getattr(objective_state, "route_tip_shown", False)):
+		objective_state.mission_phase = "waiting_for_tech_deploy"
+		objective_state.status_text = "Tip: elevated rescues first for safer route bonus"
+		objective_state.route_tip_shown = True
 	elif boarded:
 		objective_state.mission_phase = "escort_to_lz"
 		objective_state.status_text = "Escort bus to tower LZ"

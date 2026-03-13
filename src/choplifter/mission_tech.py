@@ -335,14 +335,13 @@ def update_mission_tech(
 		if bus_state is not None:
 			tech_state.tech_x = float(getattr(bus_state, "x", tech_state.tech_x))
 			tech_state.tech_y = float(getattr(bus_state, "y", tech_state.tech_y))
-		if hostage_state is not None:
-			rescued = int(getattr(hostage_state, "rescued_hostages", 0))
-			total_hostages = int(getattr(hostage_state, "total_hostages", 16))
-			if rescued >= total_hostages and bus_state is not None:
-				# Elevated platform extraction is complete: engineer exits bus and waits near tower edge.
-				bus_x = float(getattr(bus_state, "x", tech_state.tech_x))
-				bus_y = float(getattr(bus_state, "y", tech_state.tech_y))
-				stop_x = float(getattr(bus_state, "stop_x", 500.0))
+		if bus_state is not None:
+			# Keep mission-tech deboard timing aligned with passenger deboard timing at tower LZ.
+			bus_x = float(getattr(bus_state, "x", tech_state.tech_x))
+			bus_y = float(getattr(bus_state, "y", tech_state.tech_y))
+			stop_x = float(getattr(bus_state, "stop_x", 500.0))
+			bus_at_lz = bus_x <= stop_x + 140.0
+			if bus_at_lz:
 				tech_state.state = "waiting_at_lz"
 				tech_state.on_bus = False
 				tech_state.is_deployed = True

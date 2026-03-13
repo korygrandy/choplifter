@@ -5,7 +5,8 @@ import unittest
 import pytest
 
 from src.choplifter.game_types import HostageState
-from src.choplifter.mission_hostages import _update_hostages
+from src.choplifter.helicopter import Facing
+from src.choplifter.mission_hostages import _handle_unload, _update_hostages
 from src.choplifter.settings import HelicopterSettings
 
 
@@ -152,6 +153,65 @@ class AirportTechBoardingGateTests(unittest.TestCase):
 
         self.assertEqual(mission.hostages[0].state, HostageState.FALLING)
         self.assertEqual(mission.stats.lost_in_transit, 1)
+
+    def test_airport_blocks_lower_rescue_completion_when_upper_compounds_still_have_passengers(self) -> None:
+        mission = _mission(mission_id="airport", tech_state_name="on_chopper")
+        mission.hostages = [_boarded_hostage(x=10.0, y=200.0)]
+        mission.airport_hostage_state = SimpleNamespace(terminal_remaining=[2, 0])
+        mission.airport_bus_state = SimpleNamespace(stop_x=500.0)
+        mission.base = SimpleNamespace(pos=SimpleNamespace(x=0.0, y=0.0), width=200.0, contains_point=lambda _p: False)
+        mission.unload_release_seconds = 0.0
+        mission.next_saved_slot = 0
+        helicopter = SimpleNamespace(
+            pos=SimpleNamespace(x=450.0, y=0.0),
+            grounded=True,
+            doors_open=True,
+            facing=Facing.RIGHT,
+        )
+
+        _handle_unload(mission, helicopter, HelicopterSettings(), 0.25)
+
+        self.assertEqual(mission.hostages[0].state, HostageState.BOARDED)
+        self.assertEqual(mission.stats.saved, 0)
+
+    def test_airport_blocks_lower_rescue_completion_when_tech_not_on_chopper(self) -> None:
+        mission = _mission(mission_id="airport", tech_state_name="waiting_at_lz")
+        mission.hostages = [_boarded_hostage(x=10.0, y=200.0)]
+        mission.airport_hostage_state = SimpleNamespace(terminal_remaining=[0, 0])
+        mission.airport_bus_state = SimpleNamespace(stop_x=500.0)
+        mission.base = SimpleNamespace(pos=SimpleNamespace(x=0.0, y=0.0), width=200.0, contains_point=lambda _p: False)
+        mission.unload_release_seconds = 0.0
+        mission.next_saved_slot = 0
+        helicopter = SimpleNamespace(
+            pos=SimpleNamespace(x=450.0, y=0.0),
+            grounded=True,
+            doors_open=True,
+            facing=Facing.RIGHT,
+        )
+
+        _handle_unload(mission, helicopter, HelicopterSettings(), 0.25)
+
+        self.assertEqual(mission.hostages[0].state, HostageState.BOARDED)
+        self.assertEqual(mission.stats.saved, 0)
+
+    def test_airport_allows_lower_rescue_completion_when_upper_empty_and_tech_on_chopper(self) -> None:
+        mission = _mission(mission_id="airport", tech_state_name="on_chopper")
+        mission.hostages = [_boarded_hostage(x=10.0, y=200.0)]
+        mission.airport_hostage_state = SimpleNamespace(terminal_remaining=[0, 0])
+        mission.airport_bus_state = SimpleNamespace(stop_x=500.0)
+        mission.base = SimpleNamespace(pos=SimpleNamespace(x=0.0, y=0.0), width=200.0, contains_point=lambda _p: False)
+        mission.unload_release_seconds = 0.0
+        mission.next_saved_slot = 0
+        helicopter = SimpleNamespace(
+            pos=SimpleNamespace(x=450.0, y=0.0),
+            grounded=True,
+            doors_open=True,
+            facing=Facing.RIGHT,
+        )
+
+        _handle_unload(mission, helicopter, HelicopterSettings(), 0.25)
+
+        self.assertEqual(mission.hostages[0].state, HostageState.EXITING)
 
 
 if __name__ == "__main__":

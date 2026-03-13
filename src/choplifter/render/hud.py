@@ -597,6 +597,16 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
         mine_dist = int(float(getattr(mission, "mine_warning_distance", 0.0)))
         lines.append(f"[MINE] * PROXIMITY ({mine_dist}px)")
 
+    if is_airport:
+        route_name = str(getattr(mission, "airport_first_rescue_route", "")).strip().lower()
+        if route_name not in ("lower", "elevated"):
+            route_name = "unset"
+        bonus_awarded = bool(getattr(mission, "airport_route_bonus_awarded", False))
+        bonus_value = float(getattr(mission, "airport_route_bonus_value", 0.0))
+        bonus_text = f"YES (+{bonus_value:0.1f})" if bonus_awarded else "NO"
+        lines.append(f"AIRPORT ROUTE: {route_name.upper()}")
+        lines.append(f"ROUTE BONUS: {bonus_text}")
+
     if not debug_mode:
         return
 

@@ -54,6 +54,19 @@ class EscortRiskTests(unittest.TestCase):
         mission.post_respawn_escort_risk_seconds = 0.0
         self.assertEqual(airport_escort_damage_multiplier(mission), 1.0)
 
+    def test_multiplier_shifts_by_first_rescue_route(self) -> None:
+        mission = SimpleNamespace(
+            mission_id="airport",
+            post_respawn_escort_risk_seconds=2.0,
+            airport_hostage_state=SimpleNamespace(state="boarded"),
+            airport_first_rescue_route="lower",
+        )
+
+        self.assertAlmostEqual(airport_escort_damage_multiplier(mission), POST_RESPAWN_ESCORT_DAMAGE_MULTIPLIER * 0.92)
+
+        mission.airport_first_rescue_route = "elevated"
+        self.assertAlmostEqual(airport_escort_damage_multiplier(mission), POST_RESPAWN_ESCORT_DAMAGE_MULTIPLIER * 1.06)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -67,7 +67,7 @@ class MissionTechTransitionTests(unittest.TestCase):
         self.assertTrue(second.on_bus)
         self.assertEqual(bus_state.door_state, "closing")
 
-    def test_transfer_complete_moves_to_waiting_at_lz_after_elevated_rescue_complete(self) -> None:
+    def test_transfer_complete_moves_to_waiting_at_lz_when_bus_reaches_tower_lz(self) -> None:
         tech_state = MissionTechState(
             state="transfer_complete",
             on_bus=True,
@@ -77,13 +77,13 @@ class MissionTechTransitionTests(unittest.TestCase):
             deploy_timer_s=5.0,
         )
         bus_state = SimpleNamespace(
-            x=1225.0,
+            x=620.0,
             y=210.0,
             stop_x=500.0,
             door_state="closed",
             door_animation_progress=0.0,
         )
-        hostage_state = SimpleNamespace(rescued_hostages=8, total_hostages=8)
+        hostage_state = SimpleNamespace(rescued_hostages=2, total_hostages=8)
 
         updated = update_mission_tech(
             tech_state,

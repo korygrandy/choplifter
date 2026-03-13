@@ -22,6 +22,20 @@ from ..mission_ending import _end_mission
 from ..math2d import clamp
 
 
+def _has_remaining_elevated_passengers(hostage_state: Any | None) -> bool:
+    if hostage_state is None:
+        return False
+    remaining = sum(max(0, int(v)) for v in (getattr(hostage_state, "terminal_remaining", []) or []))
+    return remaining > 0
+
+
+def _should_fail_for_tech_kia(*, tech_state: Any | None, hostage_state: Any | None) -> bool:
+    tech_state_name = str(getattr(tech_state, "state", "")).strip().lower()
+    if tech_state_name != "kia":
+        return False
+    return _has_remaining_elevated_passengers(hostage_state)
+
+
 def _apply_vehicle_boundary_clamps(
     *,
     meal_truck_state: Any | None,

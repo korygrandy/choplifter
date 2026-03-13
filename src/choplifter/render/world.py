@@ -118,6 +118,19 @@ def _is_on_screen(world_x: float, camera_x: float, screen_width: int, margin: in
     screen_x = world_x - camera_x
     return -margin <= screen_x <= screen_width + margin
 
+def _compound_has_awaiting_passengers(mission: MissionState, compound: object) -> bool:
+    start = max(0, int(getattr(compound, "hostage_start", 0)))
+    count = max(0, int(getattr(compound, "hostage_count", 0)))
+    if count <= 0:
+        return False
+    hostages = list(getattr(mission, "hostages", []) or [])
+    end = min(len(hostages), start + count)
+    for h in hostages[start:end]:
+        state = getattr(h, "state", None)
+        if state not in (HostageState.SAVED, HostageState.KIA):
+            return True
+    return False
+
     # Draw wind-blown dust clouds if present
     from .particles import draw_wind_dust_clouds
     draw_wind_dust_clouds(screen, mission, camera_x=camera_x)
@@ -440,8 +453,12 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                 terminal_remaining_count = max(terminal_remaining_count, loading_left)
             is_loading_terminal = terminal_index >= 0 and terminal_index == loading_terminal_index
             boarding_active = is_loading_terminal and airport_hostage_state_name == "truck_loading"
-            passengers_inside = terminal_remaining_count > 0
             is_elevated_terminal = abs(float(c.pos.y) - elevated_y) <= 1.0
+            if is_elevated_terminal:
+                passengers_inside = terminal_remaining_count > 0
+            else:
+                # Lower compounds illuminate while any assigned passengers still await rescue.
+                passengers_inside = _compound_has_awaiting_passengers(mission, c)
             # Fuselage terminal: leftmost elevated compound (wrecked-plane visual).
             is_fuselage_terminal = (
                 is_elevated_terminal
@@ -755,7 +772,7 @@ def _draw_airport_lz_tower(screen: pygame.Surface, mission: MissionState, *, cam
     pygame.draw.rect(screen, (38, 42, 50), footing, 1, border_radius=3)
 
     # Adjacent low terminal block aligned so the bus stops in front of its facade.
-    terminal = pygame.Rect(x - 182, ground_y - 34, 132, 28)
+    terminal = pygame.Rect(x - 182, ground_y - 27, 132, 28)
     pygame.draw.rect(screen, (142, 148, 160), terminal, border_radius=3)
     pygame.draw.rect(screen, (36, 40, 48), terminal, 1, border_radius=3)
 

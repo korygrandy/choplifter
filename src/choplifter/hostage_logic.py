@@ -21,7 +21,9 @@ class AirportHostageState:
 	interrupted_transfers: int = 0
 	pickup_x: float = 1232.0
 	pickup_radius_px: float = 28.0
-	pickup_passed_offset_px: float = 66.0
+	# Terminal pickup points are compound centers; +27 with a 28px radius makes
+	# the right edge of the LZ roughly +55px from center (~10px past a 90px-wide compound).
+	pickup_passed_offset_px: float = 27.0
 	helicopter_bus_radius_px: float = 150.0
 	state: str = "waiting"  # waiting -> truck_loading -> truck_loaded -> transferring_to_bus -> boarded -> rescued
 	boarding_started_s: float = 0.0
@@ -192,10 +194,25 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 				audio.play_bus_door()
 
 	elif hostage_state.state == "truck_loading":
+		# Abort auto-boarding if truck drifts too far right of the terminal LZ.
+		# This prevents unattended loading when the truck leaves the intended pickup zone.
+		loading_index = int(getattr(hostage_state, "loading_terminal_index", -1))
+		if meal_truck_state is not None:
+			terminal_x = float(getattr(hostage_state, "pickup_x", 1500.0))
+			if 0 <= loading_index < len(pickup_xs):
+				terminal_x = float(pickup_xs[loading_index])
+			lz_center_x = terminal_x + float(passed_offset)
+			right_boundary_x = lz_center_x + float(pickup_radius) + 5.0
+			if float(getattr(meal_truck_state, "x", 0.0)) > right_boundary_x:
+				hostage_state.loading_terminal_index = -1
+				hostage_state.loading_terminal_initial_count = 0
+				hostage_state.truck_load_base = int(getattr(hostage_state, "meal_truck_loaded_hostages", 0))
+				hostage_state.state = "truck_loaded" if int(getattr(hostage_state, "meal_truck_loaded_hostages", 0)) > 0 else "waiting"
+				return hostage_state
+
 		# Board passengers one-by-one so elevated compound behavior matches ground compounds.
 		elapsed_since_start = float(getattr(mission, "elapsed_seconds", 0.0)) - float(hostage_state.boarding_started_s)
 		rate = max(0.2, float(getattr(hostage_state, "transfer_rate_s", 0.5)))
-		loading_index = int(getattr(hostage_state, "loading_terminal_index", -1))
 		loading_total = int(getattr(hostage_state, "loading_terminal_initial_count", 0))
 		if loading_total <= 0:
 			hostage_state.state = "truck_loaded"
@@ -475,7 +492,7 @@ def _draw_awaiting_passengers(target: pygame.Surface, hostage_state, *, camera_x
 	_draw_stick_figure_passenger(target, active_x, int(pickup_y), loaded_hostages, mission_time)
 
 
-def draw_airport_hostages(target: pygame.Surface, hostage_state, *, camera_x: float, ground_y: float, bus_state=None, meal_truck_state=None, mission_time: float = 0.0) -> None:
+def draw_airport_hostages(target: pygame.Surface, hostage_state, *, camera_x: float, ground_y: float, bus_state=None, meal_truck_state=None, tech_state=None, mission_time: float = 0.0) -> None:
 	"""Draw hostage status indicators for Airport mission.
 	
 	Handles different states including waiting, loading, truck_loaded (with animated position), boarded, and rescued.
@@ -538,12 +555,38 @@ def draw_airport_hostages(target: pygame.Surface, hostage_state, *, camera_x: fl
 		return
 
 	if hostage_state.state == "rescued":
-		# Keep deboarded civilians near terminal frontage, left of the tower shaft.
-		frontage_world_x = float(getattr(bus_state, "stop_x", 500.0)) - 78.0
-		base_x = int(frontage_world_x - float(camera_x))
-		base_y = int(float(ground_y) - 8)
-		for i in range(min(4, max(1, int(hostage_state.rescued_hostages // 4) + 1))):
-			_draw_stick_figure_passenger(target, base_x + i * 10, base_y, i, mission_time)
+		# Stage rescued civilians around the tower-side terminal like the original game:
+		# some gather at the frontage while others stand on the low roof.
+		visible_count = min(4, max(1, int(hostage_state.rescued_hostages // 4) + 1))
+		roof_count = min(2, max(0, visible_count - 2))
+		if visible_count >= 2:
+			roof_count = max(1, roof_count)
+		frontage_count = max(1, visible_count - roof_count)
+
+		stop_x = float(getattr(bus_state, "stop_x", 500.0))
+		frontage_world_x = stop_x - 78.0
+		tech_state_name = str(getattr(tech_state, "state", "")) if tech_state is not None else ""
+		tech_reboarding_lz = tech_state_name == "waiting_at_lz" or str(getattr(tech_state, "boarding_animation_state", "")) == "returning"
+		if tech_reboarding_lz:
+			reserved_pickup_x = float(getattr(tech_state, "lz_wait_x", stop_x - 80.0))
+			frontage_world_x = reserved_pickup_x - 18.0 - max(0, frontage_count - 1) * 10.0
+		frontage_base_x = int(frontage_world_x - float(camera_x))
+		frontage_base_y = int(float(ground_y) - 8)
+		for i in range(frontage_count):
+			_draw_stick_figure_passenger(target, frontage_base_x + i * 10, frontage_base_y, i, mission_time)
+
+		if roof_count > 0:
+			# Mirror the tower-LZ side building footprint from render/world.py.
+			terminal_world_x = stop_x - 62.0
+			roof_left = int((terminal_world_x - 4.0) - float(camera_x))
+			roof_right = roof_left + 140
+			if roof_count == 1:
+				roof_positions = [roof_left + 70]
+			else:
+				roof_positions = [roof_left + 34, roof_right - 34]
+			roof_feet_y = int(float(ground_y) - 28)
+			for i, roof_x in enumerate(roof_positions):
+				_draw_stick_figure_passenger(target, roof_x, roof_feet_y, frontage_count + i, mission_time)
 		return
 
 	if hostage_state.state == "transferring_to_bus" and meal_truck_state is not None:

@@ -17,6 +17,8 @@ class WeatherRuntimeUpdateResult:
 class VipOverlayStateResult:
     vip_kia_overlay_timer: float
     vip_kia_overlay_shown: bool
+    tech_kia_overlay_timer: float
+    tech_kia_overlay_shown: bool
 
 
 @dataclass
@@ -83,7 +85,15 @@ def update_vip_overlay_state(
     mission: object,
     vip_kia_overlay_timer: float,
     vip_kia_overlay_shown: bool,
+    tech_kia_overlay_timer: float,
+    tech_kia_overlay_shown: bool,
 ) -> VipOverlayStateResult:
+    def _has_remaining_elevated_passengers(hostage_state: object | None) -> bool:
+        if hostage_state is None:
+            return False
+        remaining = sum(max(0, int(v)) for v in (getattr(hostage_state, "terminal_remaining", []) or []))
+        return remaining > 0
+
     if hasattr(mission, "hostages"):
         vip_hostage = next((h for h in mission.hostages if getattr(h, "is_vip", False)), None)
         if vip_hostage:
@@ -93,9 +103,24 @@ def update_vip_overlay_state(
                 vip_kia_overlay_timer = 3.0
                 vip_kia_overlay_shown = True
 
+    mission_id = str(getattr(mission, "mission_id", "")).strip().lower()
+    if mission_id == "airport":
+        tech_state_name = str(getattr(getattr(mission, "mission_tech", None), "state", "")).strip().lower()
+        has_remaining_elevated = _has_remaining_elevated_passengers(
+            getattr(mission, "airport_hostage_state", None)
+        )
+        tech_kia_failure = tech_state_name == "kia" and has_remaining_elevated
+        if not tech_kia_failure:
+            tech_kia_overlay_shown = False
+        elif tech_kia_overlay_timer <= 0.0 and not tech_kia_overlay_shown:
+            tech_kia_overlay_timer = 3.0
+            tech_kia_overlay_shown = True
+
     return VipOverlayStateResult(
         vip_kia_overlay_timer=vip_kia_overlay_timer,
         vip_kia_overlay_shown=vip_kia_overlay_shown,
+        tech_kia_overlay_timer=tech_kia_overlay_timer,
+        tech_kia_overlay_shown=tech_kia_overlay_shown,
     )
 
 
@@ -103,6 +128,8 @@ def apply_vip_overlay_update(*, runtime: object, vip_overlay_state: VipOverlaySt
     """Apply VIP overlay state update results to runtime."""
     runtime.vip_kia_overlay_timer = vip_overlay_state.vip_kia_overlay_timer
     runtime.vip_kia_overlay_shown = vip_overlay_state.vip_kia_overlay_shown
+    runtime.tech_kia_overlay_timer = vip_overlay_state.tech_kia_overlay_timer
+    runtime.tech_kia_overlay_shown = vip_overlay_state.tech_kia_overlay_shown
 
 
 def apply_weather_runtime_update(
@@ -142,6 +169,8 @@ def run_frame_preamble(
         mission=mission,
         vip_kia_overlay_timer=runtime.vip_kia_overlay_timer,
         vip_kia_overlay_shown=runtime.vip_kia_overlay_shown,
+        tech_kia_overlay_timer=runtime.tech_kia_overlay_timer,
+        tech_kia_overlay_shown=runtime.tech_kia_overlay_shown,
     )
     apply_vip_overlay_update(runtime=runtime, vip_overlay_state=vip_overlay_state)
 
