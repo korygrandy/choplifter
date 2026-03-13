@@ -5,6 +5,8 @@ import random
 
 import pygame
 
+from .. import haptics
+
 
 def _clamp01(v: float) -> float:
     if v < 0.0:
@@ -82,6 +84,7 @@ def consume_mission_feedback(
     if bool(getattr(mission, "crash_impact_sfx_pending", False)):
         add_screenshake(state, 1.0, enabled=screenshake_enabled)
         getattr(audio, "trigger_duck")(strength=1.0)
+        haptics.rumble_chopper_crash()
         getattr(audio, "play_chopper_crash")()
         setattr(mission, "crash_impact_sfx_pending", False)
 

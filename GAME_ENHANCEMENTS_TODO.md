@@ -214,6 +214,8 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 
 ### UX and Messaging
 
+- [ ] Add Airport bus shift feel polish: soft-jerk body animation, short shift smoke plumes, and subtle shift rumble with tuned intensity/duration.
+
 - [x] Consolidate player-critical mission prompts into the top-center objective strip (avoid split messaging with temporary cutscene cue text).
 
 - [x] Normalize wording/typos for airport mission cues and objective statuses.

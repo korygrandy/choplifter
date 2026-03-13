@@ -404,6 +404,28 @@ def _barak_should_explode_after_near_miss(
     return should_explode
 
 
+def _barak_should_force_detonate_stuck_diversion(
+    *,
+    missile: object,
+    distance_to_nose: float,
+    close_radius: float,
+    timeout_s: float,
+    dt: float,
+) -> bool:
+    """Fail-safe: detonate diverted missiles that linger near the nose too long."""
+    close_radius = max(0.0, float(close_radius))
+    timeout_s = max(0.05, float(timeout_s))
+    dt_s = max(0.0, float(dt))
+
+    close_timer = float(getattr(missile, "diversion_close_seconds", 0.0))
+    if float(distance_to_nose) <= close_radius:
+        close_timer += dt_s
+    else:
+        close_timer = 0.0
+    missile.diversion_close_seconds = close_timer
+    return close_timer >= timeout_s
+
+
 def _update_projectiles(
     mission: MissionState,
     dt: float,
@@ -549,6 +571,23 @@ def _update_projectiles(
                         mission.burning.add_site(p.pos, intensity=0.26)
                         if logger is not None:
                             logger.debug("BARAK_DIVERTED_NEAR_MISS_DETONATE: dist=%.1f", dist_to_nose)
+                        p.alive = False
+                        continue
+
+                    # Fail-safe against rare "nose glue" loops after diversion near ground/LZ edges.
+                    if _barak_should_force_detonate_stuck_diversion(
+                        missile=p,
+                        distance_to_nose=dist_to_nose,
+                        close_radius=max(24.0, arm_radius * 0.9),
+                        timeout_s=0.28,
+                        dt=dt,
+                    ):
+                        mission.explosions.emit_fire_plume(p.pos, strength=0.70)
+                        mission.explosions.emit_explosion(p.pos, strength=0.56)
+                        mission.impact_sparks.emit_hit(p.pos, p.vel, strength=0.95)
+                        mission.burning.add_site(p.pos, intensity=0.22)
+                        if logger is not None:
+                            logger.debug("BARAK_DIVERTED_STUCK_DETONATE: dist=%.1f", dist_to_nose)
                         p.alive = False
                         continue
 

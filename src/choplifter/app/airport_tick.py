@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from .. import haptics
 from ..bus_ai import update_bus_ai, apply_airport_bus_friendly_fire
 from ..hostage_logic import update_airport_hostage_logic
 from .bus_door_flow import apply_airport_bus_door_transitions
@@ -63,6 +64,41 @@ def _apply_vehicle_boundary_clamps(
             bus_state.x = clamp(float(bus_state.x), 0.0, ai_max_overage)
 
 
+def _apply_airport_transition_haptics(
+    *,
+    prev_tech_state_name: str,
+    tech_state_name: str,
+    prev_hostage_state_name: str,
+    new_hostage_state_name: str,
+    prev_box_state: str,
+    box_state: str,
+    logger,
+) -> None:
+    prev_tech = str(prev_tech_state_name).strip().lower()
+    tech = str(tech_state_name).strip().lower()
+    prev_host = str(prev_hostage_state_name).strip().lower()
+    host = str(new_hostage_state_name).strip().lower()
+    prev_box = str(prev_box_state).strip().lower()
+    box = str(box_state).strip().lower()
+
+    if prev_tech == "on_chopper" and tech == "deployed_to_truck":
+        haptics.rumble_airport_event(event="tech_deploy", logger=logger)
+    if prev_box != "extended" and box == "extended":
+        haptics.rumble_airport_event(event="lift_extended", logger=logger)
+    if prev_host == "waiting" and host == "truck_loading":
+        haptics.rumble_airport_event(event="load_start", logger=logger)
+    if prev_host == "truck_loading" and host == "truck_loaded":
+        haptics.rumble_airport_event(event="load_complete", logger=logger)
+    if prev_host == "truck_loaded" and host == "transferring_to_bus":
+        haptics.rumble_airport_event(event="transfer_start", logger=logger)
+    if prev_host == "boarded" and host == "rescued":
+        haptics.rumble_airport_event(event="rescue_complete", logger=logger)
+    if prev_tech != "waiting_at_lz" and tech == "waiting_at_lz":
+        haptics.rumble_airport_event(event="tech_waiting_lz", logger=logger)
+    if prev_tech != "kia" and tech == "kia":
+        haptics.rumble_airport_event(event="tech_kia", logger=logger)
+
+
 @dataclass
 class AirportTickResult:
     bus_state: Any
@@ -108,6 +144,7 @@ def update_airport_mission_tick(
     """
     mission_phase = str(getattr(objective_state, "mission_phase", "waiting_for_tech_deploy"))
     tech_on_bus = bool(getattr(tech_state, "on_bus", False))
+    prev_box_state = str(getattr(meal_truck_state, "box_state", "idle")) if meal_truck_state is not None else "idle"
 
     # --- Bus AI ---
     if bus_state is not None:
@@ -199,6 +236,7 @@ def update_airport_mission_tick(
         bus_state,
         set_toast,
     )
+    box_state = str(getattr(meal_truck_state, "box_state", "idle")) if meal_truck_state is not None else "idle"
     
     # Enforce vehicle boundaries (same as helicopter: 0 to world_width).
     # Allow AI-controlled bus to slightly exceed bounds to complete sequences.
@@ -249,6 +287,16 @@ def update_airport_mission_tick(
         meal_truck_state=meal_truck_state,
         hostage_state=hostage_state,
         tech_state=tech_state,
+    )
+
+    _apply_airport_transition_haptics(
+        prev_tech_state_name=prev_tech_state_name,
+        tech_state_name=tech_state_name,
+        prev_hostage_state_name=prev_hostage_state_name,
+        new_hostage_state_name=new_hostage_state_name,
+        prev_box_state=prev_box_state,
+        box_state=box_state,
+        logger=logger,
     )
 
     # Sync mission references used by rendering / other modules

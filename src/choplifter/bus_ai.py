@@ -9,11 +9,14 @@ TODO:
 - Add repair trigger logic (Mission Tech interaction)
 """
 
+import math
+
 import pygame
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from . import haptics
 from .game_types import ProjectileKind
 from .math2d import Vec2
 from .vehicle_damage import apply_vehicle_damage, is_airport_bus_vulnerable
@@ -28,6 +31,8 @@ BUS_DECEL_DISTANCE_PX: float = 240.0
 BUS_STOP_X: float = 500.0
 BUS_CREEP_SPEED_PX_PER_SEC: float = 20.0
 BUS_DOOR_ANIMATION_DURATION: float = 0.3  # Duration for opening/closing animation
+BUS_SHIFT_JERK_DURATION_S: float = 0.18
+BUS_SHIFT_SMOKE_DURATION_S: float = 0.32
 _AIRPORT_ENEMY_BULLET_DAMAGE: float = 11.0
 _AIRPORT_ENEMY_BOMB_DAMAGE: float = 36.0
 
@@ -109,6 +114,21 @@ class BusState:
     door_animation_duration: float = 0.3  # Animation duration in seconds
     door_auto_close_timer_s: float = 0.0  # Optional hold-open timer (used for deboarding)
     door_auto_close_armed: bool = False
+    shift_jerk_timer_s: float = 0.0
+    shift_jerk_duration_s: float = BUS_SHIFT_JERK_DURATION_S
+    shift_jerk_px: float = 0.0
+    shift_smoke_timer_s: float = 0.0
+    shift_smoke_duration_s: float = BUS_SHIFT_SMOKE_DURATION_S
+
+
+def _trigger_shift_feedback(bus_state: BusState, *, severity: float, logger=None) -> None:
+    s = _clamp01(float(severity))
+    bus_state.shift_jerk_duration_s = BUS_SHIFT_JERK_DURATION_S
+    bus_state.shift_smoke_duration_s = BUS_SHIFT_SMOKE_DURATION_S
+    bus_state.shift_jerk_timer_s = max(float(getattr(bus_state, "shift_jerk_timer_s", 0.0)), BUS_SHIFT_JERK_DURATION_S)
+    bus_state.shift_smoke_timer_s = max(float(getattr(bus_state, "shift_smoke_timer_s", 0.0)), BUS_SHIFT_SMOKE_DURATION_S)
+    bus_state.shift_jerk_px = max(float(getattr(bus_state, "shift_jerk_px", 0.0)), 1.0 + 2.0 * s)
+    haptics.rumble_bus_shift(severity=0.5 + 0.5 * s, logger=logger)
 
 
 def _bus_door_open_blend(bus_state: BusState) -> float:
@@ -174,6 +194,10 @@ def update_bus_ai(bus_state: BusState, dt: float, audio=None, *, mission_phase: 
     Returns:
         Updated bus state
     """
+    dt_s = max(0.0, float(dt))
+    bus_state.shift_jerk_timer_s = max(0.0, float(getattr(bus_state, "shift_jerk_timer_s", 0.0)) - dt_s)
+    bus_state.shift_smoke_timer_s = max(0.0, float(getattr(bus_state, "shift_smoke_timer_s", 0.0)) - dt_s)
+
     # --- Manual driver override: player is in the bus cab ---
     if bus_state.driver_mode_active and driver_input is not None:
         if driver_input.move_left:
@@ -225,12 +249,14 @@ def update_bus_ai(bus_state: BusState, dt: float, audio=None, *, mission_phase: 
             bus_state.is_moving = True
             bus_state.elapsed_s = 0.0   # reset accel ramp
             bus_state.phase = "accelerating"
+            _trigger_shift_feedback(bus_state, severity=0.45, logger=None)
             if audio is not None and hasattr(audio, "play_bus_accelerate"):
                 audio.play_bus_accelerate()
         elif target_drive_mode == "reset":
             bus_state.drive_mode = "reset"
             bus_state.is_moving = True
             bus_state.phase = "cruising"
+            _trigger_shift_feedback(bus_state, severity=0.50, logger=None)
             if audio is not None and hasattr(audio, "play_bus_accelerate"):
                 audio.play_bus_accelerate()
         else:
@@ -286,6 +312,7 @@ def update_bus_ai(bus_state: BusState, dt: float, audio=None, *, mission_phase: 
                 elif prev_phase != "decelerating" and bus_state.phase == "decelerating":
                     # Play brake sound when entering deceleration
                     audio.play_bus_brakes()
+                    _trigger_shift_feedback(bus_state, severity=0.35, logger=None)
 
             speed_factor = min(accel_factor, decel_factor)
             bus_state.velocity_x = -BUS_SPEED_PX_PER_SEC * speed_factor
@@ -353,6 +380,14 @@ def draw_airport_bus(target: pygame.Surface, bus_state: BusState, camera_x: floa
     """
     screen_x = int(bus_state.x - camera_x)
     screen_y = int(bus_state.y - bus_state.height)
+
+    shift_jerk_timer = max(0.0, float(getattr(bus_state, "shift_jerk_timer_s", 0.0)))
+    if shift_jerk_timer > 0.0:
+        jerk_duration = max(0.001, float(getattr(bus_state, "shift_jerk_duration_s", BUS_SHIFT_JERK_DURATION_S)))
+        norm = max(0.0, min(1.0, shift_jerk_timer / jerk_duration))
+        phase = 1.0 - norm
+        amp = float(getattr(bus_state, "shift_jerk_px", 0.0))
+        screen_x += int(math.sin(phase * math.pi * 2.2) * amp * norm)
     
     closed_sprite = _load_bus_sprite()
     open_sprite = _load_bus_sprite_doors_open()
@@ -389,6 +424,16 @@ def draw_airport_bus(target: pygame.Surface, bus_state: BusState, camera_x: floa
     max_health = float(getattr(bus_state, "max_health", 100.0) or 100.0)
     health = max(0.0, float(getattr(bus_state, "health", max_health)))
     ratio = health / max_health if max_health > 0.0 else 0.0
+    shift_smoke_timer = max(0.0, float(getattr(bus_state, "shift_smoke_timer_s", 0.0)))
+    if shift_smoke_timer > 0.0:
+        shift_smoke_duration = max(0.001, float(getattr(bus_state, "shift_smoke_duration_s", BUS_SHIFT_SMOKE_DURATION_S)))
+        t_norm = max(0.0, min(1.0, shift_smoke_timer / shift_smoke_duration))
+        smoke_alpha = int(30 + 35 * t_norm)
+        puffs = pygame.Surface((24, 14), pygame.SRCALPHA)
+        wobble = math.sin(float(getattr(bus_state, "elapsed_s", 0.0)) * 16.0) * 1.5
+        pygame.draw.circle(puffs, (70, 70, 70, smoke_alpha), (7, 8), 4)
+        pygame.draw.circle(puffs, (65, 65, 65, int(smoke_alpha * 0.75)), (13, int(6 + wobble)), 4)
+        target.blit(puffs, (screen_x + 4, screen_y + bus_state.height - 4))
     if ratio <= 0.70:
         smoke = pygame.Surface((20, 12), pygame.SRCALPHA)
         smoke_alpha = 95 if ratio > 0.35 else 155
