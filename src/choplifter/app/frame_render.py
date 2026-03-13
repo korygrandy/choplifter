@@ -4,6 +4,7 @@ import math
 import random
 import pygame
 
+from ..objective_manager import draw_city_objectives
 from .objective_overlay import get_mission_objective_overlay, overlay_alpha, tick_overlay_timer
 
 
@@ -294,6 +295,9 @@ def render_world_branch(
             airport_meal_truck_state=airport_runtime.meal_truck_state,
             airport_cutscene_state=airport_runtime.cutscene_state,
         )
+
+    if mode == "playing":
+        draw_city_objectives(target, mission)
 
     draw_flares_fn(target, mission, camera_x=camera_x, enable_particles=particles_enabled)
     draw_explosion_particles_fn(target, mission, camera_x=camera_x)

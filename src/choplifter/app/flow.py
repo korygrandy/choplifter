@@ -1,5 +1,7 @@
 from typing import Callable
 
+from ..render.backgrounds import bg_asset_exists
+
 def apply_mission_preview(
     create_mission_and_helicopter: Callable,
     heli_settings,
@@ -25,7 +27,7 @@ def apply_mission_preview(
         audio.stop_flying()
     prev_stats = take_mission_stats_snapshot(mission, boarded_count=boarded_count)
     bg = getattr(mission, "bg_asset", "")
-    if bg and not hasattr(mission, "bg_asset_exists") and set_toast:
+    if bg and not bg_asset_exists(str(bg)) and set_toast:
         set_toast(f"Missing background: {bg}")
     return mission, helicopter, accumulator, prev_stats
 

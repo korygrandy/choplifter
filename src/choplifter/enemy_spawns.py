@@ -9,6 +9,7 @@ import random
 
 import pygame
 from .app.escort_risk import airport_escort_damage_multiplier
+from .vehicle_damage import apply_vehicle_damage, is_airport_bus_vulnerable, vehicle_health_ratio
 
 # Sprite cache — loaded once on first draw call, never reloaded.
 _RAIDER_SPRITE: pygame.Surface | None = None
@@ -40,6 +41,10 @@ class AirportSpawnEnemy:
 	vx: float
 	kind: str  # "uav" or "raider"
 	ttl_s: float
+	max_health: float = 32.0
+	health: float = 32.0
+	damage_state: str = "nominal"
+	damage_flash_s: float = 0.0
 	vy: float = 0.0
 	base_y: float = 0.0
 	phase: str = "approach"  # approach -> dive
@@ -67,7 +72,7 @@ def _next_spawn_delay(elapsed_s: float) -> float:
 	return random.uniform(2.8, 4.2)
 
 
-def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_state=None, target_x: float | None = None):
+def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_state=None, meal_truck_state=None, target_x: float | None = None):
 	if enemy_state is None:
 		enemy_state = create_airport_enemy_state()
 
@@ -87,6 +92,7 @@ def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_sta
 			y = max(90.0, ground_y - random.uniform(165.0, 235.0))
 			vx = -random.uniform(95.0, 135.0)
 			ttl_s = 14.0
+			max_health = 32.0
 			vy = random.uniform(-4.0, 4.0)
 			phase = "approach"
 			weave_phase = random.uniform(0.0, math.pi * 2.0)
@@ -94,6 +100,7 @@ def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_sta
 			y = ground_y  # Bottom-aligned to ground, same as city bus
 			vx = -random.uniform(55.0, 80.0)
 			ttl_s = 24.0
+			max_health = 52.0
 			vy = 0.0
 			phase = "approach"
 			weave_phase = 0.0
@@ -105,6 +112,8 @@ def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_sta
 				vx=vx,
 				kind=kind,
 				ttl_s=ttl_s,
+				max_health=max_health,
+				health=max_health,
 				vy=vy,
 				base_y=y,
 				phase=phase,
@@ -118,8 +127,11 @@ def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_sta
 	target_ref_x = float(target_x) if target_x is not None else bus_x
 	remaining: list[AirportSpawnEnemy] = []
 	for e in enemy_state.enemies:
+		if float(getattr(e, "health", 1.0)) <= 0.0:
+			continue
 		dt_s = max(0.0, float(dt))
 		e.ttl_s -= dt_s
+		e.damage_flash_s = max(0.0, float(getattr(e, "damage_flash_s", 0.0)) - dt_s)
 
 		if e.kind == "uav":
 			if e.phase == "approach":
@@ -147,9 +159,26 @@ def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_sta
 			dx = abs(e.x - target_ref_x)
 			if dx <= 18.0:
 				# UAV dive impacts are heavier than raider impacts.
-				impact_damage = (12.0 if e.kind == "uav" else 5.0) * airport_escort_damage_multiplier(mission)
-				bus_health = float(getattr(bus_state, "health", 100.0))
-				setattr(bus_state, "health", max(0.0, bus_health - impact_damage))
+				base_damage = 12.0 if e.kind == "uav" else 5.0
+				target_vehicle = bus_state
+				target_is_bus = True
+				if meal_truck_state is not None:
+					truck_x = float(getattr(meal_truck_state, "x", target_ref_x + 99999.0))
+					if abs(e.x - truck_x) <= 24.0:
+						target_vehicle = meal_truck_state
+						target_is_bus = False
+
+				allow_damage = True
+				if target_is_bus:
+					allow_damage = is_airport_bus_vulnerable(mission)
+				scale = airport_escort_damage_multiplier(mission) if target_is_bus else 1.0
+				apply_vehicle_damage(
+					target_vehicle,
+					base_damage * scale,
+					default_max_health=float(getattr(target_vehicle, "max_health", 100.0) or 100.0),
+					allow_damage=allow_damage,
+					source=f"{e.kind}_impact",
+				)
 				continue
 		if e.x < -220.0:
 			continue
@@ -164,6 +193,7 @@ def draw_airport_enemies(target: pygame.Surface, enemy_state, *, camera_x: float
 		return
 
 	for e in enemy_state.enemies:
+		health_ratio = vehicle_health_ratio(e, default_max_health=float(getattr(e, "max_health", 32.0) or 32.0))
 		x = int(e.x - float(camera_x))
 		y = int(e.y)
 		if e.kind == "uav":
@@ -202,3 +232,17 @@ def draw_airport_enemies(target: pygame.Surface, enemy_state, *, camera_x: float
 					[(x, y), (x - 10, y + 20), (x + 10, y + 20)],
 					1,
 				)
+
+		if health_ratio <= 0.70:
+			smoke_alpha = 120 if health_ratio > 0.35 else 180
+			smoke_radius = 4 if e.kind == "uav" else 6
+			smoke = pygame.Surface((smoke_radius * 4, smoke_radius * 3), pygame.SRCALPHA)
+			pygame.draw.circle(smoke, (55, 55, 55, smoke_alpha), (smoke_radius * 2 - 1, smoke_radius), smoke_radius)
+			target.blit(smoke, (x - smoke_radius * 2, y - smoke_radius * 3))
+
+		if health_ratio <= 0.35:
+			fire_color = (255, 145, 72)
+			fire_x = x + (9 if e.kind == "raider" else -3)
+			fire_y = y - (18 if e.kind == "raider" else 4)
+			pygame.draw.circle(target, fire_color, (fire_x, fire_y), 3)
+			pygame.draw.circle(target, (255, 210, 120), (fire_x, fire_y), 1)

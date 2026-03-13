@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Optional
 
 from .game_types import ProjectileKind
+from .math2d import Vec2
+from .vehicle_damage import apply_vehicle_damage, is_airport_bus_vulnerable
 
 
 # Cache for loaded bus sprite
@@ -382,6 +384,20 @@ def draw_airport_bus(target: pygame.Surface, bus_state: BusState, camera_x: floa
         pygame.draw.circle(target, (50, 50, 50), (screen_x + 12, wheel_y), wheel_radius)
         pygame.draw.circle(target, (50, 50, 50), (screen_x + 52, wheel_y), wheel_radius)
 
+    max_health = float(getattr(bus_state, "max_health", 100.0) or 100.0)
+    health = max(0.0, float(getattr(bus_state, "health", max_health)))
+    ratio = health / max_health if max_health > 0.0 else 0.0
+    if ratio <= 0.70:
+        smoke = pygame.Surface((20, 12), pygame.SRCALPHA)
+        smoke_alpha = 95 if ratio > 0.35 else 155
+        pygame.draw.circle(smoke, (55, 55, 55, smoke_alpha), (8, 6), 5)
+        target.blit(smoke, (screen_x + bus_state.width - 10, screen_y - 10))
+    if ratio <= 0.35:
+        fire_x = screen_x + bus_state.width - 3
+        fire_y = screen_y + 6
+        pygame.draw.circle(target, (255, 142, 64), (fire_x, fire_y), 4)
+        pygame.draw.circle(target, (255, 220, 130), (fire_x, fire_y), 2)
+
     # Passenger count indicator above bus after transfer.
     if int(boarded_count) > 0:
         label = f"x{int(boarded_count)}"
@@ -406,8 +422,41 @@ def draw_airport_bus(target: pygame.Surface, bus_state: BusState, camera_x: floa
         pygame.draw.rect(target, (170, 235, 170), pygame.Rect(badge_center[0] - 4, badge_center[1] - 5, 6, 2))
 
 
+def _closest_alive_raider_in_bus_lz(bus_left: float, bus_right: float, mission) -> object | None:
+    """Return the closest alive raider within the bus horizontal footprint, or None.
+
+    A raider in the LZ should absorb player fire before the bus does.
+    The check uses the raider's render half-width (18 px) as extra tolerance.
+    """
+    enemy_state = getattr(mission, "airport_enemy_state", None)
+    enemies = getattr(enemy_state, "enemies", None)
+    if not enemies:
+        return None
+    bus_cx = (bus_left + bus_right) * 0.5
+    lz_x_min = bus_left - 18.0
+    lz_x_max = bus_right + 18.0
+    best = None
+    best_dist = float("inf")
+    for e in enemies:
+        if str(getattr(e, "kind", "")).lower() != "raider":
+            continue
+        if float(getattr(e, "health", 1.0)) <= 0.0:
+            continue
+        ex = float(getattr(e, "x", -99999.0))
+        if not (lz_x_min <= ex <= lz_x_max):
+            continue
+        dist = abs(ex - bus_cx)
+        if dist < best_dist:
+            best_dist = dist
+            best = e
+    return best
+
+
 def apply_airport_bus_friendly_fire(bus_state: BusState | None, mission, *, logger=None) -> int:
     """Apply player projectile hits on the airport bus.
+
+    When an alive raider occupies the bus LZ the hit is routed to the raider
+    instead, matching player expectation that visible targets absorb damage.
 
     Returns the number of friendly-fire hits consumed this tick.
     """
@@ -424,6 +473,7 @@ def apply_airport_bus_friendly_fire(bus_state: BusState | None, mission, *, logg
     bus_bottom = float(getattr(bus_state, "y", 0.0))
 
     hits = 0
+    can_damage_bus = is_airport_bus_vulnerable(mission)
     for p in projectiles:
         if not bool(getattr(p, "alive", False)):
             continue
@@ -435,9 +485,50 @@ def apply_airport_bus_friendly_fire(bus_state: BusState | None, mission, *, logg
         if not (bus_left <= px <= bus_right and bus_top <= py <= bus_bottom):
             continue
 
+        # If an alive raider occupies the bus LZ, route the hit to the raider.
+        raider = _closest_alive_raider_in_bus_lz(bus_left, bus_right, mission)
+        if raider is not None:
+            damage = 18.0 if getattr(p, "kind", None) is ProjectileKind.BOMB else 4.0
+            result = apply_vehicle_damage(
+                raider,
+                damage,
+                default_max_health=float(getattr(raider, "max_health", 52.0) or 52.0),
+                source="friendly_fire_redirect",
+            )
+            if result.destroyed_now:
+                stats = getattr(mission, "stats", None)
+                if stats is not None:
+                    try:
+                        stats.enemies_destroyed += 1
+                    except Exception:
+                        pass
+                explosions = getattr(mission, "explosions", None)
+                if explosions is not None and hasattr(explosions, "emit_explosion"):
+                    try:
+                        explosions.emit_explosion(
+                            Vec2(float(getattr(raider, "x", 0.0)), float(getattr(raider, "y", 0.0)) - 8.0),
+                            strength=0.58,
+                        )
+                    except Exception:
+                        pass
+            p.alive = False
+            hits += 1
+            sparks = getattr(mission, "impact_sparks", None)
+            if sparks is not None and hasattr(sparks, "emit_hit"):
+                try:
+                    sparks.emit_hit(p.pos, p.vel, strength=0.8)
+                except Exception:
+                    pass
+            continue
+
         damage = 18.0 if getattr(p, "kind", None) is ProjectileKind.BOMB else 4.0
-        health = float(getattr(bus_state, "health", 100.0))
-        setattr(bus_state, "health", max(0.0, health - damage))
+        apply_vehicle_damage(
+            bus_state,
+            damage,
+            default_max_health=float(getattr(bus_state, "max_health", 100.0) or 100.0),
+            allow_damage=can_damage_bus,
+            source="friendly_fire",
+        )
         p.alive = False
         hits += 1
 
@@ -449,6 +540,11 @@ def apply_airport_bus_friendly_fire(bus_state: BusState | None, mission, *, logg
                 pass
 
     if hits > 0 and logger is not None:
-        logger.info("AIRPORT_BUS_FRIENDLY_FIRE: hits=%d health=%.1f", hits, float(getattr(bus_state, "health", 0.0)))
+        logger.info(
+            "AIRPORT_BUS_FRIENDLY_FIRE: hits=%d health=%.1f vulnerable=%s",
+            hits,
+            float(getattr(bus_state, "health", 0.0)),
+            can_damage_bus,
+        )
 
     return hits

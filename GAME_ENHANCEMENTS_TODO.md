@@ -1279,20 +1279,20 @@ Priority additions to preserve 1982 rescue-first essence while improving modern 
 
 ### P0 (Next Up)
 
-- [ ] City Siege objective/event overlay parity pass.
+- [x] City Siege objective/event overlay parity pass.
   - Refactor City Siege overlay flow to match Airport mission command-prompt style center-screen event HUD behavior.
 
-- [ ] Mission/background select messaging bug sweep.
+- [x] Mission/background select messaging bug sweep.
   - Resolve missing UI selection message rendering and remove any stale legacy background/message lookup paths.
 
-- [ ] Tower LZ deboard placement correction.
+- [x] Tower LZ deboard placement correction.
   - Render deboarded passengers near the terminal frontage (left-side building area), not clustered in front of the ATC tower column.
 
-- [ ] Shared vehicle damage framework.
+- [x] Shared vehicle damage framework.
   - Add vehicle damage handling parity for bus, meal truck, raider, and drone entities (helicopter/ground-cannon style health/damage states).
   - Keep bus immune until escort-protection phase starts, then enable mission-appropriate damage intake.
 
-- [ ] BARAK visual damage progression.
+- [x] BARAK visual damage progression.
   - Add damage-state VFX for BARAK vehicle: smoke density scales with damage, plus engine-front fire breakout at or below 70% health.
 
 ### P1 (Classic Flavor + Modern Presentation)

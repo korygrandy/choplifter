@@ -10,6 +10,9 @@ import pygame
 from .hostage_logic import get_active_airport_terminal_label
 
 
+CITY_MISSION_IDS = ("city", "city_center", "citycenter", "mission1", "m1")
+
+
 # Top-center objective strip typewriter state.
 _TYPEWRITER_TEXT: str = ""
 _TYPEWRITER_TYPED_LEN: int = 0
@@ -109,6 +112,57 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 		objective_state.status_text = "Deploy mission tech to meal truck"
 
 	return objective_state
+
+
+def _is_city_siege_mission(mission) -> bool:
+	mission_id = str(getattr(mission, "mission_id", "")).strip().lower()
+	return mission_id in CITY_MISSION_IDS
+
+
+def _city_status_text(mission) -> str:
+	stats = getattr(mission, "stats", None)
+	saved = int(getattr(stats, "saved", 0)) if stats is not None else 0
+	total_target = max(1, int(getattr(mission, "hostages_to_save", 21)))
+
+	vip_hostage = next((h for h in getattr(mission, "hostages", []) if bool(getattr(h, "is_vip", False))), None)
+	vip_state = str(getattr(getattr(vip_hostage, "state", None), "name", "")) if vip_hostage is not None else ""
+
+	if bool(getattr(mission, "ended", False)):
+		if bool(getattr(mission, "mission_success", False)):
+			return "Mission complete"
+		if vip_state == "KIA":
+			return "Mission failed: VIP lost"
+		return "Mission failed"
+
+	if vip_state == "KIA":
+		return "VIP down - extraction failed"
+
+	if vip_hostage is None:
+		return f"Rescue civilians ({saved}/{total_target})"
+
+	vip_secured = vip_state in ("BOARDED", "SAVED")
+	if vip_secured:
+		return f"VIP secured - rescue civilians ({saved}/{total_target})"
+
+	return f"Rescue VIP + civilians ({saved}/{total_target})"
+
+
+def draw_city_objectives(target: pygame.Surface, mission) -> None:
+	"""Draw City Siege top-center command strip using airport objective panel styling."""
+	if mission is None or not _is_city_siege_mission(mission):
+		return
+
+	status_text = _city_status_text(mission)
+	objective_state = type(
+		"CityObjectiveState",
+		(),
+		{
+			"status_text": status_text,
+			"deadline_failed": False,
+			"mission_phase": "city_siege",
+		},
+	)()
+	draw_airport_objectives(target, objective_state, camera_x=0.0, ground_y=0.0, bus_state=None)
 
 
 def draw_airport_objectives(target: pygame.Surface, objective_state, *, camera_x: float, ground_y: float, bus_state=None) -> None:

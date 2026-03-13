@@ -1163,6 +1163,36 @@ def _draw_enemies(screen: pygame.Surface, mission: MissionState, *, camera_x: fl
             y = int(ground_y - img_rect.height)
             screen.blit(img, (x - img_rect.width // 2, y))
 
+            max_health = float(getattr(e, "max_health", 0.0))
+            if max_health <= 0.0:
+                max_health = max(1.0, float(getattr(mission.tuning, "barak_health", 143.0)))
+            health = max(0.0, float(getattr(e, "health", max_health)))
+            damage_ratio = max(0.0, min(1.0, 1.0 - (health / max_health)))
+
+            if damage_ratio > 0.0:
+                smoke_count = 1 + int(damage_ratio * 4.0)
+                smoke_origin_x = x - 10
+                smoke_origin_y = y + 7
+                smoke_surf = get_volatile_surface(screen.get_width(), screen.get_height(), pygame.SRCALPHA)
+                for si in range(smoke_count):
+                    wobble = math.sin(t * (3.2 + si * 0.45) + si * 1.73)
+                    puff_x = int(smoke_origin_x + wobble * (5.0 + 2.0 * damage_ratio))
+                    puff_y = int(smoke_origin_y - (si * 5 + 4 + damage_ratio * 5.0))
+                    puff_r = int(4 + damage_ratio * 6.0 + (si % 2))
+                    puff_a = int(80 + damage_ratio * 90.0)
+                    pygame.draw.circle(smoke_surf, (46, 46, 46, puff_a), (puff_x, puff_y), puff_r)
+                screen.blit(smoke_surf, (0, 0))
+
+            # Engine-front fire breakout once BARAK health drops to 70% or lower.
+            if health <= max_health * 0.70:
+                flame_phase = 0.55 + 0.45 * math.sin(t * 11.0)
+                flame_x = x + 18
+                flame_y = y + img_rect.height - 12
+                outer_r = max(3, int(4 + flame_phase * 2))
+                inner_r = max(1, outer_r - 2)
+                pygame.draw.circle(screen, (255, int(130 + 70 * flame_phase), 62), (flame_x, flame_y), outer_r)
+                pygame.draw.circle(screen, (255, 218, 120), (flame_x, flame_y), inner_r)
+
             # Draw the launcher (rectangle) if deploying or later
             if getattr(e, "mrad_state", None) in BARAK_LAUNCHER_VISIBLE_STATES:
                 # Launcher base position: on top of vehicle, offset 40px left and 8px up

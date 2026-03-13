@@ -206,6 +206,7 @@ def update_airport_mission_tick(
         dt,
         mission=mission,
         bus_state=bus_state,
+        meal_truck_state=meal_truck_state,
         target_x=airport_target_x,
     )
 
@@ -238,6 +239,9 @@ def update_airport_mission_tick(
 
     # Sync mission references used by rendering / other modules
     mission.airport_hostage_state = hostage_state
+    mission.airport_bus_state = bus_state
+    mission.airport_enemy_state = enemy_state
+    mission.airport_objective_state = objective_state
     mission.airport_meal_truck_state = meal_truck_state
 
     # --- Win condition ---

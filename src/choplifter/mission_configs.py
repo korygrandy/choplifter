@@ -80,7 +80,7 @@ class MissionTuning:
     barak_retract_angle_speed_rad_s: float = 1.9
     barak_retract_extension_speed_s: float = 1.4
     barak_reload_seconds: float = 4.0
-    barak_reload_min_seconds: float = 4.0
+    barak_reload_min_seconds: float = 5.0
     barak_reload_max_seconds: float = 6.0
     barak_state_fail_safe_s: float = 8.0
 

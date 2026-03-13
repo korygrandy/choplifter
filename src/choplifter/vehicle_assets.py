@@ -15,6 +15,11 @@ class AirportMealTruckState:
 	y: float
 	width: int = 78
 	height: int = 28
+	max_health: float = 120.0
+	health: float = 120.0
+	damage_state: str = "nominal"
+	damage_flash_s: float = 0.0
+	destroyed: bool = False
 	speed_px_per_s: float = 66.0
 	plane_lz_x: float = 1500.0  # Elevated bunker (compound index 1)
 	is_active: bool = True  # Always visible, controls whether truck is operational
@@ -349,3 +354,18 @@ def draw_airport_meal_truck(target: pygame.Surface, meal_truck_state, *, camera_
 	if _meal_cart_box_sprite is not None and box_state in ("extending", "retracting"):
 		box_sprite = _get_facing_surface(_meal_cart_box_sprite, facing_right=facing_right)
 		target.blit(box_sprite, (x, y + box_y_offset))
+
+	max_health = float(getattr(meal_truck_state, "max_health", 120.0) or 120.0)
+	health = max(0.0, float(getattr(meal_truck_state, "health", max_health)))
+	ratio = health / max_health if max_health > 0.0 else 0.0
+	if ratio <= 0.70:
+		smoke = pygame.Surface((18, 10), pygame.SRCALPHA)
+		smoke_alpha = 90 if ratio > 0.35 else 150
+		pygame.draw.circle(smoke, (58, 58, 58, smoke_alpha), (8, 5), 4)
+		engine_x = x + (8 if facing_right else int(getattr(meal_truck_state, "width", 78)) - 12)
+		target.blit(smoke, (engine_x - 6, y - 9))
+	if ratio <= 0.35:
+		engine_x = x + (8 if facing_right else int(getattr(meal_truck_state, "width", 78)) - 12)
+		engine_y = y + 7
+		pygame.draw.circle(target, (255, 145, 70), (engine_x, engine_y), 3)
+		pygame.draw.circle(target, (255, 220, 130), (engine_x, engine_y), 1)

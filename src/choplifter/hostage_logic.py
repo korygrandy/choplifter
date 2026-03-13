@@ -538,8 +538,9 @@ def draw_airport_hostages(target: pygame.Surface, hostage_state, *, camera_x: fl
 		return
 
 	if hostage_state.state == "rescued":
-		# Draw a tiny offload cluster near the bus stop point.
-		base_x = bus_x - 10
+		# Keep deboarded civilians near terminal frontage, left of the tower shaft.
+		frontage_world_x = float(getattr(bus_state, "stop_x", 500.0)) - 78.0
+		base_x = int(frontage_world_x - float(camera_x))
 		base_y = int(float(ground_y) - 8)
 		for i in range(min(4, max(1, int(hostage_state.rescued_hostages // 4) + 1))):
 			_draw_stick_figure_passenger(target, base_x + i * 10, base_y, i, mission_time)

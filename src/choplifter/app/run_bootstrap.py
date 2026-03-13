@@ -133,7 +133,7 @@ def initialize_run_bootstrap(*, window: object, debug_weather_modes: list[str]) 
     storm_clouds = StormCloudSystem(window.width, window.height)
 
     mission_choices: list[tuple[str, str]] = [
-        ("city", "City Center Seige"),
+        ("city", "City Center Siege"),
         ("airport", "Airport Special Ops"),
         ("worship", "Worship Center Warfare"),
     ]

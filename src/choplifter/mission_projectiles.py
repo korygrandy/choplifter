@@ -19,6 +19,7 @@ from .mission_helpers import (
 from .mission_state import MissionState
 from .settings import HelicopterSettings
 from .app.escort_risk import airport_escort_damage_multiplier
+from .vehicle_damage import apply_vehicle_damage, is_airport_bus_vulnerable
 
 
 def _barak_should_apply_damage(*, grounded: bool, in_lz: bool) -> bool:
@@ -116,6 +117,8 @@ def _barak_bus_target_point(mission: MissionState) -> Vec2 | None:
     bus_state = getattr(mission, "airport_bus_state", None)
     if bus_state is None:
         return None
+    if not is_airport_bus_vulnerable(mission):
+        return None
     if float(getattr(bus_state, "health", 0.0)) <= 0.0:
         return None
     return Vec2(float(getattr(bus_state, "x", 0.0)), float(getattr(bus_state, "y", 0.0)) - 10.0)
@@ -124,6 +127,65 @@ def _barak_bus_target_point(mission: MissionState) -> Vec2 | None:
 def _barak_collision_prefers_bus(*, mission: MissionState, diverted_collision: bool) -> bool:
     # Player expectation: missiles prioritize the helicopter unless the player is actively driving a vehicle.
     return (not diverted_collision) and _barak_player_driving_vehicle(mission) and (_barak_bus_target_point(mission) is not None)
+
+
+def _projectile_hits_airport_spawn_enemy(*, projectile: Projectile, previous: Vec2, enemy: object) -> bool:
+    kind = str(getattr(enemy, "kind", "")).lower()
+    if kind == "raider":
+        center = Vec2(float(getattr(enemy, "x", 0.0)), float(getattr(enemy, "y", 0.0)) - 12.0)
+        radius = 18.0
+    else:
+        center = Vec2(float(getattr(enemy, "x", 0.0)), float(getattr(enemy, "y", 0.0)))
+        radius = 15.0
+    return _hits_circle_or_swept(previous=previous, current=projectile.pos, center=center, radius=radius)
+
+
+def _apply_airport_spawn_enemy_hits(*, mission: MissionState, projectile: Projectile, previous: Vec2) -> bool:
+    if projectile.kind not in (ProjectileKind.BULLET, ProjectileKind.BOMB):
+        return False
+
+    enemy_state = getattr(mission, "airport_enemy_state", None)
+    enemies = getattr(enemy_state, "enemies", None)
+    if not enemies:
+        return False
+
+    for enemy in enemies:
+        if float(getattr(enemy, "health", 1.0)) <= 0.0:
+            continue
+        if not _projectile_hits_airport_spawn_enemy(projectile=projectile, previous=previous, enemy=enemy):
+            continue
+
+        damage = 11.0 if projectile.kind is ProjectileKind.BULLET else 36.0
+        result = apply_vehicle_damage(
+            enemy,
+            damage,
+            default_max_health=float(getattr(enemy, "max_health", 32.0) or 32.0),
+            source="player_projectile",
+        )
+
+        if result.applied_damage > 0.0:
+            sparks = getattr(mission, "impact_sparks", None)
+            if sparks is not None and hasattr(sparks, "emit_hit"):
+                try:
+                    sparks.emit_hit(
+                        Vec2(float(projectile.pos.x), float(projectile.pos.y)),
+                        Vec2(float(projectile.vel.x), float(projectile.vel.y)),
+                        strength=0.72,
+                    )
+                except Exception:
+                    pass
+
+        if result.destroyed_now:
+            mission.stats.enemies_destroyed += 1
+            mission.explosions.emit_explosion(
+                Vec2(float(getattr(enemy, "x", 0.0)), float(getattr(enemy, "y", 0.0)) - 8.0),
+                strength=0.58,
+            )
+
+        projectile.alive = False
+        return True
+
+    return False
 
 
 def _hits_circle_or_swept(*, previous: Vec2, current: Vec2, center: Vec2, radius: float) -> bool:
@@ -559,6 +621,9 @@ def _update_projectiles(
         if not p.alive:
             continue
 
+        if _apply_airport_spawn_enemy_hits(mission=mission, projectile=p, previous=prev_pos):
+            continue
+
         # Helicopter collision (enemy projectiles only).
         if p.kind in (ProjectileKind.ENEMY_BULLET, ProjectileKind.ENEMY_ARTILLERY):
             if getattr(p, "is_barak_missile", False):
@@ -619,9 +684,14 @@ def _update_projectiles(
                         if barak_damage_target == "bus":
                             bus_state = getattr(mission, "airport_bus_state", None)
                             if bus_state is not None:
-                                health = float(getattr(bus_state, "health", 100.0))
                                 damage = 18.0 * airport_escort_damage_multiplier(mission)
-                                setattr(bus_state, "health", max(0.0, health - damage))
+                                apply_vehicle_damage(
+                                    bus_state,
+                                    damage,
+                                    default_max_health=float(getattr(bus_state, "max_health", 100.0) or 100.0),
+                                    allow_damage=is_airport_bus_vulnerable(mission),
+                                    source="barak_missile",
+                                )
                         else:
                             damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
                 elif p.kind is ProjectileKind.ENEMY_ARTILLERY:
@@ -693,9 +763,14 @@ def _update_projectiles(
                     if barak_damage_target == "bus":
                         bus_state = getattr(mission, "airport_bus_state", None)
                         if bus_state is not None:
-                            health = float(getattr(bus_state, "health", 100.0))
                             damage = 18.0 * airport_escort_damage_multiplier(mission)
-                            setattr(bus_state, "health", max(0.0, health - damage))
+                            apply_vehicle_damage(
+                                bus_state,
+                                damage,
+                                default_max_health=float(getattr(bus_state, "max_health", 100.0) or 100.0),
+                                allow_damage=is_airport_bus_vulnerable(mission),
+                                source="barak_missile",
+                            )
                     else:
                         damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
             elif p.kind is ProjectileKind.BOMB:
