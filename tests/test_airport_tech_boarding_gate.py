@@ -154,7 +154,7 @@ class AirportTechBoardingGateTests(unittest.TestCase):
         self.assertEqual(mission.hostages[0].state, HostageState.FALLING)
         self.assertEqual(mission.stats.lost_in_transit, 1)
 
-    def test_airport_blocks_lower_rescue_completion_when_upper_compounds_still_have_passengers(self) -> None:
+    def test_airport_allows_lower_rescue_completion_even_when_upper_compounds_still_have_passengers(self) -> None:
         mission = _mission(mission_id="airport", tech_state_name="on_chopper")
         mission.hostages = [_boarded_hostage(x=10.0, y=200.0)]
         mission.airport_hostage_state = SimpleNamespace(terminal_remaining=[2, 0])
@@ -171,10 +171,9 @@ class AirportTechBoardingGateTests(unittest.TestCase):
 
         _handle_unload(mission, helicopter, HelicopterSettings(), 0.25)
 
-        self.assertEqual(mission.hostages[0].state, HostageState.BOARDED)
-        self.assertEqual(mission.stats.saved, 0)
+        self.assertEqual(mission.hostages[0].state, HostageState.EXITING)
 
-    def test_airport_blocks_lower_rescue_completion_when_tech_not_on_chopper(self) -> None:
+    def test_airport_allows_lower_rescue_completion_when_tech_not_on_chopper(self) -> None:
         mission = _mission(mission_id="airport", tech_state_name="waiting_at_lz")
         mission.hostages = [_boarded_hostage(x=10.0, y=200.0)]
         mission.airport_hostage_state = SimpleNamespace(terminal_remaining=[0, 0])
@@ -191,8 +190,7 @@ class AirportTechBoardingGateTests(unittest.TestCase):
 
         _handle_unload(mission, helicopter, HelicopterSettings(), 0.25)
 
-        self.assertEqual(mission.hostages[0].state, HostageState.BOARDED)
-        self.assertEqual(mission.stats.saved, 0)
+        self.assertEqual(mission.hostages[0].state, HostageState.EXITING)
 
     def test_airport_allows_lower_rescue_completion_when_upper_empty_and_tech_on_chopper(self) -> None:
         mission = _mission(mission_id="airport", tech_state_name="on_chopper")

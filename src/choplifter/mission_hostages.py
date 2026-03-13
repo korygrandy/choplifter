@@ -261,17 +261,6 @@ def _handle_unload(mission: MissionState, helicopter: Helicopter, heli: Helicopt
         return
 
     _mission_id = str(getattr(mission, "mission_id", "")).lower()
-    if _mission_id in ("airport", "airport_special_ops", "airportspecialops", "mission2", "m2"):
-        _airport_hostage_state = getattr(mission, "airport_hostage_state", None)
-        _upper_remaining = sum(
-            max(0, int(v)) for v in (getattr(_airport_hostage_state, "terminal_remaining", []) or [])
-        )
-        _tech_state = getattr(mission, "mission_tech", None)
-        _tech_on_chopper = bool(_tech_state is not None and str(getattr(_tech_state, "state", "")) == "on_chopper")
-        if _upper_remaining > 0 or not _tech_on_chopper:
-            mission.unload_release_seconds = 0.0
-            return
-
     if not mission.base.contains_point(helicopter.pos):
         # Airport special: also allow unloading at the tower LZ (bus stop zone).
         _at_tower_lz = False

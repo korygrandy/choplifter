@@ -153,6 +153,10 @@ def draw_mission_end_overlay(screen: pygame.Surface, mission: MissionState) -> N
         mission.stats.enemies_destroyed,
         mission.crashes,
         mission.sentiment,
+        mission_id=str(getattr(mission, "mission_id", "")),
+        route_bonus_awarded=bool(getattr(mission, "airport_route_bonus_awarded", False)),
+        route_bonus_value=float(getattr(mission, "airport_route_bonus_value", 0.0)),
+        first_route=str(getattr(mission, "airport_first_rescue_route", "")),
     )
 
 
@@ -1360,6 +1364,10 @@ def _sentiment_reason_lines(
     kia_player: int,
     kia_enemy: int,
     lost_in_transit: int,
+    mission_id: str = "",
+    route_bonus_awarded: bool = False,
+    route_bonus_value: float = 0.0,
+    first_route: str = "",
 ) -> list[str]:
     factors = sentiment_contributions(
         saved=saved,
@@ -1372,12 +1380,31 @@ def _sentiment_reason_lines(
     sub_kia_enemy = abs(factors["kia_enemy"])
     sub_lost = abs(factors["lost_in_transit"])
 
-    return [
+    lines = [
         f"Sentiment factors: +{add_saved:0.1f} rescued civilians",
         f"Sentiment factors: -{sub_kia_player:0.1f} player-caused casualties",
         f"Sentiment factors: -{sub_kia_enemy:0.1f} enemy-caused casualties",
         f"Sentiment factors: -{sub_lost:0.1f} lost in transit",
     ]
+
+    mission_id_norm = str(mission_id or "").strip().lower()
+    is_airport = mission_id_norm in ("airport", "airport_special_ops", "airportspecialops", "mission2", "m2")
+    route_norm = str(first_route or "").strip().lower()
+    bonus_value = max(0.0, float(route_bonus_value or 0.0))
+    bonus_awarded = bool(route_bonus_awarded and bonus_value > 0.0)
+
+    if is_airport:
+        if bonus_awarded:
+            bonus_label = "Riskier Path Bonus" if route_norm == "elevated" else "Route Bonus"
+            lines.append(f"Sentiment factors: +{bonus_value:0.1f} {bonus_label}")
+
+        riskier_earned = bonus_awarded and route_norm == "elevated"
+        if riskier_earned:
+            lines.append("Riskier Path Bonus: EARNED (upper compounds rescued first)")
+        else:
+            lines.append("Riskier Path Bonus: NOT EARNED (rescue upper compounds first)")
+
+    return lines
 
 
 def _draw_end(
@@ -1392,6 +1419,10 @@ def _draw_end(
     enemies_destroyed: int,
     crashes: int,
     sentiment: float,
+    mission_id: str = "",
+    route_bonus_awarded: bool = False,
+    route_bonus_value: float = 0.0,
+    first_route: str = "",
 ) -> None:
     panel = get_volatile_surface(screen.get_width(), screen.get_height(), pygame.SRCALPHA)
     panel.fill((0, 0, 0, 120))
@@ -1421,6 +1452,10 @@ def _draw_end(
             kia_player=kia_player,
             kia_enemy=kia_enemy,
             lost_in_transit=lost_in_transit,
+            mission_id=mission_id,
+            route_bonus_awarded=route_bonus_awarded,
+            route_bonus_value=route_bonus_value,
+            first_route=first_route,
         )
     )
 

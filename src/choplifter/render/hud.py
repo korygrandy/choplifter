@@ -607,6 +607,29 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
         lines.append(f"AIRPORT ROUTE: {route_name.upper()}")
         lines.append(f"ROUTE BONUS: {bonus_text}")
 
+        # Airport-only feedback gate visibility for flash/screenshake playtesting.
+        if debug_mode:
+            feedback_gates: list[str] = []
+            if float(getattr(mission, "invuln_seconds", 0.0)) > 0.0:
+                feedback_gates.append("invuln")
+            if bool(getattr(mission, "engineer_remote_control_active", False)):
+                feedback_gates.append("remote-control")
+
+            in_tower_lz = False
+            base = getattr(mission, "base", None)
+            if base is not None and hasattr(base, "contains_point"):
+                try:
+                    in_tower_lz = bool(base.contains_point(helicopter.pos))
+                except Exception:
+                    in_tower_lz = False
+            if in_tower_lz:
+                feedback_gates.append("tower-lz-shield")
+
+            if feedback_gates:
+                lines.append(f"FX GATE: SUPPRESSED ({', '.join(feedback_gates)})")
+            else:
+                lines.append("FX GATE: ACTIVE")
+
     if not debug_mode:
         return
 

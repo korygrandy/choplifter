@@ -104,6 +104,16 @@ def get_active_airport_terminal_label(hostage_state) -> str:
 	return get_airport_terminal_label(hostage_state, int(getattr(hostage_state, "active_terminal_index", 0)))
 
 
+def _is_leftmost_terminal(hostage_state, terminal_index: int) -> bool:
+	pickup_xs = list(getattr(hostage_state, "terminal_pickup_xs", ()) or ())
+	if terminal_index < 0 or terminal_index >= len(pickup_xs):
+		return False
+	if not pickup_xs:
+		return terminal_index == 0
+	leftmost_x = min(float(px) for px in pickup_xs)
+	return abs(float(pickup_xs[terminal_index]) - leftmost_x) <= 0.5
+
+
 def create_airport_hostage_state(*, total_hostages: int = 16, pickup_x: float = 1500.0, pickup_points: list[float] | None = None) -> AirportHostageState:
 	pickups = [float(x) for x in (pickup_points or []) if x is not None]
 	if not pickups:
@@ -201,8 +211,13 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 			terminal_x = float(getattr(hostage_state, "pickup_x", 1500.0))
 			if 0 <= loading_index < len(pickup_xs):
 				terminal_x = float(pickup_xs[loading_index])
-			lz_center_x = terminal_x + float(passed_offset)
-			right_boundary_x = lz_center_x + float(pickup_radius) + 5.0
+			if _is_leftmost_terminal(hostage_state, loading_index):
+				# Match the tighter left-elevated cutoff: stop once truck passes
+				# 5px beyond the compound right edge (90px wide footprint).
+				right_boundary_x = terminal_x + 45.0 + 5.0
+			else:
+				lz_center_x = terminal_x + float(passed_offset)
+				right_boundary_x = lz_center_x + float(pickup_radius) + 5.0
 			if float(getattr(meal_truck_state, "x", 0.0)) > right_boundary_x:
 				hostage_state.loading_terminal_index = -1
 				hostage_state.loading_terminal_initial_count = 0
@@ -213,6 +228,9 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 		# Board passengers one-by-one so elevated compound behavior matches ground compounds.
 		elapsed_since_start = float(getattr(mission, "elapsed_seconds", 0.0)) - float(hostage_state.boarding_started_s)
 		rate = max(0.2, float(getattr(hostage_state, "transfer_rate_s", 0.5)))
+		if _is_leftmost_terminal(hostage_state, loading_index):
+			# Left elevated terminal uses a slightly slower cadence so boarding reads clearly.
+			rate *= 1.35
 		loading_total = int(getattr(hostage_state, "loading_terminal_initial_count", 0))
 		if loading_total <= 0:
 			hostage_state.state = "truck_loaded"
@@ -566,7 +584,11 @@ def draw_airport_hostages(target: pygame.Surface, hostage_state, *, camera_x: fl
 		stop_x = float(getattr(bus_state, "stop_x", 500.0))
 		frontage_world_x = stop_x - 78.0
 		tech_state_name = str(getattr(tech_state, "state", "")) if tech_state is not None else ""
-		tech_reboarding_lz = tech_state_name == "waiting_at_lz" or str(getattr(tech_state, "boarding_animation_state", "")) == "returning"
+		tech_animation_state = str(getattr(tech_state, "boarding_animation_state", "")) if tech_state is not None else ""
+		if tech_animation_state == "returning":
+			# Avoid overlap with engineer return-boarding walk animation near the pickup ring.
+			frontage_count = 0
+		tech_reboarding_lz = tech_state_name == "waiting_at_lz"
 		if tech_reboarding_lz:
 			reserved_pickup_x = float(getattr(tech_state, "lz_wait_x", stop_x - 80.0))
 			frontage_world_x = reserved_pickup_x - 18.0 - max(0, frontage_count - 1) * 10.0

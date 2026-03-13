@@ -134,6 +134,29 @@ class AirportObjectiveFlowTests(unittest.TestCase):
         self.assertAlmostEqual(float(getattr(mission, "airport_route_bonus_value", 0.0)), 3.0)
         self.assertAlmostEqual(float(mission.sentiment), 48.0)
 
+    def test_awards_lower_first_route_bonus_when_lower_path_started_first(self) -> None:
+        mission = SimpleNamespace(
+            elapsed_seconds=52.0,
+            mission_id="airport",
+            stats=SimpleNamespace(saved=3),
+            sentiment=45.0,
+            airport_first_rescue_route="lower",
+            airport_route_bonus_awarded=False,
+        )
+        hostage_state = SimpleNamespace(state="rescued", rescued_hostages=2, interrupted_transfers=0)
+
+        update_airport_objectives(
+            None,
+            0.016,
+            mission=mission,
+            hostage_state=hostage_state,
+            tech_state=SimpleNamespace(state="on_chopper", is_deployed=False, on_bus=False),
+        )
+
+        self.assertTrue(bool(getattr(mission, "airport_route_bonus_awarded", False)))
+        self.assertAlmostEqual(float(getattr(mission, "airport_route_bonus_value", 0.0)), 2.0)
+        self.assertAlmostEqual(float(mission.sentiment), 47.0)
+
 
 if __name__ == "__main__":
     unittest.main()
