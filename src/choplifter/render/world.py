@@ -99,8 +99,8 @@ from ..mission_helpers import sentiment_band_label, sentiment_contributions
 _airport_fuselage_half_image_cache: pygame.Surface | None | bool = False
 _airport_fuselage_total_image_cache: pygame.Surface | None | bool = False
 
-FUSELAGE_BACKDROP_OFFSET_X = -245
-FUSELAGE_BACKDROP_OFFSET_Y = -175
+FUSELAGE_BACKDROP_OFFSET_X = -190 + 40   # Moved 40px right
+FUSELAGE_BACKDROP_OFFSET_Y = -195 + 35    # Lowered by 35px
 FUSELAGE_BACKDROP_FADE_WIDTH_PX = 220.0
 
 
@@ -783,8 +783,11 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                 draw_rect.center = r.center
                 draw_rect.y = r.bottom - square_side
             if not is_fuselage_terminal:
-                pygame.draw.rect(screen, body_color, draw_rect, border_radius=2)
-                pygame.draw.rect(screen, edge_color, draw_rect, 2, border_radius=2)
+                if not c.is_open:
+                    pygame.draw.rect(screen, body_color, draw_rect, border_radius=2)
+                    pygame.draw.rect(screen, edge_color, draw_rect, 2, border_radius=2)
+                else:
+                    pygame.draw.rect(screen, edge_color, draw_rect, 1, border_radius=2)
 
             if is_fuselage_terminal:
                 if not fuselage_backdrop_drawn:
@@ -1015,10 +1018,7 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                         pygame.draw.circle(screen, (30, 34, 40), (px, py - 10), 2, 1)
 
             # Preserve destroyed/open gameplay readability.
-            if c.is_open:
-                breach = pygame.Rect(r.centerx - 14, r.bottom - 16, 28, 16)
-                pygame.draw.rect(screen, (52, 48, 42), breach)
-                pygame.draw.rect(screen, (92, 84, 70), breach, 1)
+            # Keep unlocked airport rescue LZs visually clear (no extra open-state slab overlay).
             continue
 
     if is_airport_special:

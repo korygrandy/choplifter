@@ -6,8 +6,8 @@ from typing import Any
 FUSELAGE_DAMAGE_STAGE_INTACT = 0
 FUSELAGE_DAMAGE_STAGE_HALF = 1
 FUSELAGE_DAMAGE_STAGE_TOTAL = 2
-FUSELAGE_DAMAGE_THRESHOLD_HALF = 100.0
-FUSELAGE_DAMAGE_THRESHOLD_TOTAL = 175.0
+FUSELAGE_DAMAGE_THRESHOLD_HALF = 120.0
+FUSELAGE_DAMAGE_THRESHOLD_TOTAL = 240.0
 FUSELAGE_HALF_STAGE_MIN_SECONDS = 0.65
 
 
@@ -49,20 +49,22 @@ def get_airport_fuselage_damage_stage(mission: Any | None) -> int:
         setattr(mission, "airport_fuselage_damage_stage", FUSELAGE_DAMAGE_STAGE_TOTAL)
         return FUSELAGE_DAMAGE_STAGE_TOTAL
 
-    max_health = float(getattr(mission, "airport_fuselage_max_health", 0.0))
-    current_health = max(0.0, float(getattr(fuselage_compound, "health", 0.0)))
-    if max_health <= 0.0:
-        compound_healths = [
-            max(0.0, float(getattr(c, "health", 0.0)))
-            for c in (getattr(mission, "compounds", []) or [])
-        ]
-        observed_peak = max(compound_healths) if compound_healths else current_health
-        max_health = max(1.0, current_health, observed_peak)
-    else:
-        max_health = max(max_health, current_health)
-    setattr(mission, "airport_fuselage_max_health", max_health)
-
-    damage_taken = max(0.0, max_health - current_health)
+    # Use explicit damage counter if present
+    damage_taken = float(getattr(mission, "airport_fuselage_damage_taken", -1.0))
+    if damage_taken < 0.0:
+        max_health = float(getattr(mission, "airport_fuselage_max_health", 0.0))
+        current_health = max(0.0, float(getattr(fuselage_compound, "health", 0.0)))
+        if max_health <= 0.0:
+            compound_healths = [
+                max(0.0, float(getattr(c, "health", 0.0)))
+                for c in (getattr(mission, "compounds", []) or [])
+            ]
+            observed_peak = max(compound_healths) if compound_healths else current_health
+            max_health = max(1.0, current_health, observed_peak)
+        else:
+            max_health = max(max_health, current_health)
+        setattr(mission, "airport_fuselage_max_health", max_health)
+        damage_taken = max(0.0, max_health - current_health)
     mission_time = float(getattr(mission, "elapsed_seconds", 0.0))
     stage_now = FUSELAGE_DAMAGE_STAGE_INTACT
     if damage_taken >= float(FUSELAGE_DAMAGE_THRESHOLD_HALF):

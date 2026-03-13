@@ -289,6 +289,18 @@ def _record_airport_elevated_terminal_impact(*, mission: MissionState, compound:
     mission.airport_terminal_impact_sparks = events
 
 
+def _is_airport_elevated_terminal_compound(*, mission: MissionState, compound: object) -> bool:
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    if mission_id not in ("airport", "airport_special_ops"):
+        return False
+    compounds = list(getattr(mission, "compounds", []) or [])
+    if not compounds:
+        return False
+    elevated_y = min(float(getattr(c.pos, "y", 0.0)) for c in compounds if getattr(c, "pos", None) is not None)
+    compound_y = float(getattr(getattr(compound, "pos", None), "y", 0.0))
+    return abs(compound_y - elevated_y) <= 1.0
+
+
 def _hits_circle_or_swept(*, previous: Vec2, current: Vec2, center: Vec2, radius: float) -> bool:
     """Return True when either endpoint or the movement segment intersects the circle."""
     if _hits_circle(current, center, radius=radius) or _hits_circle(previous, center, radius=radius):
@@ -920,18 +932,42 @@ def _update_projectiles(
 
         # Compound collision (player projectiles only).
         for c in mission.compounds:
-            if c.health <= 0:
+            is_airport_elevated = _is_airport_elevated_terminal_compound(mission=mission, compound=c)
+            if c.health <= 0 and not is_airport_elevated:
                 continue
             if c.contains_point(p.pos):
-                if p.kind is ProjectileKind.BULLET:
-                    c.health -= 12.0
-                elif p.kind is ProjectileKind.BOMB:
-                    c.health -= 40.0
+                did_damage_structure = False
+                is_fuselage = hasattr(mission, "airport_fuselage_compound_id") and getattr(c, "compound_id", None) == getattr(mission, "airport_fuselage_compound_id", None)
+                damage_amt = 0.0
+                if c.health > 0:
+                    if p.kind is ProjectileKind.BULLET:
+                        c.health -= 12.0
+                        damage_amt = 12.0
+                        did_damage_structure = True
+                    elif p.kind is ProjectileKind.BOMB:
+                        c.health -= 40.0
+                        damage_amt = 40.0
+                        did_damage_structure = True
+                    else:
+                        continue
                 else:
-                    continue
-                _record_airport_elevated_terminal_impact(mission=mission, compound=c, projectile=p)
-                _apply_airport_elevated_passenger_hit(mission=mission, compound=c, projectile=p)
-                _log_compound_health_if_needed(c, logger, reason="hit")
+                    if p.kind not in (ProjectileKind.BULLET, ProjectileKind.BOMB):
+                        continue
+                    # If already zero, still count damage for fuselage
+                    if p.kind is ProjectileKind.BULLET:
+                        damage_amt = 12.0
+                    elif p.kind is ProjectileKind.BOMB:
+                        damage_amt = 40.0
+                # Track cumulative fuselage damage
+                if is_fuselage and damage_amt > 0.0:
+                    prev = float(getattr(mission, "airport_fuselage_damage_taken", 0.0))
+                    mission.airport_fuselage_damage_taken = prev + damage_amt
+
+                if is_airport_elevated:
+                    _record_airport_elevated_terminal_impact(mission=mission, compound=c, projectile=p)
+                    _apply_airport_elevated_passenger_hit(mission=mission, compound=c, projectile=p)
+                if did_damage_structure:
+                    _log_compound_health_if_needed(c, logger, reason="hit")
                 p.alive = False
                 break
 
@@ -950,6 +986,13 @@ def _update_projectiles(
                     mission.stats.kia_by_enemy += 1
                 else:
                     mission.stats.kia_by_player += 1
+                # Play random scream SFX (male/female), matching elevated logic
+                audio = getattr(mission, "audio", None)
+                if audio is not None and hasattr(audio, "play_hostage_scream"):
+                    try:
+                        audio.play_hostage_scream()
+                    except Exception:
+                        pass
                 p.alive = False
                 break
 

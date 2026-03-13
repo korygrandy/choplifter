@@ -209,8 +209,8 @@ def update_mission_tech(
 				tech_state.fall_vel_x = random.uniform(-60.0, 60.0)
 				tech_state.fall_vel_y = random.uniform(-80.0, -120.0)
 				tech_state.fall_angle = 0.0
-				if audio is not None and hasattr(audio, "play_hostage_scream"):
-					audio.play_hostage_scream()
+				if audio is not None and hasattr(audio, "play_female_scream"):
+					audio.play_female_scream()
 				return tech_state
 		else:
 			tech_state.fall_airborne_timer = 0.0

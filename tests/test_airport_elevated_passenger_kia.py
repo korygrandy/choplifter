@@ -166,6 +166,69 @@ class AirportElevatedPassengerKiaTests(unittest.TestCase):
         self.assertEqual(len(mission.airport_terminal_impact_sparks), 1)
         self.assertFalse(projectile.alive)
 
+    def test_player_bullet_hit_on_open_zero_health_elevated_terminal_still_kias(self) -> None:
+        elevated_left = Compound(
+            pos=Vec2(100.0, 120.0),
+            width=90.0,
+            height=44.0,
+            health=0.0,
+            is_open=True,
+            hostage_start=0,
+            hostage_count=0,
+        )
+        elevated_right = Compound(
+            pos=Vec2(260.0, 120.0),
+            width=90.0,
+            height=44.0,
+            health=0.0,
+            is_open=True,
+            hostage_start=0,
+            hostage_count=0,
+        )
+        lower_terminal = Compound(
+            pos=Vec2(420.0, 180.0),
+            width=90.0,
+            height=44.0,
+            health=100.0,
+            is_open=False,
+            hostage_start=0,
+            hostage_count=0,
+        )
+        projectile = Projectile(
+            kind=ProjectileKind.BULLET,
+            pos=Vec2(130.0, 132.0),
+            vel=Vec2(0.0, 0.0),
+            ttl=1.0,
+        )
+        hostage_state = SimpleNamespace(
+            terminal_pickup_xs=(145.0, 305.0),
+            terminal_remaining=[2, 2],
+            terminal_kia=[0, 0],
+        )
+        mission = self._base_mission(
+            projectile=projectile,
+            compounds=[elevated_left, elevated_right, lower_terminal],
+            hostage_state=hostage_state,
+        )
+
+        heli = SimpleNamespace(ground_y=500.0)
+        helicopter = SimpleNamespace(pos=Vec2(0.0, 0.0), vel=Vec2(0.0, 0.0), facing=None, grounded=False)
+
+        _update_projectiles(
+            mission,
+            0.0,
+            heli,
+            logger=None,
+            helicopter=helicopter,
+            damage_helicopter=lambda *_a, **_k: None,
+        )
+
+        self.assertEqual(hostage_state.terminal_remaining, [1, 2])
+        self.assertEqual(hostage_state.terminal_kia, [1, 0])
+        self.assertEqual(mission.stats.kia_by_player, 1)
+        self.assertEqual(len(mission.airport_terminal_impact_sparks), 1)
+        self.assertFalse(projectile.alive)
+
     def test_player_bullet_hit_on_lower_terminal_does_not_consume_elevated_passengers(self) -> None:
         elevated_left = Compound(
             pos=Vec2(100.0, 120.0),
