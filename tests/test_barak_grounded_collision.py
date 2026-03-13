@@ -59,13 +59,18 @@ class BarakGroundedCollisionTests(unittest.TestCase):
     def test_collision_prefers_bus_only_when_player_driving_vehicle(self) -> None:
         mission = SimpleNamespace(
             player_driving_vehicle=False,
+            mission_id="airport",
             airport_bus_state=SimpleNamespace(x=300.0, y=220.0, health=100.0),
+            airport_hostage_state=SimpleNamespace(state="boarded"),
         )
         self.assertFalse(_barak_collision_prefers_bus(mission=mission, diverted_collision=False))
 
         mission.player_driving_vehicle = True
         self.assertTrue(_barak_collision_prefers_bus(mission=mission, diverted_collision=False))
         self.assertFalse(_barak_collision_prefers_bus(mission=mission, diverted_collision=True))
+
+        mission.airport_hostage_state.state = "waiting"
+        self.assertFalse(_barak_collision_prefers_bus(mission=mission, diverted_collision=False))
 
     def test_swept_collision_detects_high_speed_crossing(self) -> None:
         previous = Vec2(0.0, 0.0)

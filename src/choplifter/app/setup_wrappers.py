@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .objective_overlay import get_mission_objective_overlay_duration
+
 
 def apply_mission_preview_to_context(
     *,
@@ -89,9 +91,13 @@ def reset_game_to_context(
     audio.log_audio_channel_snapshot(tag="restart", logger=logger)
 
     gamepad_buttons.reset()
-    runtime.city_objective_overlay_timer = 0.0
+    runtime.city_objective_overlay_timer = get_mission_objective_overlay_duration(
+        mission_id=selected_mission_id,
+    )
     runtime.vip_kia_overlay_timer = 0.0
     runtime.vip_kia_overlay_shown = False
+    runtime.tech_kia_overlay_timer = 0.0
+    runtime.tech_kia_overlay_shown = False
     runtime.meal_truck_driver_mode = False
     runtime.meal_truck_lift_command_extended = False
     runtime.bus_driver_mode = False

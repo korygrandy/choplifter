@@ -57,6 +57,7 @@ def draw_airport_world_overlays(
         meal_truck_state=airport_meal_truck_state,
         ground_y=heli_ground_y,
         bus_state=airport_bus_state,
+        tech_state=airport_tech_state,
         mission_time=mission_elapsed_seconds,
     )
     draw_airport_enemies(target, airport_enemy_state, camera_x=camera_x)

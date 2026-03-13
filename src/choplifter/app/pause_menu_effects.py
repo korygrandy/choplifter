@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Callable, Sequence
 
 from .pause_menu_inputs import PausedMenuDecision
+from .loop_mode_adjustments import CITY_STYLE_BRIEF_MISSION_IDS
 
 
 @dataclass
@@ -61,7 +62,7 @@ def apply_paused_menu_decision(
     if paused.action != "none":
         if paused.action == "restart_mission":
             logger.info(f"PAUSE MENU: A pressed on restart_mission")
-            if selected_mission_id == "city":
+            if selected_mission_id in CITY_STYLE_BRIEF_MISSION_IDS:
                 play_satellite_reallocating()
             reset_game()
             next_mode = "playing"

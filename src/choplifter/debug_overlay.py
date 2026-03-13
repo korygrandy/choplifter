@@ -3,6 +3,7 @@ from __future__ import annotations
 import pygame
 
 from .helicopter import Helicopter
+from .airport_fuselage import get_airport_fuselage_damage_progress, get_airport_fuselage_damage_stage
 from .game_types import EnemyKind
 from .mission_helpers import boarded_count
 from .mission_state import MissionState
@@ -54,6 +55,8 @@ class DebugOverlay:
         jet_tell = THREAT_TELL_MATRIX[EnemyKind.JET]
         mine_tell = THREAT_TELL_MATRIX[EnemyKind.AIR_MINE]
         barak = next((e for e in mission.enemies if e.kind is EnemyKind.BARAK_MRAD and e.alive), None)
+        fuselage_stage = int(get_airport_fuselage_damage_stage(mission))
+        fuselage_damage_taken, fuselage_damage_total = get_airport_fuselage_damage_progress(mission)
         if barak is None:
             barak_state_line = "barak: none"
             barak_pose_line = "barak_pose: --"
@@ -91,6 +94,7 @@ class DebugOverlay:
             f"matrix[tank]: lead={tank_tell.lead_time_s:0.2f}s range={int(tank_tell.effective_range_px)}px",
             f"matrix[jet ]: lead={jet_tell.lead_time_s:0.2f}s range={int(jet_tell.effective_range_px)}px",
             f"matrix[mine]: lead={mine_tell.lead_time_s:0.2f}s range={int(mine_tell.effective_range_px)}px",
+            f"fuselage: stage {fuselage_stage} dmg {fuselage_damage_taken:0.1f}/{fuselage_damage_total:0.1f}",
             barak_state_line,
             barak_pose_line,
             f"compounds: {compound_states}",

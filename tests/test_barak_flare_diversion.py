@@ -12,6 +12,7 @@ from src.choplifter.mission_projectiles import (
     _barak_homing_target,
     _barak_is_successfully_diverted,
     _barak_roll_diversion,
+    _barak_should_force_detonate_stuck_diversion,
     _barak_should_explode_after_near_miss,
     _barak_target_point,
     _turn_toward_angle,
@@ -303,6 +304,40 @@ class BarakFlareDiversionTests(unittest.TestCase):
         target = 1.2
         new_angle = _turn_toward_angle(current=current, target=target, max_step=0.25)
         self.assertAlmostEqual(new_angle, 0.25, places=5)
+
+    def test_stuck_diversion_timeout_detonates_when_close_for_too_long(self) -> None:
+        missile = SimpleNamespace(division_close_seconds=0.0)
+
+        should = False
+        for _ in range(4):
+            should = _barak_should_force_detonate_stuck_diversion(
+                missile=missile,
+                distance_to_nose=18.0,
+                close_radius=24.0,
+                timeout_s=0.28,
+                dt=0.08,
+            )
+        self.assertTrue(should)
+
+    def test_stuck_diversion_timeout_resets_when_missile_pulls_away(self) -> None:
+        missile = SimpleNamespace(diversion_close_seconds=0.0)
+
+        _barak_should_force_detonate_stuck_diversion(
+            missile=missile,
+            distance_to_nose=18.0,
+            close_radius=24.0,
+            timeout_s=0.28,
+            dt=0.20,
+        )
+        should = _barak_should_force_detonate_stuck_diversion(
+            missile=missile,
+            distance_to_nose=36.0,
+            close_radius=24.0,
+            timeout_s=0.28,
+            dt=0.08,
+        )
+        self.assertFalse(should)
+        self.assertAlmostEqual(float(getattr(missile, "diversion_close_seconds", 0.0)), 0.0, places=6)
 
     def test_default_diversion_success_rate_is_sixty_six_percent(self) -> None:
         self.assertAlmostEqual(MissionTuning().barak_flare_diversion_chance, 0.66, places=6)

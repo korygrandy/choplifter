@@ -38,4 +38,10 @@ def airport_escort_damage_multiplier(mission: object | None) -> float:
     if hostage_state_name != "boarded":
         return 1.0
 
+    first_route = str(getattr(mission, "airport_first_rescue_route", "")).strip().lower()
+    if first_route == "lower":
+        return float(POST_RESPAWN_ESCORT_DAMAGE_MULTIPLIER * 0.92)
+    if first_route == "elevated":
+        return float(POST_RESPAWN_ESCORT_DAMAGE_MULTIPLIER * 1.06)
+
     return float(POST_RESPAWN_ESCORT_DAMAGE_MULTIPLIER)

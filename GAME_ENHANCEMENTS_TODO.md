@@ -4,6 +4,20 @@
 
 
 
+
+## Fuselage Layering Workplan (2026-03-13)
+
+- [x] Remove the fuselage terminal D4 label from the first elevated compound.
+- [x] Render `airplane-backdrop.png` behind the fuselage compound.
+- [ ] Tune backdrop placement offsets to align with compound position during playtest.
+- [x] Reskin fuselage compound to a black square silhouette.
+- [x] Add two-stage fuselage damage sequence rendering:
+  - stage 1 asset: `plan-fuselage-half-damaged.png`
+  - stage 2 asset: `plane-fuselage-totally-amaged.png`
+- [x] Add fuselage damage particle animation hooks for each stage transition.
+- [x] Gate meal-cart passenger boarding until fuselage damage stage 2 is complete.
+- [x] Add/adjust tests for damage-stage progression and boarding gate behavior.
+
 ## Audit Update (2026-03-10)
 
 This file contains legacy planning notes and backlog items. The current implemented airport gameplay is:
@@ -213,6 +227,8 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
   - Applied in gamepad mission confirmation flow through deferred mode-based playback.
 
 ### UX and Messaging
+
+- [ ] Add Airport bus shift feel polish: soft-jerk body animation, short shift smoke plumes, and subtle shift rumble with tuned intensity/duration.
 
 - [x] Consolidate player-critical mission prompts into the top-center objective strip (avoid split messaging with temporary cutscene cue text).
 
@@ -1279,20 +1295,20 @@ Priority additions to preserve 1982 rescue-first essence while improving modern 
 
 ### P0 (Next Up)
 
-- [ ] City Siege objective/event overlay parity pass.
+- [x] City Siege objective/event overlay parity pass.
   - Refactor City Siege overlay flow to match Airport mission command-prompt style center-screen event HUD behavior.
 
-- [ ] Mission/background select messaging bug sweep.
+- [x] Mission/background select messaging bug sweep.
   - Resolve missing UI selection message rendering and remove any stale legacy background/message lookup paths.
 
-- [ ] Tower LZ deboard placement correction.
+- [x] Tower LZ deboard placement correction.
   - Render deboarded passengers near the terminal frontage (left-side building area), not clustered in front of the ATC tower column.
 
-- [ ] Shared vehicle damage framework.
+- [x] Shared vehicle damage framework.
   - Add vehicle damage handling parity for bus, meal truck, raider, and drone entities (helicopter/ground-cannon style health/damage states).
   - Keep bus immune until escort-protection phase starts, then enable mission-appropriate damage intake.
 
-- [ ] BARAK visual damage progression.
+- [x] BARAK visual damage progression.
   - Add damage-state VFX for BARAK vehicle: smoke density scales with damage, plus engine-front fire breakout at or below 70% health.
 
 ### P1 (Classic Flavor + Modern Presentation)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from concurrent.futures import Future, ThreadPoolExecutor
 import os
 from pathlib import Path
 import subprocess
@@ -8,6 +9,60 @@ import tempfile
 from typing import Any
 
 import pygame
+
+
+_VIDEO_IO_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="intro-video-io")
+
+
+def _extract_audio_track_to_temp(video_path: Path) -> Path | None:
+    try:
+        import imageio_ffmpeg  # type: ignore
+
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+    try:
+        tmp = tempfile.NamedTemporaryFile(prefix="choplifter-intro-", suffix=".ogg", delete=False)
+        tmp_path = Path(tmp.name)
+        tmp.close()
+
+        args = [
+            str(ffmpeg_exe),
+            "-y",
+            "-i",
+            str(video_path),
+            "-vn",
+            "-acodec",
+            "libvorbis",
+            "-ar",
+            "44100",
+            "-ac",
+            "2",
+            str(tmp_path),
+        ]
+
+        creationflags = 0
+        if hasattr(subprocess, "CREATE_NO_WINDOW"):
+            creationflags = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+
+        result = subprocess.run(
+            args,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=creationflags,
+            check=False,
+        )
+        if result.returncode != 0 or not tmp_path.exists() or tmp_path.stat().st_size <= 0:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return None
+
+        return tmp_path
+    except Exception:
+        return None
 
 
 @dataclass
@@ -38,6 +93,10 @@ class IntroVideoPlayer:
     _audio_path: Path | None = None
     _audio_started: bool = False
     _audio_failed: bool = False
+    _audio_extract_future: Future[Path | None] | None = None
+    _audio_wait_s: float = 0.0
+    _audio_wait_timeout_s: float = 6.0
+    _loading_font: pygame.font.Font | None = None
     done: bool = False
 
     _last_error: str | None = None
@@ -70,7 +129,10 @@ class IntroVideoPlayer:
             fps = float(meta.get("fps") or 30.0)
             duration_s = float(meta.get("duration") or 0.0)
             it = reader.iter_data()
-            return IntroVideoPlayer(path=path, fps=fps, duration_s=duration_s, _reader=reader, _iter=it)
+            player = IntroVideoPlayer(path=path, fps=fps, duration_s=duration_s, _reader=reader, _iter=it)
+            # Start audio extraction in background to avoid frame hitch on cutscene start.
+            player._audio_extract_future = _VIDEO_IO_EXECUTOR.submit(_extract_audio_track_to_temp, path)
+            return player
         except Exception:
             try:
                 import traceback
@@ -82,6 +144,18 @@ class IntroVideoPlayer:
 
     def close(self, *, immediate: bool = False) -> None:
         self._stop_audio(immediate=immediate)
+        if self._audio_extract_future is not None and self._audio_path is None and self._audio_extract_future.done():
+            try:
+                pending_path = self._audio_extract_future.result()
+            except Exception:
+                pending_path = None
+            if pending_path is not None:
+                try:
+                    pending_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+        self._audio_extract_future = None
+
         if self._audio_path is not None:
             try:
                 self._audio_path.unlink(missing_ok=True)
@@ -93,6 +167,18 @@ class IntroVideoPlayer:
             self._reader.close()
         except Exception:
             pass
+
+    def is_audio_loading(self) -> bool:
+        """Return True while optional cutscene audio is still warming up.
+
+        Playback remains valid while this is True; it only indicates that
+        extracted audio is not yet ready to start.
+        """
+        if self._audio_started or self._audio_failed:
+            return False
+        if self._audio_extract_future is None:
+            return True
+        return not self._audio_extract_future.done()
 
     def _stop_audio(self, *, immediate: bool) -> None:
         try:
@@ -107,13 +193,6 @@ class IntroVideoPlayer:
         if self._audio_started or self._audio_failed:
             return
 
-        # Lazy import so the game still runs without video deps.
-        try:
-            import imageio_ffmpeg  # type: ignore
-        except Exception:
-            self._audio_failed = True
-            return
-
         # Ensure mixer is available.
         try:
             if not pygame.mixer.get_init():
@@ -122,66 +201,78 @@ class IntroVideoPlayer:
             self._audio_failed = True
             return
 
-        # Extract audio to temp OGG (Windows: keep file path, don't rely on delete-on-close semantics).
+        if self._audio_extract_future is None:
+            self._audio_extract_future = _VIDEO_IO_EXECUTOR.submit(_extract_audio_track_to_temp, self.path)
+            return
+        if not self._audio_extract_future.done():
+            return
+
         try:
-            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-            tmp = tempfile.NamedTemporaryFile(prefix="choplifter-intro-", suffix=".ogg", delete=False)
-            tmp_path = Path(tmp.name)
-            tmp.close()
-
-            args = [
-                str(ffmpeg_exe),
-                "-y",
-                "-i",
-                str(self.path),
-                "-vn",
-                "-acodec",
-                "libvorbis",
-                "-ar",
-                "44100",
-                "-ac",
-                "2",
-                str(tmp_path),
-            ]
-
-            creationflags = 0
-            if hasattr(subprocess, "CREATE_NO_WINDOW"):
-                creationflags = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
-
-            r = subprocess.run(
-                args,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=creationflags,
-                check=False,
-            )
-            if r.returncode != 0 or not tmp_path.exists() or tmp_path.stat().st_size <= 0:
-                try:
-                    tmp_path.unlink(missing_ok=True)
-                except Exception:
-                    pass
-                self._audio_failed = True
-                return
-
-            self._audio_path = tmp_path
+            self._audio_path = self._audio_extract_future.result()
         except Exception:
+            self._audio_path = None
+        finally:
+            self._audio_extract_future = None
+
+        if self._audio_path is None:
             self._audio_failed = True
             return
 
         try:
             pygame.mixer.music.load(str(self._audio_path))
             pygame.mixer.music.set_volume(1.0)
-            pygame.mixer.music.play()
+            try:
+                pygame.mixer.music.play(start=max(0.0, float(self._t)))
+            except Exception:
+                pygame.mixer.music.play()
             self._audio_started = True
         except Exception:
             self._audio_failed = True
             return
+
+    def _is_waiting_on_audio(self) -> bool:
+        return (
+            not self._audio_started
+            and not self._audio_failed
+            and self._audio_extract_future is not None
+            and not self._audio_extract_future.done()
+            and self._t <= 0.05
+            and self._audio_wait_s < self._audio_wait_timeout_s
+        )
+
+    def _draw_terminal_loading_prompt(self, screen: pygame.Surface) -> None:
+        if self._loading_font is None:
+            self._loading_font = pygame.font.SysFont("consolas", 28, bold=True)
+
+        text_full = "Loading..."
+        chars_per_second = 11.0
+        typed_count = max(0, min(len(text_full), int(self._audio_wait_s * chars_per_second)))
+        typed = text_full[:typed_count]
+        cursor = "_" if int(self._audio_wait_s * 2.8) % 2 == 0 else " "
+        terminal_text = f"> {typed}{cursor}"
+
+        glow = self._loading_font.render(terminal_text, True, (36, 120, 46))
+        main = self._loading_font.render(terminal_text, True, (74, 248, 102))
+        x = 34
+        y = screen.get_height() - 72
+        screen.blit(glow, (x + 2, y + 2))
+        screen.blit(main, (x, y))
 
     def update(self, dt: float) -> None:
         if self.done:
             return
 
         self._ensure_audio_started()
+
+        # Keep opening audio intact: while extraction/playback is warming up,
+        # hold at t=0 instead of running video ahead and seeking into audio later.
+        waiting_for_audio = self._is_waiting_on_audio()
+        if waiting_for_audio and self._t <= 0.05:
+            self._audio_wait_s += max(0.0, float(dt))
+            if self._audio_wait_s < self._audio_wait_timeout_s:
+                return
+            # Failsafe: stop blocking video playback, but keep trying to start
+            # audio asynchronously as soon as extraction finishes.
 
         self._t += max(0.0, float(dt))
         target_index = int(self._t * max(1e-6, self.fps))
@@ -221,6 +312,8 @@ class IntroVideoPlayer:
     def draw(self, screen: pygame.Surface) -> None:
         screen.fill((0, 0, 0))
         if self._frame is None:
+            if self._is_waiting_on_audio():
+                self._draw_terminal_loading_prompt(screen)
             return
 
         sw, sh = screen.get_size()
@@ -244,3 +337,6 @@ class IntroVideoPlayer:
         x = (sw - dw) // 2
         y = (sh - dh) // 2
         screen.blit(self._scaled, (x, y))
+
+        if self._is_waiting_on_audio():
+            self._draw_terminal_loading_prompt(screen)

@@ -127,7 +127,11 @@ def run_post_fixed_step_phase(
     shake_y = frame_prep.shake_y
 
     render_present_started = time.perf_counter()
-    runtime.vip_kia_overlay_timer, runtime.city_objective_overlay_timer = render_mode_frame_from_runtime(
+    (
+        runtime.vip_kia_overlay_timer,
+        runtime.tech_kia_overlay_timer,
+        runtime.city_objective_overlay_timer,
+    ) = render_mode_frame_from_runtime(
         mode=mode,
         target=target,
         screen=screen,

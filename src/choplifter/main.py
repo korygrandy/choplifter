@@ -4,7 +4,6 @@ from .barak_mrad import BARAK_STATE_DEPLOY
 import pygame
 import time
 
-from .audio_extra import play_satellite_reallocating
 from .helicopter import Facing, update_helicopter
 from .mission import update_mission
 from .mission_helpers import boarded_count
@@ -278,7 +277,8 @@ def run() -> None:
                 logger=logger,
                 mission_id=mission_id,
             ),
-            play_satellite_reallocating_fn=play_satellite_reallocating,
+            play_satellite_reallocating_fn=audio.play_satellite_reallocating,
+            play_airport_ai_mission_brief_fn=audio.play_airport_ai_mission_brief,
         ).mode
 
         frame_inputs = read_frame_input_snapshot(
@@ -318,7 +318,7 @@ def run() -> None:
                 audio=audio,
                 logger=logger,
                 set_toast=set_toast,
-                play_satellite_reallocating=play_satellite_reallocating,
+                play_satellite_reallocating=audio.play_satellite_reallocating,
                 reset_game=reset_game_wrapper,
                 start_mission_intro_or_playing_fn=lambda mission_id: start_mission_intro_or_playing(
                     cutscenes.mission,

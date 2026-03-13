@@ -10,6 +10,13 @@ import pygame
 from .hostage_logic import get_active_airport_terminal_label
 
 
+CITY_MISSION_IDS = ("city", "city_center", "citycenter", "mission1", "m1")
+AIRPORT_MISSION_IDS = ("airport", "airport_special_ops", "airportspecialops", "mission2", "m2")
+
+ELEVATED_FIRST_SENTIMENT_BONUS = 3.0
+LOWER_FIRST_SENTIMENT_BONUS = 2.0
+
+
 # Top-center objective strip typewriter state.
 _TYPEWRITER_TEXT: str = ""
 _TYPEWRITER_TYPED_LEN: int = 0
@@ -23,10 +30,22 @@ class AirportObjectiveState:
 	deadline_failed: bool = False
 	mission_phase: str = "waiting_for_tech_deploy"
 	status_text: str = "Deploy mission tech to meal truck"
+	route_tip_shown: bool = False
 
 
 def create_airport_objective_state(*, hostage_deadline_s: float = 120.0) -> AirportObjectiveState:
 	return AirportObjectiveState(hostage_deadline_s=max(15.0, float(hostage_deadline_s)))
+
+
+def _airport_terminal_display_name(label: str) -> str:
+	label_norm = str(label or "").strip().lower()
+	if label_norm == "fuselage":
+		return "Fuselage Terminal"
+	if label_norm == "jetway":
+		return "Jetway Terminal"
+	if label_norm == "lower":
+		return "Lower Terminal"
+	return "Elevated Terminal"
 
 
 def update_airport_objectives(objective_state, dt: float, *, mission=None, hostage_state=None, bus_state=None, meal_truck_state=None, tech_state=None):
@@ -44,6 +63,7 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 	interrupted_transfers = int(getattr(hostage_state, "interrupted_transfers", 0)) if hostage_state is not None else 0
 	remaining_elevated = sum(max(0, int(v)) for v in (getattr(hostage_state, "terminal_remaining", []) or [])) if hostage_state is not None else 0
 	terminal_label = get_active_airport_terminal_label(hostage_state) if hostage_state is not None else "elevated"
+	terminal_display_name = _airport_terminal_display_name(terminal_label)
     
 	tech_operating = bool(tech_state is not None and getattr(tech_state, "is_deployed", False))
 	tech_on_bus = bool(tech_state is not None and getattr(tech_state, "on_bus", False))
@@ -66,6 +86,27 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 	elevated_rescued = int(getattr(hostage_state, "rescued_hostages", 0)) if hostage_state is not None else 0
 	combined_rescued = lower_rescued + elevated_rescued
 
+	mission_id = str(getattr(mission, "mission_id", "")).strip().lower() if mission is not None else ""
+	is_airport = mission_id in AIRPORT_MISSION_IDS
+	if is_airport and mission is not None:
+		first_route = str(getattr(mission, "airport_first_rescue_route", "")).strip().lower()
+		if first_route not in ("lower", "elevated"):
+			if elevated_rescued > 0 and lower_rescued <= 0:
+				first_route = "elevated"
+			elif lower_rescued > 0 and elevated_rescued <= 0:
+				first_route = "lower"
+			if first_route:
+				setattr(mission, "airport_first_rescue_route", first_route)
+
+		if elevated_rescued > 0 and lower_rescued > 0 and not bool(getattr(mission, "airport_route_bonus_awarded", False)):
+			first_route = str(getattr(mission, "airport_first_rescue_route", "")).strip().lower()
+			bonus = LOWER_FIRST_SENTIMENT_BONUS
+			if first_route == "elevated":
+				bonus = ELEVATED_FIRST_SENTIMENT_BONUS
+			mission.sentiment = min(100.0, float(getattr(mission, "sentiment", 50.0)) + float(bonus))
+			setattr(mission, "airport_route_bonus_awarded", True)
+			setattr(mission, "airport_route_bonus_value", float(bonus))
+
 	if rescued and combined_rescued >= total_target:
 		objective_state.mission_phase = "mission_complete"
 		objective_state.status_text = "All civilians rescued"
@@ -75,10 +116,14 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 	elif rescued and not tech_on_bus:
 		# Elevated rescue flow is complete; continue lower-level rescues after tech rejoins chopper.
 		objective_state.mission_phase = "resume_lower_rescue"
-		objective_state.status_text = "Resume lower-terminal rescues"
+		objective_state.status_text = "Resume Lower Terminal rescues"
 	elif waiting and interrupted_transfers > 0 and not tech_operating and not tech_on_bus:
 		objective_state.mission_phase = "auto_reset"
 		objective_state.status_text = "Bus resetting to standby"
+	elif waiting and remaining_elevated > 0 and lower_rescued <= 0 and not bool(getattr(objective_state, "route_tip_shown", False)):
+		objective_state.mission_phase = "waiting_for_tech_deploy"
+		objective_state.status_text = "Tip: any order works; elevated-first is riskiest (+bonus)"
+		objective_state.route_tip_shown = True
 	elif boarded:
 		objective_state.mission_phase = "escort_to_lz"
 		objective_state.status_text = "Escort bus to tower LZ"
@@ -88,19 +133,19 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 	elif truck_loaded:
 		if remaining_elevated > 0:
 			objective_state.mission_phase = "truck_driving_to_bunker"
-			objective_state.status_text = f"Drive meal truck to {terminal_label} terminal"
+			objective_state.status_text = f"Drive meal truck to {terminal_display_name}"
 		else:
 			objective_state.mission_phase = "truck_driving_to_bus"
 			objective_state.status_text = "Drive meal truck to bus transfer lane"
 	elif truck_loading:
 		objective_state.mission_phase = "extracting_hostages"
-		objective_state.status_text = f"Load civilians onto meal truck at {terminal_label} terminal"
+		objective_state.status_text = f"Load civilians onto meal truck at {terminal_display_name}"
 	elif truck_active and tech_operating:
 		objective_state.mission_phase = "truck_driving_to_bunker"
 		if truck_at_plane_lz and not truck_extended:
-			objective_state.status_text = f"Extend meal-truck lift at {terminal_label} terminal"
+			objective_state.status_text = f"Extend meal-truck lift at {terminal_display_name}"
 		else:
-			objective_state.status_text = f"Drive meal truck to {terminal_label} terminal"
+			objective_state.status_text = f"Drive meal truck to {terminal_display_name}"
 	elif waiting:
 		objective_state.mission_phase = "waiting_for_tech_deploy"
 		objective_state.status_text = "Deploy mission tech to meal truck"
@@ -109,6 +154,57 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 		objective_state.status_text = "Deploy mission tech to meal truck"
 
 	return objective_state
+
+
+def _is_city_siege_mission(mission) -> bool:
+	mission_id = str(getattr(mission, "mission_id", "")).strip().lower()
+	return mission_id in CITY_MISSION_IDS
+
+
+def _city_status_text(mission) -> str:
+	stats = getattr(mission, "stats", None)
+	saved = int(getattr(stats, "saved", 0)) if stats is not None else 0
+	total_target = max(1, int(getattr(mission, "hostages_to_save", 21)))
+
+	vip_hostage = next((h for h in getattr(mission, "hostages", []) if bool(getattr(h, "is_vip", False))), None)
+	vip_state = str(getattr(getattr(vip_hostage, "state", None), "name", "")) if vip_hostage is not None else ""
+
+	if bool(getattr(mission, "ended", False)):
+		if bool(getattr(mission, "mission_success", False)):
+			return "Mission complete"
+		if vip_state == "KIA":
+			return "Mission failed: VIP lost"
+		return "Mission failed"
+
+	if vip_state == "KIA":
+		return "VIP down - extraction failed"
+
+	if vip_hostage is None:
+		return f"Rescue civilians ({saved}/{total_target})"
+
+	vip_secured = vip_state in ("BOARDED", "SAVED")
+	if vip_secured:
+		return f"VIP secured - rescue civilians ({saved}/{total_target})"
+
+	return f"Rescue VIP + civilians ({saved}/{total_target})"
+
+
+def draw_city_objectives(target: pygame.Surface, mission) -> None:
+	"""Draw City Siege top-center command strip using airport objective panel styling."""
+	if mission is None or not _is_city_siege_mission(mission):
+		return
+
+	status_text = _city_status_text(mission)
+	objective_state = type(
+		"CityObjectiveState",
+		(),
+		{
+			"status_text": status_text,
+			"deadline_failed": False,
+			"mission_phase": "city_siege",
+		},
+	)()
+	draw_airport_objectives(target, objective_state, camera_x=0.0, ground_y=0.0, bus_state=None)
 
 
 def draw_airport_objectives(target: pygame.Surface, objective_state, *, camera_x: float, ground_y: float, bus_state=None) -> None:

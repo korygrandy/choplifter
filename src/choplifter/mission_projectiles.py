@@ -19,6 +19,7 @@ from .mission_helpers import (
 from .mission_state import MissionState
 from .settings import HelicopterSettings
 from .app.escort_risk import airport_escort_damage_multiplier
+from .vehicle_damage import apply_vehicle_damage, is_airport_bus_vulnerable
 
 
 def _barak_should_apply_damage(*, grounded: bool, in_lz: bool) -> bool:
@@ -116,6 +117,8 @@ def _barak_bus_target_point(mission: MissionState) -> Vec2 | None:
     bus_state = getattr(mission, "airport_bus_state", None)
     if bus_state is None:
         return None
+    if not is_airport_bus_vulnerable(mission):
+        return None
     if float(getattr(bus_state, "health", 0.0)) <= 0.0:
         return None
     return Vec2(float(getattr(bus_state, "x", 0.0)), float(getattr(bus_state, "y", 0.0)) - 10.0)
@@ -124,6 +127,178 @@ def _barak_bus_target_point(mission: MissionState) -> Vec2 | None:
 def _barak_collision_prefers_bus(*, mission: MissionState, diverted_collision: bool) -> bool:
     # Player expectation: missiles prioritize the helicopter unless the player is actively driving a vehicle.
     return (not diverted_collision) and _barak_player_driving_vehicle(mission) and (_barak_bus_target_point(mission) is not None)
+
+
+def _projectile_hits_airport_spawn_enemy(*, projectile: Projectile, previous: Vec2, enemy: object) -> bool:
+    kind = str(getattr(enemy, "kind", "")).lower()
+    if kind == "raider":
+        center = Vec2(float(getattr(enemy, "x", 0.0)), float(getattr(enemy, "y", 0.0)) - 12.0)
+        radius = 18.0
+    else:
+        center = Vec2(float(getattr(enemy, "x", 0.0)), float(getattr(enemy, "y", 0.0)))
+        radius = 15.0
+    return _hits_circle_or_swept(previous=previous, current=projectile.pos, center=center, radius=radius)
+
+
+def _apply_airport_spawn_enemy_hits(*, mission: MissionState, projectile: Projectile, previous: Vec2) -> bool:
+    if projectile.kind not in (ProjectileKind.BULLET, ProjectileKind.BOMB):
+        return False
+
+    enemy_state = getattr(mission, "airport_enemy_state", None)
+    enemies = getattr(enemy_state, "enemies", None)
+    if not enemies:
+        return False
+
+    for enemy in enemies:
+        if float(getattr(enemy, "health", 1.0)) <= 0.0:
+            continue
+        if not _projectile_hits_airport_spawn_enemy(projectile=projectile, previous=previous, enemy=enemy):
+            continue
+
+        damage = 11.0 if projectile.kind is ProjectileKind.BULLET else 36.0
+        result = apply_vehicle_damage(
+            enemy,
+            damage,
+            default_max_health=float(getattr(enemy, "max_health", 32.0) or 32.0),
+            source="player_projectile",
+        )
+
+        if result.applied_damage > 0.0:
+            sparks = getattr(mission, "impact_sparks", None)
+            if sparks is not None and hasattr(sparks, "emit_hit"):
+                try:
+                    sparks.emit_hit(
+                        Vec2(float(projectile.pos.x), float(projectile.pos.y)),
+                        Vec2(float(projectile.vel.x), float(projectile.vel.y)),
+                        strength=0.72,
+                    )
+                except Exception:
+                    pass
+
+        if result.destroyed_now:
+            mission.stats.enemies_destroyed += 1
+            mission.explosions.emit_explosion(
+                Vec2(float(getattr(enemy, "x", 0.0)), float(getattr(enemy, "y", 0.0)) - 8.0),
+                strength=0.58,
+            )
+
+        projectile.alive = False
+        return True
+
+    return False
+
+
+def _apply_airport_elevated_passenger_hit(*, mission: MissionState, compound: object, projectile: Projectile) -> bool:
+    """Apply collateral passenger KIA when bullets strike elevated airport terminals."""
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    if mission_id not in ("airport", "airport_special_ops"):
+        return False
+    if projectile.kind not in (ProjectileKind.BULLET, ProjectileKind.ENEMY_BULLET):
+        return False
+    if not bool(getattr(compound, "is_open", False)):
+        return False
+
+    hostage_state = getattr(mission, "airport_hostage_state", None)
+    if hostage_state is None:
+        return False
+
+    pickup_xs = list(getattr(hostage_state, "terminal_pickup_xs", ()) or ())
+    remaining = list(getattr(hostage_state, "terminal_remaining", []) or [])
+    if not pickup_xs or not remaining:
+        return False
+
+    compounds = list(getattr(mission, "compounds", []) or [])
+    if not compounds:
+        return False
+    elevated_y = min(float(getattr(c.pos, "y", 0.0)) for c in compounds if getattr(c, "pos", None) is not None)
+    compound_y = float(getattr(getattr(compound, "pos", None), "y", 0.0))
+    if abs(compound_y - elevated_y) > 1.0:
+        return False
+
+    compound_width = float(getattr(compound, "width", 0.0))
+    compound_center_x = float(getattr(getattr(compound, "pos", None), "x", 0.0)) + compound_width * 0.5
+    terminal_index = -1
+    best_d = 1e9
+    for i, tx in enumerate(pickup_xs):
+        d = abs(float(tx) - compound_center_x)
+        if d < best_d:
+            best_d = d
+            terminal_index = i
+
+    if terminal_index < 0:
+        return False
+    if best_d > max(90.0, compound_width * 0.9):
+        return False
+    if terminal_index >= len(remaining):
+        return False
+    if int(remaining[terminal_index]) <= 0:
+        return False
+
+    remaining[terminal_index] = max(0, int(remaining[terminal_index]) - 1)
+    hostage_state.terminal_remaining = remaining
+
+    terminal_kia = list(getattr(hostage_state, "terminal_kia", []) or [])
+    if len(terminal_kia) < len(pickup_xs):
+        terminal_kia.extend([0] * (len(pickup_xs) - len(terminal_kia)))
+    terminal_kia[terminal_index] = max(0, int(terminal_kia[terminal_index]) + 1)
+    hostage_state.terminal_kia = terminal_kia
+
+    if projectile.kind is ProjectileKind.ENEMY_BULLET:
+        mission.stats.kia_by_enemy += 1
+    else:
+        mission.stats.kia_by_player += 1
+
+    audio = getattr(mission, "audio", None)
+    if audio is not None and hasattr(audio, "play_hostage_scream"):
+        try:
+            audio.play_hostage_scream()
+        except Exception:
+            pass
+    return True
+
+
+def _record_airport_elevated_terminal_impact(*, mission: MissionState, compound: object, projectile: Projectile) -> None:
+    """Queue a short-lived elevated-terminal spark burst at the exact projectile impact point."""
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    if mission_id not in ("airport", "airport_special_ops"):
+        return
+    if projectile.kind not in (ProjectileKind.BULLET, ProjectileKind.BOMB):
+        return
+
+    compounds = list(getattr(mission, "compounds", []) or [])
+    if not compounds:
+        return
+    elevated_y = min(float(getattr(c.pos, "y", 0.0)) for c in compounds if getattr(c, "pos", None) is not None)
+    compound_y = float(getattr(getattr(compound, "pos", None), "y", 0.0))
+    if abs(compound_y - elevated_y) > 1.0:
+        return
+
+    now_s = float(getattr(mission, "elapsed_seconds", 0.0))
+    duration_s = 0.20 if projectile.kind is ProjectileKind.BULLET else 0.30
+    events = list(getattr(mission, "airport_terminal_impact_sparks", []) or [])
+    events.append(
+        {
+            "x": float(projectile.pos.x),
+            "y": float(projectile.pos.y),
+            "born_s": now_s,
+            "duration_s": duration_s,
+        }
+    )
+    if len(events) > 32:
+        events = events[-32:]
+    mission.airport_terminal_impact_sparks = events
+
+
+def _is_airport_elevated_terminal_compound(*, mission: MissionState, compound: object) -> bool:
+    mission_id = str(getattr(mission, "mission_id", "")).lower()
+    if mission_id not in ("airport", "airport_special_ops"):
+        return False
+    compounds = list(getattr(mission, "compounds", []) or [])
+    if not compounds:
+        return False
+    elevated_y = min(float(getattr(c.pos, "y", 0.0)) for c in compounds if getattr(c, "pos", None) is not None)
+    compound_y = float(getattr(getattr(compound, "pos", None), "y", 0.0))
+    return abs(compound_y - elevated_y) <= 1.0
 
 
 def _hits_circle_or_swept(*, previous: Vec2, current: Vec2, center: Vec2, radius: float) -> bool:
@@ -342,6 +517,28 @@ def _barak_should_explode_after_near_miss(
     return should_explode
 
 
+def _barak_should_force_detonate_stuck_diversion(
+    *,
+    missile: object,
+    distance_to_nose: float,
+    close_radius: float,
+    timeout_s: float,
+    dt: float,
+) -> bool:
+    """Fail-safe: detonate diverted missiles that linger near the nose too long."""
+    close_radius = max(0.0, float(close_radius))
+    timeout_s = max(0.05, float(timeout_s))
+    dt_s = max(0.0, float(dt))
+
+    close_timer = float(getattr(missile, "diversion_close_seconds", 0.0))
+    if float(distance_to_nose) <= close_radius:
+        close_timer += dt_s
+    else:
+        close_timer = 0.0
+    missile.diversion_close_seconds = close_timer
+    return close_timer >= timeout_s
+
+
 def _update_projectiles(
     mission: MissionState,
     dt: float,
@@ -490,6 +687,23 @@ def _update_projectiles(
                         p.alive = False
                         continue
 
+                    # Fail-safe against rare "nose glue" loops after diversion near ground/LZ edges.
+                    if _barak_should_force_detonate_stuck_diversion(
+                        missile=p,
+                        distance_to_nose=dist_to_nose,
+                        close_radius=max(24.0, arm_radius * 0.9),
+                        timeout_s=0.28,
+                        dt=dt,
+                    ):
+                        mission.explosions.emit_fire_plume(p.pos, strength=0.70)
+                        mission.explosions.emit_explosion(p.pos, strength=0.56)
+                        mission.impact_sparks.emit_hit(p.pos, p.vel, strength=0.95)
+                        mission.burning.add_site(p.pos, intensity=0.22)
+                        if logger is not None:
+                            logger.debug("BARAK_DIVERTED_STUCK_DETONATE: dist=%.1f", dist_to_nose)
+                        p.alive = False
+                        continue
+
         # Enemy collision (player projectiles only).
         if p.kind in (ProjectileKind.BULLET, ProjectileKind.BOMB):
             for e in mission.enemies:
@@ -559,6 +773,9 @@ def _update_projectiles(
         if not p.alive:
             continue
 
+        if _apply_airport_spawn_enemy_hits(mission=mission, projectile=p, previous=prev_pos):
+            continue
+
         # Helicopter collision (enemy projectiles only).
         if p.kind in (ProjectileKind.ENEMY_BULLET, ProjectileKind.ENEMY_ARTILLERY):
             if getattr(p, "is_barak_missile", False):
@@ -619,9 +836,14 @@ def _update_projectiles(
                         if barak_damage_target == "bus":
                             bus_state = getattr(mission, "airport_bus_state", None)
                             if bus_state is not None:
-                                health = float(getattr(bus_state, "health", 100.0))
                                 damage = 18.0 * airport_escort_damage_multiplier(mission)
-                                setattr(bus_state, "health", max(0.0, health - damage))
+                                apply_vehicle_damage(
+                                    bus_state,
+                                    damage,
+                                    default_max_health=float(getattr(bus_state, "max_health", 100.0) or 100.0),
+                                    allow_damage=is_airport_bus_vulnerable(mission),
+                                    source="barak_missile",
+                                )
                         else:
                             damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
                 elif p.kind is ProjectileKind.ENEMY_ARTILLERY:
@@ -693,9 +915,14 @@ def _update_projectiles(
                     if barak_damage_target == "bus":
                         bus_state = getattr(mission, "airport_bus_state", None)
                         if bus_state is not None:
-                            health = float(getattr(bus_state, "health", 100.0))
                             damage = 18.0 * airport_escort_damage_multiplier(mission)
-                            setattr(bus_state, "health", max(0.0, health - damage))
+                            apply_vehicle_damage(
+                                bus_state,
+                                damage,
+                                default_max_health=float(getattr(bus_state, "max_health", 100.0) or 100.0),
+                                allow_damage=is_airport_bus_vulnerable(mission),
+                                source="barak_missile",
+                            )
                     else:
                         damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
             elif p.kind is ProjectileKind.BOMB:
@@ -705,16 +932,42 @@ def _update_projectiles(
 
         # Compound collision (player projectiles only).
         for c in mission.compounds:
-            if c.health <= 0:
+            is_airport_elevated = _is_airport_elevated_terminal_compound(mission=mission, compound=c)
+            if c.health <= 0 and not is_airport_elevated:
                 continue
             if c.contains_point(p.pos):
-                if p.kind is ProjectileKind.BULLET:
-                    c.health -= 12.0
-                elif p.kind is ProjectileKind.BOMB:
-                    c.health -= 40.0
+                did_damage_structure = False
+                is_fuselage = hasattr(mission, "airport_fuselage_compound_id") and getattr(c, "compound_id", None) == getattr(mission, "airport_fuselage_compound_id", None)
+                damage_amt = 0.0
+                if c.health > 0:
+                    if p.kind is ProjectileKind.BULLET:
+                        c.health -= 12.0
+                        damage_amt = 12.0
+                        did_damage_structure = True
+                    elif p.kind is ProjectileKind.BOMB:
+                        c.health -= 40.0
+                        damage_amt = 40.0
+                        did_damage_structure = True
+                    else:
+                        continue
                 else:
-                    continue
-                _log_compound_health_if_needed(c, logger, reason="hit")
+                    if p.kind not in (ProjectileKind.BULLET, ProjectileKind.BOMB):
+                        continue
+                    # If already zero, still count damage for fuselage
+                    if p.kind is ProjectileKind.BULLET:
+                        damage_amt = 12.0
+                    elif p.kind is ProjectileKind.BOMB:
+                        damage_amt = 40.0
+                # Track cumulative fuselage damage
+                if is_fuselage and damage_amt > 0.0:
+                    prev = float(getattr(mission, "airport_fuselage_damage_taken", 0.0))
+                    mission.airport_fuselage_damage_taken = prev + damage_amt
+
+                if is_airport_elevated:
+                    _record_airport_elevated_terminal_impact(mission=mission, compound=c, projectile=p)
+                    _apply_airport_elevated_passenger_hit(mission=mission, compound=c, projectile=p)
+                if did_damage_structure:
+                    _log_compound_health_if_needed(c, logger, reason="hit")
                 p.alive = False
                 break
 
@@ -733,6 +986,13 @@ def _update_projectiles(
                     mission.stats.kia_by_enemy += 1
                 else:
                     mission.stats.kia_by_player += 1
+                # Play random scream SFX (male/female), matching elevated logic
+                audio = getattr(mission, "audio", None)
+                if audio is not None and hasattr(audio, "play_hostage_scream"):
+                    try:
+                        audio.play_hostage_scream()
+                    except Exception:
+                        pass
                 p.alive = False
                 break
 

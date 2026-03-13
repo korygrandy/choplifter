@@ -31,6 +31,8 @@ class BusDoorFlowTests(unittest.TestCase):
         bus = update_bus_ai(bus, 0.05, audio=audio, mission_phase="truck_driving_to_bus", tech_on_bus=False)
         self.assertGreaterEqual(audio.accel_calls, 1)
         self.assertTrue(bus.is_moving)
+        self.assertGreater(float(getattr(bus, "shift_jerk_timer_s", 0.0)), 0.0)
+        self.assertGreater(float(getattr(bus, "shift_smoke_timer_s", 0.0)), 0.0)
 
         bus = update_bus_ai(bus, 0.05, audio=audio, mission_phase="waiting_for_tech_deploy", tech_on_bus=False)
         self.assertGreaterEqual(audio.brake_calls, 1)

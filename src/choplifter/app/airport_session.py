@@ -36,22 +36,29 @@ def create_empty_airport_runtime() -> AirportRuntimeState:
         cutscene_state=None,
         meal_truck_state=None,
         raised_bunker_x=1500.0,
-        meal_truck_spawn_x=1060.0,
+        meal_truck_spawn_x=970.0,
         total_rescue_target=16,
     )
 
 
-def configure_airport_passenger_distribution(*, mission: object, total_passengers: int = 16) -> tuple[list[float], int, float]:
+def configure_airport_passenger_distribution(*, mission: object, total_passengers: int = 16) -> tuple[list[float], int, int, float]:
     """Split airport civilians between lower compounds and elevated terminals."""
     compounds = list(getattr(mission, "compounds", []))
     if not compounds:
         fallback_x = 1500.0
-        return [fallback_x], int(total_passengers), fallback_x
+        total = max(1, int(total_passengers))
+        return [fallback_x], total, 0, fallback_x
 
-    min_y = min(float(c.pos.y) for c in compounds)
-    elevated_indices = [i for i, c in enumerate(compounds) if abs(float(c.pos.y) - min_y) <= 1.0]
-    if not elevated_indices:
-        elevated_indices = [min(range(len(compounds)), key=lambda i: float(compounds[i].pos.y))]
+    # Airport flow assumes two elevated extraction terminals and at least one
+    # lower-compound rescue lane when 3+ compounds are present.
+    sorted_by_height = sorted(
+        range(len(compounds)),
+        key=lambda i: (float(compounds[i].pos.y), float(compounds[i].pos.x)),
+    )
+    if len(compounds) >= 3:
+        elevated_indices = sorted_by_height[:2]
+    else:
+        elevated_indices = sorted_by_height[:1]
 
     elevated_center_xs = sorted(
         float(compounds[i].pos.x) + float(compounds[i].width) * 0.5 for i in elevated_indices
@@ -60,28 +67,38 @@ def configure_airport_passenger_distribution(*, mission: object, total_passenger
 
     lower_indices = [i for i in range(len(compounds)) if i not in elevated_indices]
     total = max(1, int(total_passengers))
+
+    base_assignment = [0] * len(compounds)
+
+    # Airport Special Ops has three active rescue terminals:
+    # two elevated + one lower lane. Guarantee >=1 each when total allows.
+    active_terminal_indices = list(elevated_indices)
     if lower_indices:
-        elevated_total = random.randint(4, max(4, total - 2)) if total >= 6 else max(1, total // 2)
-    else:
-        elevated_total = total
-    lower_total = max(0, total - elevated_total)
+        active_terminal_indices.append(lower_indices[0])
+    active_terminal_indices = sorted(set(active_terminal_indices))
 
-    for c in compounds:
-        c.hostage_count = 0
+    if active_terminal_indices and total >= len(active_terminal_indices):
+        for idx in active_terminal_indices:
+            base_assignment[idx] = 1
+        remaining = total - len(active_terminal_indices)
+        for _ in range(remaining):
+            idx = random.choice(active_terminal_indices)
+            base_assignment[idx] += 1
+    elif active_terminal_indices:
+        # Not enough total passengers to guarantee one per terminal.
+        # Fill terminals left-to-right until we run out.
+        for idx in active_terminal_indices[:total]:
+            base_assignment[idx] += 1
 
-    if lower_indices and lower_total > 0:
-        if len(lower_indices) == 1:
-            compounds[lower_indices[0]].hostage_count = lower_total
-        else:
-            first = random.randint(0, lower_total)
-            second = lower_total - first
-            compounds[lower_indices[0]].hostage_count = first
-            compounds[lower_indices[1]].hostage_count = second
+    # Assign hostage counts
+    for idx, c in enumerate(compounds):
+        c.hostage_count = base_assignment[idx]
 
-    for i in elevated_indices:
-        compounds[i].hostage_count = 0
+    # For return values, sum up elevated and lower
+    elevated_total = sum(compounds[i].hostage_count for i in elevated_indices)
+    lower_total = sum(compounds[i].hostage_count for i in lower_indices)
 
-    return elevated_center_xs, elevated_total, raised_bunker_x
+    return elevated_center_xs, elevated_total, lower_total, raised_bunker_x
 
 
 def initialize_airport_runtime(
@@ -89,10 +106,10 @@ def initialize_airport_runtime(
     mission: object,
     ground_y: float,
     total_rescue_target: int = 16,
-    meal_truck_spawn_x: float = 1060.0,
+    meal_truck_spawn_x: float = 1040.0,
     hostage_deadline_s: float = 120.0,
 ) -> AirportRuntimeState:
-    pickup_points, elevated_total, raised_bunker_x = configure_airport_passenger_distribution(
+    pickup_points, elevated_total, lower_total, raised_bunker_x = configure_airport_passenger_distribution(
         mission=mission,
         total_passengers=total_rescue_target,
     )

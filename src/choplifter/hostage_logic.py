@@ -8,6 +8,8 @@ import random
 
 import pygame
 
+from .airport_fuselage import is_airport_fuselage_boarding_unlocked
+
 
 @dataclass
 class AirportHostageState:
@@ -21,7 +23,9 @@ class AirportHostageState:
 	interrupted_transfers: int = 0
 	pickup_x: float = 1232.0
 	pickup_radius_px: float = 28.0
-	pickup_passed_offset_px: float = 66.0
+	# Terminal pickup points are compound centers; +27 with a 28px radius makes
+	# the right edge of the LZ roughly +55px from center (~10px past a 90px-wide compound).
+	pickup_passed_offset_px: float = 27.0
 	helicopter_bus_radius_px: float = 150.0
 	state: str = "waiting"  # waiting -> truck_loading -> truck_loaded -> transferring_to_bus -> boarded -> rescued
 	boarding_started_s: float = 0.0
@@ -30,6 +34,8 @@ class AirportHostageState:
 	rescue_completed_s: float = 0.0
 	terminal_pickup_xs: tuple[float, ...] = ()
 	terminal_remaining: list[int] | None = None
+	terminal_kia: list[int] | None = None
+	terminal_unlock_beeped: list[bool] | None = None
 	active_terminal_index: int = 0
 	loading_terminal_index: int = -1
 	loading_terminal_initial_count: int = 0
@@ -51,6 +57,9 @@ def _remaining_at_terminal(hostage_state, terminal_index: int) -> int:
 	remaining = getattr(hostage_state, "terminal_remaining", None) or []
 	if terminal_index < 0 or terminal_index >= len(remaining):
 		return 0
+	open_for_boarding = list(getattr(hostage_state, "terminal_open_for_boarding", []) or [])
+	if terminal_index < len(open_for_boarding) and not bool(open_for_boarding[terminal_index]):
+		return 0
 	count = int(remaining[terminal_index])
 	# During active loading, deduct passengers already boarded from that terminal.
 	if (
@@ -62,6 +71,40 @@ def _remaining_at_terminal(hostage_state, terminal_index: int) -> int:
 		loaded_from_terminal = max(0, loaded_total - base_total)
 		count = max(0, count - loaded_from_terminal)
 	return max(0, count)
+
+
+def _compute_terminal_open_for_boarding(mission, pickup_xs: list[float]) -> list[bool]:
+	if not pickup_xs:
+		return []
+	compounds = list(getattr(mission, "compounds", []) or []) if mission is not None else []
+	if not compounds:
+		return [True for _ in pickup_xs]
+
+	open_states: list[bool] = []
+	for px in pickup_xs:
+		best_compound = None
+		best_d = 1e9
+		for c in compounds:
+			pos = getattr(c, "pos", None)
+			if pos is None:
+				continue
+			center_x = float(pos.x) + float(getattr(c, "width", 0.0)) * 0.5
+			d = abs(center_x - float(px))
+			if d < best_d:
+				best_d = d
+				best_compound = c
+
+		if best_compound is None:
+			open_states.append(True)
+			continue
+
+		max_match_distance = max(90.0, float(getattr(best_compound, "width", 0.0)) * 0.9)
+		if best_d <= max_match_distance:
+			open_states.append(bool(getattr(best_compound, "is_open", False)))
+		else:
+			open_states.append(True)
+
+	return open_states
 
 
 def _find_near_terminal_index(hostage_state, truck_x: float, pickup_radius: float, passed_offset: float) -> int:
@@ -102,6 +145,25 @@ def get_active_airport_terminal_label(hostage_state) -> str:
 	return get_airport_terminal_label(hostage_state, int(getattr(hostage_state, "active_terminal_index", 0)))
 
 
+def _is_leftmost_terminal(hostage_state, terminal_index: int) -> bool:
+	pickup_xs = list(getattr(hostage_state, "terminal_pickup_xs", ()) or ())
+	if terminal_index < 0 or terminal_index >= len(pickup_xs):
+		return False
+	if not pickup_xs:
+		return terminal_index == 0
+	leftmost_x = min(float(px) for px in pickup_xs)
+	return abs(float(pickup_xs[terminal_index]) - leftmost_x) <= 0.5
+
+
+def _loading_right_boundary_x(hostage_state, terminal_x: float, terminal_index: int, pickup_radius: float, passed_offset: float) -> float:
+	if _is_leftmost_terminal(hostage_state, terminal_index):
+		# Match the tighter left-elevated cutoff: stop once truck passes
+		# 5px beyond the compound right edge (90px wide footprint).
+		return float(terminal_x) + 45.0 + 5.0
+	lz_center_x = float(terminal_x) + float(passed_offset)
+	return lz_center_x + float(pickup_radius) + 5.0
+
+
 def create_airport_hostage_state(*, total_hostages: int = 16, pickup_x: float = 1500.0, pickup_points: list[float] | None = None) -> AirportHostageState:
 	pickups = [float(x) for x in (pickup_points or []) if x is not None]
 	if not pickups:
@@ -113,6 +175,7 @@ def create_airport_hostage_state(*, total_hostages: int = 16, pickup_x: float = 
 		pickup_x=float(pickups[active_index]),
 		terminal_pickup_xs=tuple(pickups),
 		terminal_remaining=counts,
+		terminal_kia=[0 for _ in pickups],
 		active_terminal_index=int(active_index),
 	)
 
@@ -133,10 +196,41 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 		remaining = [0 for _ in pickup_xs]
 		remaining[0] = int(getattr(hostage_state, "total_hostages", 16))
 	hostage_state.terminal_remaining = remaining
+	terminal_kia = list(getattr(hostage_state, "terminal_kia", []) or [])
+	if len(terminal_kia) != len(pickup_xs):
+		terminal_kia = (terminal_kia + [0 for _ in pickup_xs])[: len(pickup_xs)]
+	hostage_state.terminal_kia = terminal_kia
+	prev_open_for_boarding = list(getattr(hostage_state, "terminal_open_for_boarding", []) or [])
+	hostage_state.terminal_open_for_boarding = _compute_terminal_open_for_boarding(mission, pickup_xs)
+	has_prev_open_snapshot = len(prev_open_for_boarding) == len(pickup_xs)
+
+	unlock_beeped = list(getattr(hostage_state, "terminal_unlock_beeped", []) or [])
+	if len(unlock_beeped) != len(pickup_xs):
+		unlock_beeped = (unlock_beeped + [False for _ in pickup_xs])[: len(pickup_xs)]
+	for i in range(len(pickup_xs)):
+		is_open_now = bool(hostage_state.terminal_open_for_boarding[i])
+		was_open = bool(prev_open_for_boarding[i]) if i < len(prev_open_for_boarding) else False
+		if not is_open_now:
+			unlock_beeped[i] = False
+			continue
+		if not has_prev_open_snapshot:
+			continue
+		if unlock_beeped[i]:
+			continue
+		if was_open:
+			continue
+		if _remaining_at_terminal(hostage_state, i) <= 0:
+			continue
+		if audio is not None and hasattr(audio, "play_bus_door"):
+			audio.play_bus_door()
+		unlock_beeped[i] = True
+	hostage_state.terminal_unlock_beeped = unlock_beeped
 
 	tech_operating = bool(tech_state is not None and getattr(tech_state, "is_deployed", False))
 	tech_on_truck = bool(meal_truck_state is not None and getattr(meal_truck_state, "tech_has_deployed", False))
 	tech_available_for_boarding = tech_operating or tech_on_truck
+	enforce_fuselage_gate = bool(getattr(mission, "enforce_fuselage_boarding_gate", False)) if mission is not None else False
+	boarding_unlocked = is_airport_fuselage_boarding_unlocked(mission) if enforce_fuselage_gate else True
 	truck_extended = bool(
 		meal_truck_state is not None
 		and (
@@ -146,7 +240,13 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 	)
 	truck_retracted = bool(meal_truck_state is not None and float(getattr(meal_truck_state, "extension_progress", 0.0)) <= 0.05)
 	truck_x = float(getattr(meal_truck_state, "x", 0.0)) if meal_truck_state is not None else 0.0
-	pickup_radius = float(getattr(hostage_state, "pickup_radius_px", 28.0))
+	base_pickup_radius = float(getattr(hostage_state, "pickup_radius_px", 28.0))
+	pickup_radius = base_pickup_radius
+	# Make near-terminal detection slightly more forgiving for dual elevated terminals,
+	# but keep boundary cutoffs based on the base radius.
+	pickup_xs = list(getattr(hostage_state, "terminal_pickup_xs", ()) or ())
+	if len(pickup_xs) >= 2:
+		pickup_radius = max(pickup_radius, 48.0)
 	passed_offset = float(getattr(hostage_state, "pickup_passed_offset_px", 66.0))
 	near_terminal_index = _find_near_terminal_index(hostage_state, truck_x, pickup_radius, passed_offset)
 
@@ -182,7 +282,18 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 	# Phase 1: player deploys tech and gets meal truck in place at the damaged plane.
 	if hostage_state.state == "waiting":
 		# Boarding starts only in a tight center LZ when the lift is extended.
-		if tech_available_for_boarding and truck_extended and near_terminal_index >= 0:
+		can_start_loading = False
+		if boarding_unlocked and tech_available_for_boarding and truck_extended and near_terminal_index >= 0:
+			terminal_x = float(pickup_xs[near_terminal_index]) if near_terminal_index < len(pickup_xs) else float(getattr(hostage_state, "pickup_x", 1500.0))
+			right_boundary_x = _loading_right_boundary_x(
+				hostage_state,
+				terminal_x,
+				near_terminal_index,
+				base_pickup_radius,
+				passed_offset,
+			)
+			can_start_loading = float(truck_x) <= float(right_boundary_x)
+		if can_start_loading:
 			hostage_state.loading_terminal_index = int(near_terminal_index)
 			hostage_state.loading_terminal_initial_count = int(_remaining_at_terminal(hostage_state, near_terminal_index))
 			hostage_state.truck_load_base = int(getattr(hostage_state, "meal_truck_loaded_hostages", 0))
@@ -192,10 +303,33 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 				audio.play_bus_door()
 
 	elif hostage_state.state == "truck_loading":
+		# Abort auto-boarding if truck drifts too far right of the terminal LZ.
+		# This prevents unattended loading when the truck leaves the intended pickup zone.
+		loading_index = int(getattr(hostage_state, "loading_terminal_index", -1))
+		if meal_truck_state is not None:
+			terminal_x = float(getattr(hostage_state, "pickup_x", 1500.0))
+			if 0 <= loading_index < len(pickup_xs):
+				terminal_x = float(pickup_xs[loading_index])
+			right_boundary_x = _loading_right_boundary_x(
+				hostage_state,
+				terminal_x,
+				loading_index,
+				base_pickup_radius,
+				passed_offset,
+			)
+			if float(getattr(meal_truck_state, "x", 0.0)) > right_boundary_x:
+				hostage_state.loading_terminal_index = -1
+				hostage_state.loading_terminal_initial_count = 0
+				hostage_state.truck_load_base = int(getattr(hostage_state, "meal_truck_loaded_hostages", 0))
+				hostage_state.state = "truck_loaded" if int(getattr(hostage_state, "meal_truck_loaded_hostages", 0)) > 0 else "waiting"
+				return hostage_state
+
 		# Board passengers one-by-one so elevated compound behavior matches ground compounds.
 		elapsed_since_start = float(getattr(mission, "elapsed_seconds", 0.0)) - float(hostage_state.boarding_started_s)
 		rate = max(0.2, float(getattr(hostage_state, "transfer_rate_s", 0.5)))
-		loading_index = int(getattr(hostage_state, "loading_terminal_index", -1))
+		if _is_leftmost_terminal(hostage_state, loading_index):
+			# Left elevated terminal uses a slightly slower cadence so boarding reads clearly.
+			rate *= 1.35
 		loading_total = int(getattr(hostage_state, "loading_terminal_initial_count", 0))
 		if loading_total <= 0:
 			hostage_state.state = "truck_loaded"
@@ -216,7 +350,18 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 	# tech_operating is NOT required here — passengers stay on truck regardless of box state.
 	elif hostage_state.state == "truck_loaded":
 		hostages_remaining = sum(max(0, int(v)) for v in (getattr(hostage_state, "terminal_remaining", []) or []))
-		if tech_available_for_boarding and truck_extended and near_terminal_index >= 0:
+		can_restart_loading = False
+		if boarding_unlocked and tech_available_for_boarding and truck_extended and near_terminal_index >= 0:
+			terminal_x = float(pickup_xs[near_terminal_index]) if near_terminal_index < len(pickup_xs) else float(getattr(hostage_state, "pickup_x", 1500.0))
+			right_boundary_x = _loading_right_boundary_x(
+				hostage_state,
+				terminal_x,
+				near_terminal_index,
+				base_pickup_radius,
+				passed_offset,
+			)
+			can_restart_loading = float(truck_x) <= float(right_boundary_x)
+		if can_restart_loading:
 			hostage_state.loading_terminal_index = int(near_terminal_index)
 			hostage_state.loading_terminal_initial_count = int(_remaining_at_terminal(hostage_state, near_terminal_index))
 			hostage_state.truck_load_base = int(getattr(hostage_state, "meal_truck_loaded_hostages", 0))
@@ -475,7 +620,7 @@ def _draw_awaiting_passengers(target: pygame.Surface, hostage_state, *, camera_x
 	_draw_stick_figure_passenger(target, active_x, int(pickup_y), loaded_hostages, mission_time)
 
 
-def draw_airport_hostages(target: pygame.Surface, hostage_state, *, camera_x: float, ground_y: float, bus_state=None, meal_truck_state=None, mission_time: float = 0.0) -> None:
+def draw_airport_hostages(target: pygame.Surface, hostage_state, *, camera_x: float, ground_y: float, bus_state=None, meal_truck_state=None, tech_state=None, mission_time: float = 0.0) -> None:
 	"""Draw hostage status indicators for Airport mission.
 	
 	Handles different states including waiting, loading, truck_loaded (with animated position), boarded, and rescued.
@@ -538,11 +683,42 @@ def draw_airport_hostages(target: pygame.Surface, hostage_state, *, camera_x: fl
 		return
 
 	if hostage_state.state == "rescued":
-		# Draw a tiny offload cluster near the bus stop point.
-		base_x = bus_x - 10
-		base_y = int(float(ground_y) - 8)
-		for i in range(min(4, max(1, int(hostage_state.rescued_hostages // 4) + 1))):
-			_draw_stick_figure_passenger(target, base_x + i * 10, base_y, i, mission_time)
+		# Stage rescued civilians around the tower-side terminal like the original game:
+		# some gather at the frontage while others stand on the low roof.
+		visible_count = min(4, max(1, int(hostage_state.rescued_hostages // 4) + 1))
+		roof_count = min(2, max(0, visible_count - 2))
+		if visible_count >= 2:
+			roof_count = max(1, roof_count)
+		frontage_count = max(1, visible_count - roof_count)
+
+		stop_x = float(getattr(bus_state, "stop_x", 500.0))
+		frontage_world_x = stop_x - 78.0
+		tech_state_name = str(getattr(tech_state, "state", "")) if tech_state is not None else ""
+		tech_animation_state = str(getattr(tech_state, "boarding_animation_state", "")) if tech_state is not None else ""
+		if tech_animation_state == "returning":
+			# Avoid overlap with engineer return-boarding walk animation near the pickup ring.
+			frontage_count = 0
+		tech_reboarding_lz = tech_state_name == "waiting_at_lz"
+		if tech_reboarding_lz:
+			reserved_pickup_x = float(getattr(tech_state, "lz_wait_x", stop_x - 80.0))
+			frontage_world_x = reserved_pickup_x - 18.0 - max(0, frontage_count - 1) * 10.0
+		frontage_base_x = int(frontage_world_x - float(camera_x))
+		frontage_base_y = int(float(ground_y) - 8)
+		for i in range(frontage_count):
+			_draw_stick_figure_passenger(target, frontage_base_x + i * 10, frontage_base_y, i, mission_time)
+
+		if roof_count > 0:
+			# Mirror the tower-LZ side building footprint from render/world.py.
+			terminal_world_x = stop_x - 62.0
+			roof_left = int((terminal_world_x - 4.0) - float(camera_x))
+			roof_right = roof_left + 140
+			if roof_count == 1:
+				roof_positions = [roof_left + 70]
+			else:
+				roof_positions = [roof_left + 34, roof_right - 34]
+			roof_feet_y = int(float(ground_y) - 28)
+			for i, roof_x in enumerate(roof_positions):
+				_draw_stick_figure_passenger(target, roof_x, roof_feet_y, frontage_count + i, mission_time)
 		return
 
 	if hostage_state.state == "transferring_to_bus" and meal_truck_state is not None:
