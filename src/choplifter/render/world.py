@@ -100,7 +100,7 @@ _airport_fuselage_half_image_cache: pygame.Surface | None | bool = False
 _airport_fuselage_total_image_cache: pygame.Surface | None | bool = False
 
 FUSELAGE_BACKDROP_OFFSET_X = -190 + 40   # Moved 40px right
-FUSELAGE_BACKDROP_OFFSET_Y = -195 + 35    # Lowered by 35px
+FUSELAGE_BACKDROP_OFFSET_Y = -195 + 35 + 4    # Lowered by 39px (moved down 4 more)
 FUSELAGE_BACKDROP_FADE_WIDTH_PX = 220.0
 
 
@@ -772,8 +772,8 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                 if is_fuselage_terminal and not fuselage_backdrop_drawn:
                     _draw_fuselage_wreck(screen, r, t)
 
-            # Light tan jetway body (fuselage terminal stays transparent).
-            body_color = (212, 198, 172) if not c.is_open else (170, 156, 132)
+            # Jetway body: light tan when closed, darker brown when destroyed/open (matches lower compound deactivated color).
+            body_color = (212, 198, 172) if not c.is_open else (118, 92, 58)
             edge_color = (78, 72, 60)
             roof_color = (194, 184, 164)
             draw_rect = r
@@ -787,6 +787,8 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                     pygame.draw.rect(screen, body_color, draw_rect, border_radius=2)
                     pygame.draw.rect(screen, edge_color, draw_rect, 2, border_radius=2)
                 else:
+                    # Draw solid fill for destroyed/open elevated terminal, matching lower compound
+                    pygame.draw.rect(screen, body_color, draw_rect, border_radius=2)
                     pygame.draw.rect(screen, edge_color, draw_rect, 1, border_radius=2)
 
             if is_fuselage_terminal:

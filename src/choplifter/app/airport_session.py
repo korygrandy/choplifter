@@ -66,37 +66,26 @@ def configure_airport_passenger_distribution(*, mission: object, total_passenger
 
     lower_indices = [i for i in range(len(compounds)) if i not in elevated_indices]
     total = max(1, int(total_passengers))
-    if lower_indices:
-        # Reserve at least one lower-compound rescue when possible so elevated-only
-        # extraction cannot complete the full airport objective.
-        if total <= 1:
-            elevated_total = total
-        else:
-            min_elevated = 1 if total < 6 else 4
-            min_elevated = min(min_elevated, total - 1)
-            max_elevated = total - 1
-            elevated_total = random.randint(min_elevated, max_elevated)
-        lower_total = total - elevated_total
-    else:
-        elevated_total = total
-        lower_total = 0
 
-    for c in compounds:
-        c.hostage_count = 0
+    # Ensure at least 1 passenger per compound if possible
+    min_per_compound = 1 if len(compounds) >= 3 and total >= len(compounds) else 0
+    base_assignment = [min_per_compound] * len(compounds)
+    remaining = total - sum(base_assignment)
 
-    if lower_indices and lower_total > 0:
-        if len(lower_indices) == 1:
-            compounds[lower_indices[0]].hostage_count = lower_total
-        else:
-            first = random.randint(0, lower_total)
-            second = lower_total - first
-            compounds[lower_indices[0]].hostage_count = first
-            compounds[lower_indices[1]].hostage_count = second
+    # Distribute remaining passengers randomly among all compounds
+    for _ in range(remaining):
+        idx = random.randint(0, len(compounds) - 1)
+        base_assignment[idx] += 1
 
-    for i in elevated_indices:
-        compounds[i].hostage_count = 0
+    # Assign hostage counts
+    for idx, c in enumerate(compounds):
+        c.hostage_count = base_assignment[idx]
 
-    return elevated_center_xs, elevated_total, raised_bunker_x
+    # For return values, sum up elevated and lower
+    elevated_total = sum(compounds[i].hostage_count for i in elevated_indices)
+    lower_total = sum(compounds[i].hostage_count for i in lower_indices)
+
+    return elevated_center_xs, elevated_total, lower_total, raised_bunker_x
 
 
 def initialize_airport_runtime(
@@ -107,7 +96,7 @@ def initialize_airport_runtime(
     meal_truck_spawn_x: float = 1040.0,
     hostage_deadline_s: float = 120.0,
 ) -> AirportRuntimeState:
-    pickup_points, elevated_total, raised_bunker_x = configure_airport_passenger_distribution(
+    pickup_points, elevated_total, lower_total, raised_bunker_x = configure_airport_passenger_distribution(
         mission=mission,
         total_passengers=total_rescue_target,
     )

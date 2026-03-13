@@ -26,16 +26,16 @@ class AirportPassengerDistributionTests(unittest.TestCase):
             ]
         )
 
-        pickup_points, elevated_total, _raised_bunker_x = configure_airport_passenger_distribution(
+        pickup_points, elevated_total, lower_total, _raised_bunker_x = configure_airport_passenger_distribution(
             mission=mission,
             total_passengers=16,
         )
 
-        lower_total = sum(int(getattr(c, "hostage_count", 0)) for c in mission.compounds)
+        total = sum(int(getattr(c, "hostage_count", 0)) for c in mission.compounds)
         self.assertEqual(len(pickup_points), 2)
         self.assertGreaterEqual(elevated_total, 1)
         self.assertGreaterEqual(lower_total, 1)
-        self.assertEqual(elevated_total + lower_total, 16)
+        self.assertEqual(total, 16)
 
     def test_same_height_compounds_still_reserve_lower_lane(self) -> None:
         random.seed(11)
@@ -47,16 +47,16 @@ class AirportPassengerDistributionTests(unittest.TestCase):
             ]
         )
 
-        pickup_points, elevated_total, _raised_bunker_x = configure_airport_passenger_distribution(
+        pickup_points, elevated_total, lower_total, _raised_bunker_x = configure_airport_passenger_distribution(
             mission=mission,
             total_passengers=16,
         )
 
-        lower_total = sum(int(getattr(c, "hostage_count", 0)) for c in mission.compounds)
+        total = sum(int(getattr(c, "hostage_count", 0)) for c in mission.compounds)
         self.assertEqual(len(pickup_points), 2)
         self.assertGreaterEqual(elevated_total, 1)
         self.assertGreaterEqual(lower_total, 1)
-        self.assertEqual(elevated_total + lower_total, 16)
+        self.assertEqual(total, 16)
 
 
 if __name__ == "__main__":
