@@ -41,8 +41,13 @@ def update_mission(
 
     _update_fuel(mission, helicopter, dt, logger)
     if helicopter.fuel <= 0.0:
-        end_mission(mission, "THE END", "OUT OF FUEL", logger)
-        return
+        # Prioritize crash resolution over fuel-out if the helicopter is already
+        # in a crash sequence or has taken fatal damage this frame.
+        crash_in_progress = bool(getattr(mission, "crash_active", False))
+        fatal_damage = float(getattr(helicopter, "damage", 0.0)) >= 100.0
+        if not (crash_in_progress or fatal_damage):
+            end_mission(mission, "THE END", "OUT OF FUEL", logger)
+            return
 
     _update_world_particles(mission, helicopter, dt, heli)
 

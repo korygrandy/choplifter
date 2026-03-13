@@ -135,7 +135,12 @@ def _compound_has_awaiting_passengers(mission: MissionState, compound: object) -
     from .particles import draw_wind_dust_clouds
     draw_wind_dust_clouds(screen, mission, camera_x=camera_x)
 
-def draw_mission_end_overlay(screen: pygame.Surface, mission: MissionState) -> None:
+def draw_mission_end_overlay(
+    screen: pygame.Surface,
+    mission: MissionState,
+    *,
+    mission_end_return_seconds: float = 0.0,
+) -> None:
     """Draw THE END/debrief overlay as a top-most layer above world entities and weather."""
     if not (getattr(mission, "ended", False) and getattr(mission, "end_text", "")):
         return
@@ -157,7 +162,16 @@ def draw_mission_end_overlay(screen: pygame.Surface, mission: MissionState) -> N
         route_bonus_awarded=bool(getattr(mission, "airport_route_bonus_awarded", False)),
         route_bonus_value=float(getattr(mission, "airport_route_bonus_value", 0.0)),
         first_route=str(getattr(mission, "airport_first_rescue_route", "")),
+        mission_end_return_seconds=float(mission_end_return_seconds),
     )
+
+
+def _countdown_seconds_label(remaining_seconds: float) -> str:
+    seconds = max(0.0, float(remaining_seconds))
+    if seconds <= 0.0:
+        return ""
+    display = max(1, int(math.ceil(seconds)))
+    return f"Returning to Mission Select in {display}s"
 
 
 def _draw_base(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
@@ -1423,6 +1437,7 @@ def _draw_end(
     route_bonus_awarded: bool = False,
     route_bonus_value: float = 0.0,
     first_route: str = "",
+    mission_end_return_seconds: float = 0.0,
 ) -> None:
     panel = get_volatile_surface(screen.get_width(), screen.get_height(), pygame.SRCALPHA)
     panel.fill((0, 0, 0, 120))
@@ -1458,6 +1473,10 @@ def _draw_end(
             first_route=first_route,
         )
     )
+
+    countdown_line = _countdown_seconds_label(mission_end_return_seconds)
+    if countdown_line:
+        lines.append(countdown_line)
 
     # Keep restart prompt anchored to the bottom so it stays visible while stats scroll.
     prompt = small.render("Press Enter (or Start) to restart", True, (235, 235, 235))

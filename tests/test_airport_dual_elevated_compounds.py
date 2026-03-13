@@ -146,6 +146,54 @@ class AirportDualElevatedCompoundsTests(unittest.TestCase):
         self.assertEqual(out.meal_truck_loaded_hostages, 2)
         self.assertEqual(out.loading_terminal_index, -1)
 
+    def test_left_terminal_right_edge_zone_does_not_retrigger_loading_or_door_sfx(self) -> None:
+        hostage_state = AirportHostageState(
+            total_hostages=6,
+            boarded_hostages=0,
+            rescued_hostages=0,
+            meal_truck_loaded_hostages=0,
+            state="waiting",
+            terminal_pickup_xs=(1200.0, 1500.0),
+            terminal_remaining=[3, 0],
+            pickup_x=1200.0,
+            active_terminal_index=0,
+            pickup_radius_px=28.0,
+            pickup_passed_offset_px=27.0,
+        )
+
+        # This x is still inside near-terminal radius (<= 55 from center)
+        # but beyond the tighter left-terminal loading boundary (> 50).
+        meal_truck_state = SimpleNamespace(
+            x=1252.0,
+            extension_progress=1.0,
+            box_state="extended",
+            tech_has_deployed=True,
+        )
+        bus_state = SimpleNamespace(x=1800.0, stop_x=500.0)
+        helicopter = SimpleNamespace(pos=SimpleNamespace(x=0.0, y=0.0))
+        mission = SimpleNamespace(elapsed_seconds=42.0)
+        tech_state = SimpleNamespace(is_deployed=True)
+
+        audio_calls: list[str] = []
+
+        class _Audio:
+            def play_bus_door(self) -> None:
+                audio_calls.append("bus_door")
+
+        out = update_airport_hostage_logic(
+            hostage_state,
+            0.016,
+            bus_state=bus_state,
+            helicopter=helicopter,
+            mission=mission,
+            meal_truck_state=meal_truck_state,
+            tech_state=tech_state,
+            audio=_Audio(),
+        )
+
+        self.assertEqual(out.state, "waiting")
+        self.assertEqual(audio_calls, [])
+
 
 if __name__ == "__main__":
     unittest.main()

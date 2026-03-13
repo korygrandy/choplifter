@@ -251,6 +251,7 @@ def render_world_branch(
     vip_kia_overlay_timer: float,
     tech_kia_overlay_timer: float,
     city_objective_overlay_timer: float,
+    mission_end_return_seconds: float,
     meal_truck_driver_mode: bool,
     debug_mode: bool,
     mission_choices: object,
@@ -363,7 +364,11 @@ def render_world_branch(
             draw_chopper_select_overlay_fn=draw_chopper_select_overlay_fn,
         )
 
-    draw_mission_end_overlay_fn(target, mission)
+    draw_mission_end_overlay_fn(
+        target,
+        mission,
+        mission_end_return_seconds=float(mission_end_return_seconds),
+    )
     return next_vip_timer, next_tech_kia_timer, next_city_objective_timer
 
 
@@ -435,6 +440,7 @@ def render_mode_frame(
     vip_kia_overlay_timer: float,
     tech_kia_overlay_timer: float,
     city_objective_overlay_timer: float,
+    mission_end_return_seconds: float,
     meal_truck_driver_mode: bool,
     debug_mode: bool,
     mission_choices: object,
@@ -510,6 +516,7 @@ def render_mode_frame(
         vip_kia_overlay_timer=next_vip_timer,
         tech_kia_overlay_timer=next_tech_kia_timer,
         city_objective_overlay_timer=next_city_objective_timer,
+        mission_end_return_seconds=float(mission_end_return_seconds),
         meal_truck_driver_mode=meal_truck_driver_mode,
         debug_mode=debug_mode,
         mission_choices=mission_choices,
@@ -641,6 +648,7 @@ def render_mode_frame_from_runtime(
         vip_kia_overlay_timer=float(getattr(runtime, "vip_kia_overlay_timer", 0.0)),
         tech_kia_overlay_timer=float(getattr(runtime, "tech_kia_overlay_timer", 0.0)),
         city_objective_overlay_timer=float(getattr(runtime, "city_objective_overlay_timer", 0.0)),
+        mission_end_return_seconds=float(getattr(runtime, "mission_end_return_seconds", 0.0)),
         meal_truck_driver_mode=bool(getattr(runtime, "meal_truck_driver_mode", False)),
         debug_mode=bool(getattr(runtime, "debug_mode", False)),
         mission_choices=mission_choices,

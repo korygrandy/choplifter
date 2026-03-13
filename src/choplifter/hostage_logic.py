@@ -114,6 +114,15 @@ def _is_leftmost_terminal(hostage_state, terminal_index: int) -> bool:
 	return abs(float(pickup_xs[terminal_index]) - leftmost_x) <= 0.5
 
 
+def _loading_right_boundary_x(hostage_state, terminal_x: float, terminal_index: int, pickup_radius: float, passed_offset: float) -> float:
+	if _is_leftmost_terminal(hostage_state, terminal_index):
+		# Match the tighter left-elevated cutoff: stop once truck passes
+		# 5px beyond the compound right edge (90px wide footprint).
+		return float(terminal_x) + 45.0 + 5.0
+	lz_center_x = float(terminal_x) + float(passed_offset)
+	return lz_center_x + float(pickup_radius) + 5.0
+
+
 def create_airport_hostage_state(*, total_hostages: int = 16, pickup_x: float = 1500.0, pickup_points: list[float] | None = None) -> AirportHostageState:
 	pickups = [float(x) for x in (pickup_points or []) if x is not None]
 	if not pickups:
@@ -194,7 +203,18 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 	# Phase 1: player deploys tech and gets meal truck in place at the damaged plane.
 	if hostage_state.state == "waiting":
 		# Boarding starts only in a tight center LZ when the lift is extended.
+		can_start_loading = False
 		if tech_available_for_boarding and truck_extended and near_terminal_index >= 0:
+			terminal_x = float(pickup_xs[near_terminal_index]) if near_terminal_index < len(pickup_xs) else float(getattr(hostage_state, "pickup_x", 1500.0))
+			right_boundary_x = _loading_right_boundary_x(
+				hostage_state,
+				terminal_x,
+				near_terminal_index,
+				pickup_radius,
+				passed_offset,
+			)
+			can_start_loading = float(truck_x) <= float(right_boundary_x)
+		if can_start_loading:
 			hostage_state.loading_terminal_index = int(near_terminal_index)
 			hostage_state.loading_terminal_initial_count = int(_remaining_at_terminal(hostage_state, near_terminal_index))
 			hostage_state.truck_load_base = int(getattr(hostage_state, "meal_truck_loaded_hostages", 0))
@@ -211,13 +231,13 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 			terminal_x = float(getattr(hostage_state, "pickup_x", 1500.0))
 			if 0 <= loading_index < len(pickup_xs):
 				terminal_x = float(pickup_xs[loading_index])
-			if _is_leftmost_terminal(hostage_state, loading_index):
-				# Match the tighter left-elevated cutoff: stop once truck passes
-				# 5px beyond the compound right edge (90px wide footprint).
-				right_boundary_x = terminal_x + 45.0 + 5.0
-			else:
-				lz_center_x = terminal_x + float(passed_offset)
-				right_boundary_x = lz_center_x + float(pickup_radius) + 5.0
+			right_boundary_x = _loading_right_boundary_x(
+				hostage_state,
+				terminal_x,
+				loading_index,
+				pickup_radius,
+				passed_offset,
+			)
 			if float(getattr(meal_truck_state, "x", 0.0)) > right_boundary_x:
 				hostage_state.loading_terminal_index = -1
 				hostage_state.loading_terminal_initial_count = 0
@@ -251,7 +271,18 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 	# tech_operating is NOT required here — passengers stay on truck regardless of box state.
 	elif hostage_state.state == "truck_loaded":
 		hostages_remaining = sum(max(0, int(v)) for v in (getattr(hostage_state, "terminal_remaining", []) or []))
+		can_restart_loading = False
 		if tech_available_for_boarding and truck_extended and near_terminal_index >= 0:
+			terminal_x = float(pickup_xs[near_terminal_index]) if near_terminal_index < len(pickup_xs) else float(getattr(hostage_state, "pickup_x", 1500.0))
+			right_boundary_x = _loading_right_boundary_x(
+				hostage_state,
+				terminal_x,
+				near_terminal_index,
+				pickup_radius,
+				passed_offset,
+			)
+			can_restart_loading = float(truck_x) <= float(right_boundary_x)
+		if can_restart_loading:
 			hostage_state.loading_terminal_index = int(near_terminal_index)
 			hostage_state.loading_terminal_initial_count = int(_remaining_at_terminal(hostage_state, near_terminal_index))
 			hostage_state.truck_load_base = int(getattr(hostage_state, "meal_truck_loaded_hostages", 0))
