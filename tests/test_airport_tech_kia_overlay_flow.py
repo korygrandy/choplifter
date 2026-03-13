@@ -11,12 +11,31 @@ pytestmark = pytest.mark.airport_smoke
 
 
 class AirportTechKiaOverlayFlowTests(unittest.TestCase):
-    def test_starts_tech_kia_overlay_once_when_elevated_passengers_remain(self) -> None:
+    def test_starts_tech_kia_overlay_once_when_tech_is_kia(self) -> None:
         mission = SimpleNamespace(
             mission_id="airport",
             hostages=[],
             mission_tech=SimpleNamespace(state="kia"),
-            airport_hostage_state=SimpleNamespace(terminal_remaining=[1, 0]),
+            airport_hostage_state=SimpleNamespace(terminal_remaining=[0, 0]),
+        )
+
+        state = update_vip_overlay_state(
+            mission=mission,
+            vip_kia_overlay_timer=0.0,
+            vip_kia_overlay_shown=False,
+            tech_kia_overlay_timer=0.0,
+            tech_kia_overlay_shown=False,
+        )
+
+        self.assertEqual(state.tech_kia_overlay_timer, 3.0)
+        self.assertTrue(state.tech_kia_overlay_shown)
+
+    def test_starts_tech_kia_overlay_for_airport_alias_mission_ids(self) -> None:
+        mission = SimpleNamespace(
+            mission_id="mission2",
+            hostages=[],
+            mission_tech=SimpleNamespace(state="kia"),
+            airport_hostage_state=SimpleNamespace(terminal_remaining=[0, 0]),
         )
 
         state = update_vip_overlay_state(

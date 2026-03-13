@@ -94,6 +94,9 @@ class IntroVideoPlayer:
     _audio_started: bool = False
     _audio_failed: bool = False
     _audio_extract_future: Future[Path | None] | None = None
+    _audio_wait_s: float = 0.0
+    _audio_wait_timeout_s: float = 3.5
+    _loading_font: pygame.font.Font | None = None
     done: bool = False
 
     _last_error: str | None = None
@@ -227,11 +230,49 @@ class IntroVideoPlayer:
             self._audio_failed = True
             return
 
+    def _is_waiting_on_audio(self) -> bool:
+        return (
+            not self._audio_started
+            and not self._audio_failed
+            and self._audio_extract_future is not None
+            and not self._audio_extract_future.done()
+            and self._t <= 0.05
+            and self._audio_wait_s < self._audio_wait_timeout_s
+        )
+
+    def _draw_terminal_loading_prompt(self, screen: pygame.Surface) -> None:
+        if self._loading_font is None:
+            self._loading_font = pygame.font.SysFont("consolas", 28, bold=True)
+
+        text_full = "Loading..."
+        chars_per_second = 11.0
+        typed_count = max(0, min(len(text_full), int(self._audio_wait_s * chars_per_second)))
+        typed = text_full[:typed_count]
+        cursor = "_" if int(self._audio_wait_s * 2.8) % 2 == 0 else " "
+        terminal_text = f"> {typed}{cursor}"
+
+        glow = self._loading_font.render(terminal_text, True, (36, 120, 46))
+        main = self._loading_font.render(terminal_text, True, (74, 248, 102))
+        x = 34
+        y = screen.get_height() - 72
+        screen.blit(glow, (x + 2, y + 2))
+        screen.blit(main, (x, y))
+
     def update(self, dt: float) -> None:
         if self.done:
             return
 
         self._ensure_audio_started()
+
+        # Keep opening audio intact: while extraction/playback is warming up,
+        # hold at t=0 instead of running video ahead and seeking into audio later.
+        waiting_for_audio = self._is_waiting_on_audio()
+        if waiting_for_audio and self._t <= 0.05:
+            self._audio_wait_s += max(0.0, float(dt))
+            if self._audio_wait_s < self._audio_wait_timeout_s:
+                return
+            # Failsafe: avoid indefinite freeze if extraction stalls.
+            self._audio_failed = True
 
         self._t += max(0.0, float(dt))
         target_index = int(self._t * max(1e-6, self.fps))
@@ -271,6 +312,8 @@ class IntroVideoPlayer:
     def draw(self, screen: pygame.Surface) -> None:
         screen.fill((0, 0, 0))
         if self._frame is None:
+            if self._is_waiting_on_audio():
+                self._draw_terminal_loading_prompt(screen)
             return
 
         sw, sh = screen.get_size()
@@ -294,3 +337,6 @@ class IntroVideoPlayer:
         x = (sw - dw) // 2
         y = (sh - dh) // 2
         screen.blit(self._scaled, (x, y))
+
+        if self._is_waiting_on_audio():
+            self._draw_terminal_loading_prompt(screen)

@@ -8,6 +8,8 @@ import random
 
 import pygame
 
+from .airport_fuselage import is_airport_fuselage_boarding_unlocked
+
 
 @dataclass
 class AirportHostageState:
@@ -158,6 +160,7 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 	tech_operating = bool(tech_state is not None and getattr(tech_state, "is_deployed", False))
 	tech_on_truck = bool(meal_truck_state is not None and getattr(meal_truck_state, "tech_has_deployed", False))
 	tech_available_for_boarding = tech_operating or tech_on_truck
+	boarding_unlocked = is_airport_fuselage_boarding_unlocked(mission)
 	truck_extended = bool(
 		meal_truck_state is not None
 		and (
@@ -204,7 +207,7 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 	if hostage_state.state == "waiting":
 		# Boarding starts only in a tight center LZ when the lift is extended.
 		can_start_loading = False
-		if tech_available_for_boarding and truck_extended and near_terminal_index >= 0:
+		if boarding_unlocked and tech_available_for_boarding and truck_extended and near_terminal_index >= 0:
 			terminal_x = float(pickup_xs[near_terminal_index]) if near_terminal_index < len(pickup_xs) else float(getattr(hostage_state, "pickup_x", 1500.0))
 			right_boundary_x = _loading_right_boundary_x(
 				hostage_state,
@@ -272,7 +275,7 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 	elif hostage_state.state == "truck_loaded":
 		hostages_remaining = sum(max(0, int(v)) for v in (getattr(hostage_state, "terminal_remaining", []) or []))
 		can_restart_loading = False
-		if tech_available_for_boarding and truck_extended and near_terminal_index >= 0:
+		if boarding_unlocked and tech_available_for_boarding and truck_extended and near_terminal_index >= 0:
 			terminal_x = float(pickup_xs[near_terminal_index]) if near_terminal_index < len(pickup_xs) else float(getattr(hostage_state, "pickup_x", 1500.0))
 			right_boundary_x = _loading_right_boundary_x(
 				hostage_state,

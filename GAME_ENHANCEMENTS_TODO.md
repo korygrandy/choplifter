@@ -4,6 +4,20 @@
 
 
 
+
+## Fuselage Layering Workplan (2026-03-13)
+
+- [x] Remove the fuselage terminal D4 label from the first elevated compound.
+- [x] Render `airplane-backdrop.png` behind the fuselage compound.
+- [ ] Tune backdrop placement offsets to align with compound position during playtest.
+- [x] Reskin fuselage compound to a black square silhouette.
+- [x] Add two-stage fuselage damage sequence rendering:
+  - stage 1 asset: `plan-fuselage-half-damaged.png`
+  - stage 2 asset: `plane-fuselage-totally-amaged.png`
+- [x] Add fuselage damage particle animation hooks for each stage transition.
+- [x] Gate meal-cart passenger boarding until fuselage damage stage 2 is complete.
+- [x] Add/adjust tests for damage-stage progression and boarding gate behavior.
+
 ## Audit Update (2026-03-10)
 
 This file contains legacy planning notes and backlog items. The current implemented airport gameplay is:

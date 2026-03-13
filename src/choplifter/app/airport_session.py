@@ -36,7 +36,7 @@ def create_empty_airport_runtime() -> AirportRuntimeState:
         cutscene_state=None,
         meal_truck_state=None,
         raised_bunker_x=1500.0,
-        meal_truck_spawn_x=1060.0,
+        meal_truck_spawn_x=970.0,
         total_rescue_target=16,
     )
 
@@ -104,7 +104,7 @@ def initialize_airport_runtime(
     mission: object,
     ground_y: float,
     total_rescue_target: int = 16,
-    meal_truck_spawn_x: float = 1060.0,
+    meal_truck_spawn_x: float = 1040.0,
     hostage_deadline_s: float = 120.0,
 ) -> AirportRuntimeState:
     pickup_points, elevated_total, raised_bunker_x = configure_airport_passenger_distribution(
