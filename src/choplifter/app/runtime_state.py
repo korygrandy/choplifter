@@ -28,6 +28,7 @@ class GameRuntimeState:
     hud_disabled_timer: float = 0.0
     prev_loop_mode: str = "intro"
     city_satellite_sfx_pending: bool = False
+    airport_ai_mission_brief_pending: bool = False
     vip_kia_overlay_timer: float = 0.0
     vip_kia_overlay_shown: bool = False
     tech_kia_overlay_timer: float = 0.0

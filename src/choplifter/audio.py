@@ -294,6 +294,7 @@ class AudioBank:
     bus_door: pygame.mixer.Sound | None
     hang_on_yall: pygame.mixer.Sound | None
     carjacked_mealtruck: pygame.mixer.Sound | None
+    airport_ai_mission_brief: pygame.mixer.Sound | None
     barak_explosion: pygame.mixer.Sound | None
 
     def play_barak_mrad_deploy(self) -> None:
@@ -569,6 +570,9 @@ class AudioBank:
             carjacked_mealtruck = _try_load_asset_sound(asset_dir / "carjacked-mealtruck.ogg")
             if carjacked_mealtruck is not None:
                 carjacked_mealtruck.set_volume(0.62)
+            airport_ai_mission_brief = _try_load_asset_sound(asset_dir / "airport-ai-mission-brief.ogg")
+            if airport_ai_mission_brief is not None:
+                airport_ai_mission_brief.set_volume(0.64)
             barak_explosion = (
                 _try_load_asset_sound(asset_dir / "barak-explosion.ogg")
                 or _try_load_asset_sound(asset_dir / "barrak-explosion.ogg")
@@ -606,6 +610,7 @@ class AudioBank:
                 bus_door=bus_door,
                 hang_on_yall=hang_on_yall,
                 carjacked_mealtruck=carjacked_mealtruck,
+                airport_ai_mission_brief=airport_ai_mission_brief,
                 barak_explosion=barak_explosion,
             )
         except Exception as e:
@@ -641,6 +646,7 @@ class AudioBank:
                 bus_door=None,
                 hang_on_yall=None,
                 carjacked_mealtruck=None,
+                airport_ai_mission_brief=None,
                 barak_explosion=None,
             )
             r2 = _sine_pcm16(freq_hz=988.0, duration_s=0.10, volume=0.22, sample_rate=sample_rate)
@@ -914,6 +920,9 @@ class AudioBank:
 
     def play_carjacked_mealtruck(self) -> None:
         self._play(self.carjacked_mealtruck, bus="sfx")
+
+    def play_airport_ai_mission_brief(self) -> None:
+        self._play(self.airport_ai_mission_brief, bus="sfx")
 
     def play_barak_explosion(self) -> None:
         self._play(self.barak_explosion, bus="sfx")

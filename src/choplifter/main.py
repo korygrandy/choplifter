@@ -279,6 +279,7 @@ def run() -> None:
                 mission_id=mission_id,
             ),
             play_satellite_reallocating_fn=play_satellite_reallocating,
+            play_airport_ai_mission_brief_fn=audio.play_airport_ai_mission_brief,
         ).mode
 
         frame_inputs = read_frame_input_snapshot(
