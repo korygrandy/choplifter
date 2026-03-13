@@ -95,7 +95,7 @@ class IntroVideoPlayer:
     _audio_failed: bool = False
     _audio_extract_future: Future[Path | None] | None = None
     _audio_wait_s: float = 0.0
-    _audio_wait_timeout_s: float = 3.5
+    _audio_wait_timeout_s: float = 6.0
     _loading_font: pygame.font.Font | None = None
     done: bool = False
 
@@ -271,8 +271,8 @@ class IntroVideoPlayer:
             self._audio_wait_s += max(0.0, float(dt))
             if self._audio_wait_s < self._audio_wait_timeout_s:
                 return
-            # Failsafe: avoid indefinite freeze if extraction stalls.
-            self._audio_failed = True
+            # Failsafe: stop blocking video playback, but keep trying to start
+            # audio asynchronously as soon as extraction finishes.
 
         self._t += max(0.0, float(dt))
         target_index = int(self._t * max(1e-6, self.fps))

@@ -4,6 +4,20 @@ from dataclasses import dataclass
 from typing import Callable
 
 
+CITY_STYLE_BRIEF_MISSION_IDS = (
+    "city",
+    "city_center",
+    "citycenter",
+    "mission1",
+    "m1",
+    "worship",
+    "worship_center",
+    "worshipcenter",
+    "mission3",
+    "m3",
+)
+
+
 @dataclass
 class LoopModeAdjustmentResult:
     mode: str
@@ -27,7 +41,7 @@ def apply_post_input_mode_adjustments(
         next_mode = start_mission_intro_or_playing_fn(selected_mission_id)
 
     # Defer city satellite SFX until gameplay begins.
-    if runtime.prev_loop_mode == "select_chopper" and next_mode in ("cutscene", "playing") and selected_mission_id == "city":
+    if runtime.prev_loop_mode == "select_chopper" and next_mode in ("cutscene", "playing") and selected_mission_id in CITY_STYLE_BRIEF_MISSION_IDS:
         runtime.city_satellite_sfx_pending = True
 
     # Defer airport mission brief VO until gameplay begins (after cutscene/skip).
