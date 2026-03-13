@@ -1,6 +1,22 @@
 # LLM Handoff (Current Engineering State)
 
-Last updated: 2026-03-12 (session 3)
+Last updated: 2026-03-12 (session 5)
+
+**Session 5 Changes:**
+- P1 render-performance backlog closure: temp-surface reuse and off-screen draw culling are now complete.
+  - Files: `src/choplifter/render/world.py`, `src/choplifter/render/helicopter.py`, `src/choplifter/render/hud.py`, `src/choplifter/render/overlays.py`, `src/choplifter/debug_overlay.py`, `src/choplifter/render/particles.py`
+  - Status: import smoke pass; volatile surface reuse fixed to clear cached alpha surfaces before redraw to prevent persistence artifacts.
+- World render cleanup: cached world fonts added for repeated placard/LZ/end-screen text.
+  - Files: `src/choplifter/render/world.py`
+  - Status: no gameplay behavior change; removes repeated `pygame.font.SysFont(...)` creation in hot paths.
+
+**Session 4 Changes:**
+- Vehicle boundary enforcement: meal truck + bus clamped to viewport (matching helicopter), with AI exception allowing bus 200px overage for sequence completion.
+  - Files: `src/choplifter/app/airport_tick.py` (new `_apply_vehicle_boundary_clamps` helper), `tests/test_vehicle_boundary_clamps.py`
+  - Status: 5 unit tests + airport smoke pass.
+- Chopper warning beep recovery fix: beeps now stop when health recovers above 70% threshold (e.g., after supply drop pickup).
+  - Files: `src/choplifter/app/game_update.py`, `tests/test_chopper_warning_beep_recovery.py`
+  - Status: 2 unit tests + audio suite pass.
 
 This file is the canonical engineering handoff for future AI/dev sessions.
 
@@ -75,7 +91,7 @@ Main contributors:
 - `src/choplifter/assets/intro.mpg` (very large)
 - `src/choplifter/assets/hostage-rescue-cutscene.mpg`
 - bundled `imageio-ffmpeg` executable (about `83.58 MB`)
-- large WAV assets
+- audio assets are now primarily compressed OGG
 
 Current script behavior (`scripts/build_windows_exe.ps1`):
 - Stages runtime assets into `pyinstaller-build/asset-staging` using explicit extension allow-list.
@@ -87,7 +103,7 @@ Current script behavior (`scripts/build_windows_exe.ps1`):
 
 1. Optimize PNG/JPG assets losslessly and re-measure package outputs.
 2. Add optional "lite media" packaging mode if distribution size needs major further reduction.
-3. Convert heavy WAV effects to OGG where acceptable.
+3. Re-measure package outputs after the OGG SFX migration and decide whether further audio compression changes are still worth pursuing.
 4. Keep the explicit asset-manifest staging approach and update docs when include rules change.
 
 ## Recent Changes (Session 3 — 2026-03-12)
@@ -317,7 +333,7 @@ All items below were implemented and validated with import smoke, `tests/test_pa
     - Reused debug panel surfaces by dimensions via a small bounded cache.
   - `src/choplifter/render/overlays.py`
     - Added shared scratch surface cache and replaced repeated dim/panel/confirm allocations.
-- **Note:** this is the first slice of the temp-surface backlog item; HUD and particle render paths are still pending.
+- **Note:** later sessions extended this work into HUD/world render paths and closed the backlog item.
 
 ### P1 perf: temporary surface reuse (HUD extension)
 
@@ -338,6 +354,27 @@ All items below were implemented and validated with import smoke, `tests/test_pa
   - Added cache for fire-plume polygons by `(width, height)`.
 - **Behavior note:** per-particle alpha is still applied at draw time, preserving fade/decay behavior while reducing allocations.
 - **Validation:** import smoke, focused pause-audio regression, and airport smoke suite all pass.
+
+### P1 perf: temporary surface reuse (closure)
+
+- **Change:** completed the temp-surface reuse backlog item in remaining hot render paths and fixed the reuse safety issue that initially caused persistence artifacts.
+- **Modules:**
+  - `src/choplifter/render/world.py`
+    - Added bounded volatile-surface cache for smoke/ring/panel/missile/launcher helper surfaces.
+    - Added cached world fonts for repeated placard/LZ/end-screen text.
+    - Cleared reused volatile surfaces before each draw to prevent stale alpha content from persisting across pans.
+  - `src/choplifter/render/helicopter.py`
+    - Added cached closed-door panel surfaces keyed by dimensions.
+- **Validation:** import smoke pass after volatile-surface clear fix; no remaining smoke-layer persistence after panning.
+
+### P1 perf: off-screen draw culling (closure)
+
+- **Change:** completed the draw-culling backlog item for high-frequency world render paths.
+- **Modules:**
+  - `src/choplifter/render/world.py`
+    - Added `_is_on_screen(...)` helper.
+    - Culls hostages, projectiles, enemies, compounds, and airport tower rendering when outside camera view plus padding.
+- **Goal/result:** reduce unnecessary transform/composite work in dense scenes without visible edge pop-in.
 
 ### Manual visual sanity checklist (P0 weather/perf)
 

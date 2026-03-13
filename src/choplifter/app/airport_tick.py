@@ -19,6 +19,34 @@ from ..enemy_spawns import update_airport_enemy_spawns
 from ..objective_manager import update_airport_objectives
 from ..cutscene_manager import update_airport_cutscene_state
 from ..mission_ending import _end_mission
+from ..math2d import clamp
+
+
+def _apply_vehicle_boundary_clamps(
+    *,
+    meal_truck_state: Any | None,
+    bus_state: Any | None,
+    world_width: float,
+    bus_driver_mode: bool,
+) -> None:
+    """
+    Keep vehicles within world boundaries.
+    
+    Meal truck: always clamped to [0, world_width].
+    Bus: clamped to [0, world_width] if player is driving.
+         If AI-controlled, allow slight overage (world_width + 200px) to complete sequences.
+    """
+    if meal_truck_state is not None:
+        meal_truck_state.x = clamp(float(meal_truck_state.x), 0.0, world_width)
+    
+    if bus_state is not None:
+        if bus_driver_mode:
+            # Player driving: strict boundary
+            bus_state.x = clamp(float(bus_state.x), 0.0, world_width)
+        else:
+            # AI-controlled: allow slight overage for sequence completion
+            ai_max_overage = world_width + 200.0
+            bus_state.x = clamp(float(bus_state.x), 0.0, ai_max_overage)
 
 
 @dataclass
@@ -156,6 +184,15 @@ def update_airport_mission_tick(
         hostage_state,
         bus_state,
         set_toast,
+    )
+    
+    # Enforce vehicle boundaries (same as helicopter: 0 to world_width).
+    # Allow AI-controlled bus to slightly exceed bounds to complete sequences.
+    _apply_vehicle_boundary_clamps(
+        meal_truck_state=meal_truck_state,
+        bus_state=bus_state,
+        world_width=float(getattr(mission, "world_width", 2800.0)),
+        bus_driver_mode=bus_driver_mode,
     )
 
     # --- Enemy spawns ---

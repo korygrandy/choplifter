@@ -2,7 +2,7 @@ from pathlib import Path
 import pygame
 
 def play_satellite_reallocating():
-    """Play the satellite-reallocating.wav SFX immediately if available."""
+    """Play the satellite-reallocating.ogg SFX immediately if available."""
     try:
         module_dir = Path(__file__).resolve().parent
         asset_dir = module_dir / "assets"

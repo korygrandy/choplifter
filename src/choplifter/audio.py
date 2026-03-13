@@ -237,8 +237,8 @@ class AudioBank:
             import os
             module_dir = Path(__file__).resolve().parent
             asset_dir = module_dir / "assets"
-            male = _try_load_asset_sound(asset_dir / "male-scream.wav")
-            female = _try_load_asset_sound(asset_dir / "female-scream.wav")
+            male = _try_load_asset_sound(asset_dir / "male-scream.ogg")
+            female = _try_load_asset_sound(asset_dir / "female-scream.ogg")
             self._hostage_scream_sounds = [s for s in (male, female) if s is not None]
         if not self._hostage_scream_sounds:
             return
@@ -469,8 +469,8 @@ class AudioBank:
 
             explosion = explosion_big
 
-            mine_explosion = _try_load_asset_sound(asset_dir / "mine-explosion.wav")
-            flare_defense = _try_load_asset_sound(asset_dir / "flare-defense.wav")
+            mine_explosion = _try_load_asset_sound(asset_dir / "mine-explosion.ogg")
+            flare_defense = _try_load_asset_sound(asset_dir / "flare-defense.ogg")
 
             door_o = _sine_pcm16(freq_hz=392.0, duration_s=0.06, volume=0.22, sample_rate=sample_rate)
             door_c = _sine_pcm16(freq_hz=294.0, duration_s=0.06, volume=0.22, sample_rate=sample_rate)
@@ -488,30 +488,30 @@ class AudioBank:
             crash_a = _sine_pcm16(freq_hz=48.0, duration_s=0.40, volume=0.42, sample_rate=sample_rate, fade_out_s=0.25)
             crash = pygame.mixer.Sound(buffer=crash_a)
 
-            artillery_shot = _try_load_asset_sound(asset_dir / "artillery-shot.wav")
-            artillery_impact_a = _try_load_asset_sound(asset_dir / "artillery-impact.wav")
-            artillery_impact_b = _try_load_asset_sound(asset_dir / "alternate-artillery-impact.wav")
+            artillery_shot = _try_load_asset_sound(asset_dir / "artillery-shot.ogg")
+            artillery_impact_a = _try_load_asset_sound(asset_dir / "artillery-impact.ogg")
+            artillery_impact_b = _try_load_asset_sound(asset_dir / "alternate-artillery-impact.ogg")
             jet_flyby = _try_load_asset_sound(asset_dir / "fighter-jet-flyby.ogg")
 
-            menu_select = _try_load_asset_sound(asset_dir / "menu-select.wav")
-            pause = _try_load_asset_sound(asset_dir / "pause.wav")
-            midair_collision = _try_load_asset_sound(asset_dir / "midair-collission.wav")
-            chopper_warning_beeps = _try_load_asset_sound(asset_dir / "chopper-warning-beeps.wav")
+            menu_select = _try_load_asset_sound(asset_dir / "menu-select.ogg")
+            pause = _try_load_asset_sound(asset_dir / "pause.ogg")
+            midair_collision = _try_load_asset_sound(asset_dir / "midair-collission.ogg")
+            chopper_warning_beeps = _try_load_asset_sound(asset_dir / "chopper-warning-beeps.ogg")
 
-            explosion_big = _try_load_asset_sound(asset_dir / "explosion_big.wav") or explosion_big
-            explosion_small = _try_load_asset_sound(asset_dir / "explosion_small.wav") or explosion_small
+            explosion_big = _try_load_asset_sound(asset_dir / "explosion_big.ogg") or explosion_big
+            explosion_small = _try_load_asset_sound(asset_dir / "explosion_small.ogg") or explosion_small
             shoot = (
-                _try_load_asset_sound(asset_dir / "gunfire.wav")
-                or _try_load_asset_sound(asset_dir / "shoot.wav")
+                _try_load_asset_sound(asset_dir / "gunfire.ogg")
+                or _try_load_asset_sound(asset_dir / "shoot.ogg")
                 or shoot
             )
-            bomb = _try_load_asset_sound(asset_dir / "bomb.wav") or bomb
-            rescue = _try_load_asset_sound(asset_dir / "rescue.wav") or rescue
-            crash = _try_load_asset_sound(asset_dir / "crash.wav") or crash
-            chopper_crash = _try_load_asset_sound(asset_dir / "chopper-crash.wav")
-            doors_open = _try_load_asset_sound(asset_dir / "doors_open.wav") or doors_open
-            doors_close = _try_load_asset_sound(asset_dir / "doors_close.wav") or doors_close
-            board = _try_load_asset_sound(asset_dir / "board.wav") or board
+            bomb = _try_load_asset_sound(asset_dir / "bomb.ogg") or bomb
+            rescue = _try_load_asset_sound(asset_dir / "rescue.ogg") or rescue
+            crash = _try_load_asset_sound(asset_dir / "crash.ogg") or crash
+            chopper_crash = _try_load_asset_sound(asset_dir / "chopper-crash.ogg")
+            doors_open = _try_load_asset_sound(asset_dir / "doors_open.ogg") or doors_open
+            doors_close = _try_load_asset_sound(asset_dir / "doors_close.ogg") or doors_close
+            board = _try_load_asset_sound(asset_dir / "board.ogg") or board
             flying_loop = _try_load_asset_sound(asset_dir / "chopper-flying.ogg")
 
             shoot.set_volume(0.35)
@@ -545,19 +545,11 @@ class AudioBank:
             if pause is not None:
                 pause.set_volume(0.55)
 
-            # Prefer the current OGG asset, but keep legacy WAV fallbacks for older checkouts.
-            barak_mrad_deploy = (
-                _try_load_asset_sound(asset_dir / "barak-deploying.ogg")
-                or _try_load_asset_sound(asset_dir / "barak-depoying.wav")
-                or _try_load_asset_sound(asset_dir / "barak-deploying.wav")
-            )
+            barak_mrad_deploy = _try_load_asset_sound(asset_dir / "barak-deploying.ogg")
             if barak_mrad_deploy is not None:
                 barak_mrad_deploy.set_volume(0.66)
 
-            barak_mrad_launch = (
-                _try_load_asset_sound(asset_dir / "barak-launched.ogg")
-                or _try_load_asset_sound(asset_dir / "barak-launched.wav")
-            )
+            barak_mrad_launch = _try_load_asset_sound(asset_dir / "barak-launched.ogg")
             if barak_mrad_launch is not None:
                 barak_mrad_launch.set_volume(0.58)
 
@@ -657,32 +649,32 @@ class AudioBank:
             crash_a = _sine_pcm16(freq_hz=48.0, duration_s=0.40, volume=0.42, sample_rate=sample_rate, fade_out_s=0.25)
             crash = pygame.mixer.Sound(buffer=crash_a)
 
-            artillery_shot = _try_load_asset_sound(asset_dir / "artillery-shot.wav")
-            artillery_impact_a = _try_load_asset_sound(asset_dir / "artillery-impact.wav")
-            artillery_impact_b = _try_load_asset_sound(asset_dir / "alternate-artillery-impact.wav")
+            artillery_shot = _try_load_asset_sound(asset_dir / "artillery-shot.ogg")
+            artillery_impact_a = _try_load_asset_sound(asset_dir / "artillery-impact.ogg")
+            artillery_impact_b = _try_load_asset_sound(asset_dir / "alternate-artillery-impact.ogg")
             jet_flyby = _try_load_asset_sound(asset_dir / "fighter-jet-flyby.ogg")
 
-            menu_select = _try_load_asset_sound(asset_dir / "menu-select.wav")
-            pause = _try_load_asset_sound(asset_dir / "pause.wav")
-            midair_collision = _try_load_asset_sound(asset_dir / "midair-collission.wav")
-            chopper_warning_beeps = _try_load_asset_sound(asset_dir / "chopper-warning-beeps.wav")
+            menu_select = _try_load_asset_sound(asset_dir / "menu-select.ogg")
+            pause = _try_load_asset_sound(asset_dir / "pause.ogg")
+            midair_collision = _try_load_asset_sound(asset_dir / "midair-collission.ogg")
+            chopper_warning_beeps = _try_load_asset_sound(asset_dir / "chopper-warning-beeps.ogg")
 
             # Override placeholders with external files if provided.
             # (These are optional: game stays playable without them.)
-            explosion_big = _try_load_asset_sound(asset_dir / "explosion_big.wav") or explosion_big
-            explosion_small = _try_load_asset_sound(asset_dir / "explosion_small.wav") or explosion_small
+            explosion_big = _try_load_asset_sound(asset_dir / "explosion_big.ogg") or explosion_big
+            explosion_small = _try_load_asset_sound(asset_dir / "explosion_small.ogg") or explosion_small
             shoot = (
-                _try_load_asset_sound(asset_dir / "gunfire.wav")
-                or _try_load_asset_sound(asset_dir / "shoot.wav")
+                _try_load_asset_sound(asset_dir / "gunfire.ogg")
+                or _try_load_asset_sound(asset_dir / "shoot.ogg")
                 or shoot
             )
-            bomb = _try_load_asset_sound(asset_dir / "bomb.wav") or bomb
-            rescue = _try_load_asset_sound(asset_dir / "rescue.wav") or rescue
-            crash = _try_load_asset_sound(asset_dir / "crash.wav") or crash
-            chopper_crash = _try_load_asset_sound(asset_dir / "chopper-crash.wav")
-            doors_open = _try_load_asset_sound(asset_dir / "doors_open.wav") or doors_open
-            doors_close = _try_load_asset_sound(asset_dir / "doors_close.wav") or doors_close
-            board = _try_load_asset_sound(asset_dir / "board.wav") or board
+            bomb = _try_load_asset_sound(asset_dir / "bomb.ogg") or bomb
+            rescue = _try_load_asset_sound(asset_dir / "rescue.ogg") or rescue
+            crash = _try_load_asset_sound(asset_dir / "crash.ogg") or crash
+            chopper_crash = _try_load_asset_sound(asset_dir / "chopper-crash.ogg")
+            doors_open = _try_load_asset_sound(asset_dir / "doors_open.ogg") or doors_open
+            doors_close = _try_load_asset_sound(asset_dir / "doors_close.ogg") or doors_close
+            board = _try_load_asset_sound(asset_dir / "board.ogg") or board
             flying_loop = _try_load_asset_sound(asset_dir / "chopper-flying.ogg")
 
             # Keep levels conservative.

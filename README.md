@@ -130,8 +130,9 @@ Outputs:
 Current packaging behavior:
 
 - Assets are staged through an explicit runtime manifest at `pyinstaller-build/asset-staging` before PyInstaller runs.
-- Included extensions: `.png`, `.jpg`, `.jpeg`, `.wav`, `.ogg`, `.avi`, `.mpg`, `.json`.
+- Included extensions: `.png`, `.jpg`, `.jpeg`, `.ogg`, `.avi`, `.mpg`, `.json`.
 - Non-runtime source assets (for example `.xcf`) are excluded from staged output.
+- Staging validation is enforced: if any `.xcf` file appears in staged assets, `scripts/build_windows_exe.ps1` fails the build immediately (applies to both `-Mode onedir` and `-Mode onefile`).
 - Legacy `.mpg` files are excluded when same-path `.avi` variants exist.
 
 ## Build Size Notes
@@ -147,7 +148,7 @@ Largest contributors are typically:
 - `src/choplifter/assets/intro.mpg`
 - `src/choplifter/assets/hostage-rescue-cutscene.mpg`
 - Bundled `imageio-ffmpeg` binary
-- Uncompressed WAV files
+- Compressed OGG sound effects
 
 See `docs/WINDOWS_EXE_BUILD.md` for optimization guidance.
 

@@ -31,10 +31,11 @@ The build script now stages assets through an explicit runtime manifest before i
 
 - Source: `src/choplifter/assets`
 - Staging folder: `pyinstaller-build/asset-staging`
-- Included extensions: `.png`, `.jpg`, `.jpeg`, `.wav`, `.ogg`, `.avi`, `.mpg`, `.json`
+- Included extensions: `.png`, `.jpg`, `.jpeg`, `.ogg`, `.avi`, `.mpg`, `.json`
 
 Additional staging rule:
 - If both `.avi` and `.mpg` exist for the same relative media path, the legacy `.mpg` variant is excluded.
+- If any `.xcf` file is detected in staged assets, the build fails fast (guardrail for both onefile and onedir modes).
 
 This prevents non-runtime source files (for example `.xcf`) from being bundled into distributable EXEs.
 
@@ -69,13 +70,13 @@ Largest contributors typically include:
 - `src/choplifter/assets/intro.mpg`
 - `src/choplifter/assets/hostage-rescue-cutscene.mpg`
 - bundled `imageio-ffmpeg` executable/runtime (about `83.58 MB`)
-- large WAV files
+- compressed OGG sound assets
 
 ## Size Reduction Plan
 
 1. Keep explicit runtime asset staging (already implemented) and monitor staged payload deltas after content changes.
 2. Add optional "lite media" build profile (skip video runtime/deps, use cutscene fallback) if distribution size must drop further.
-3. Convert heavy WAV assets to compressed OGG where acceptable.
+3. Continue monitoring audio payload size after the OGG migration and re-measure package outputs.
 4. Optimize PNG/JPG assets losslessly for small incremental reductions.
 
 ## Troubleshooting

@@ -61,19 +61,21 @@ $assetIncludeExtensions = @(
     '.png',
     '.jpg',
     '.jpeg',
-    '.wav',
     '.ogg',
     '.avi',
     '.mpg',
     '.json'
 )
 
+$allAssetFiles = Get-ChildItem -Path $assetsSrc -Recurse -File
+$xcfSourceAssets = $allAssetFiles | Where-Object { $_.Extension.ToLowerInvariant() -eq '.xcf' }
+
 if (Test-Path $stagedAssets) {
     Remove-Item -Recurse -Force $stagedAssets
 }
 New-Item -ItemType Directory -Path $stagedAssets | Out-Null
 
-$includedAssets = Get-ChildItem -Path $assetsSrc -Recurse -File |
+$includedAssets = $allAssetFiles |
     Where-Object { $assetIncludeExtensions -contains $_.Extension.ToLowerInvariant() }
 
 # Prefer modern .avi cutscenes over legacy .mpg files when both exist.
@@ -105,7 +107,16 @@ foreach ($asset in $includedAssets) {
     Copy-Item -LiteralPath $asset.FullName -Destination $targetPath -Force
 }
 
-Write-Host ("ASSET_STAGING: included={0} | from={1}" -f $includedAssets.Count, $assetsSrc)
+$stagedXcfAssets = @()
+if (Test-Path $stagedAssets) {
+    $stagedXcfAssets = Get-ChildItem -Path $stagedAssets -Recurse -File -Filter '*.xcf'
+}
+if ($stagedXcfAssets.Count -gt 0) {
+    $badPaths = ($stagedXcfAssets | ForEach-Object { $_.FullName.Substring($stagedAssets.Length).TrimStart('\', '/') }) -join ', '
+    throw "Build staging validation failed: .xcf files must not be packaged, but found: $badPaths"
+}
+
+Write-Host ("ASSET_STAGING: included={0} | excluded_xcf={1} | from={2}" -f $includedAssets.Count, $xcfSourceAssets.Count, $assetsSrc)
 
 $addData = @(
     '--add-data', "$stagedAssets;src\\choplifter\\assets"

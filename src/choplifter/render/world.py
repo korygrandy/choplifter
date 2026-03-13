@@ -11,6 +11,60 @@ def get_enemy_image(name):
         _enemy_image_cache[name] = pygame.image.load(path).convert_alpha()
     return _enemy_image_cache[name]
 
+# Volatile surface cache: surfaces are reused across frames and redrawn each time.
+# Keys are (width, height, flags) tuples. Surfaces are created once and resized as needed.
+_volatile_surface_cache = {}
+
+# Font and text caches for world rendering
+_WORLD_FONT_CACHE: dict[tuple[str, int, bool], pygame.font.Font] = {}
+_WORLD_TEXT_CACHE: dict[tuple[str, tuple[int, int, int], str], pygame.Surface] = {}
+
+def get_world_font(name: str, size: int, bold: bool = False) -> pygame.font.Font:
+    """Get a cached font for world rendering."""
+    key = (name, size, bold)
+    if key not in _WORLD_FONT_CACHE:
+        _WORLD_FONT_CACHE[key] = pygame.font.SysFont(name, size, bold=bold)
+    return _WORLD_FONT_CACHE[key]
+
+def get_world_text(text: str, font_size: int, color: tuple[int, int, int]) -> pygame.Surface:
+    """Get a cached rendered text surface."""
+    key = (text, color, str(font_size))
+    if key not in _WORLD_TEXT_CACHE:
+        font = get_world_font("consolas", font_size, bold=True)
+        _WORLD_TEXT_CACHE[key] = font.render(text, True, color)
+    return _WORLD_TEXT_CACHE[key]
+
+def get_volatile_surface(width: int, height: int, flags: int = 0) -> pygame.Surface:
+    """Get a cached volatile surface, creating or resizing as needed.
+    
+    Volatile surfaces are transient: they are redrawn each frame and safe to reuse
+    across multiple callers. The content is NOT preserved between frames.
+    
+    Args:
+        width, height: Required dimensions
+        flags: pygame surface flags (e.g., pygame.SRCALPHA). Default 0 = opaque surface.
+    
+    Returns:
+        A pygame.Surface with the requested dimensions, cleared to transparent/black.
+    """
+    key = (width, height, flags)
+    if key not in _volatile_surface_cache:
+        _volatile_surface_cache[key] = pygame.Surface((width, height), flags)
+    else:
+        surf = _volatile_surface_cache[key]
+        if surf.get_size() != (width, height):
+            # Resize if dimensions changed
+            _volatile_surface_cache[key] = pygame.Surface((width, height), flags)
+    
+    # Clear the surface before returning (critical for safe reuse across callers)
+    surf = _volatile_surface_cache[key]
+    if flags & pygame.SRCALPHA:
+        surf.fill((0, 0, 0, 0))  # Transparent for alpha surfaces
+    else:
+        surf.fill((0, 0, 0))  # Black for opaque surfaces
+    
+    return surf
+
 import math
 from typing import TYPE_CHECKING
 import pygame
@@ -47,6 +101,22 @@ def draw_mission(screen: pygame.Surface, mission: MissionState, *, camera_x: flo
         draw_dust_storm_particles(screen, mission, camera_x=camera_x)
     _draw_projectiles(screen, mission, camera_x=camera_x)
     _draw_supply_drops(screen, mission, camera_x=camera_x)
+
+
+def _is_on_screen(world_x: float, camera_x: float, screen_width: int, margin: int = 200) -> bool:
+    """Quick culling check: is a world position visible within camera view + margin?
+    
+    Args:
+        world_x: Entity's world x coordinate
+        camera_x: Camera's world x position
+        screen_width: Screen width in pixels
+        margin: Buffer around screen edges (pixels) for partially visible objects
+        
+    Returns:
+        True if entity is within visible range (camera view + margin buffer)
+    """
+    screen_x = world_x - camera_x
+    return -margin <= screen_x <= screen_width + margin
 
     # Draw wind-blown dust clouds if present
     from .particles import draw_wind_dust_clouds
@@ -172,7 +242,7 @@ def _draw_base(screen: pygame.Surface, mission: MissionState, *, camera_x: float
     )
     pygame.draw.rect(screen, placard_border, placard, 1, border_radius=2)
     font_size = max(8, min(13, int(placard_h * 0.8)))
-    placard_font = pygame.font.SysFont("consolas", font_size, bold=True)
+    placard_font = get_world_font("consolas", font_size, bold=True)
     placard_text = placard_font.render("US POST OFFICE", True, (232, 236, 244))
     text_x = placard.centerx - placard_text.get_width() // 2
     text_y = placard.centery - placard_text.get_height() // 2
@@ -212,7 +282,7 @@ def _draw_base(screen: pygame.Surface, mission: MissionState, *, camera_x: float
     pygame.draw.rect(screen, (56, 62, 72), apron_mark, 1, border_radius=2)
     inner = apron_mark.inflate(-10, -4)
     pygame.draw.rect(screen, (40, 66, 118), inner, border_radius=1)
-    lz_font = pygame.font.SysFont("consolas", 9, bold=True)
+    lz_font = get_world_font("consolas", 9, bold=True)
     lz_text = lz_font.render("LZ", True, (238, 220, 132))
     screen.blit(lz_text, (inner.centerx - lz_text.get_width() // 2, inner.centery - lz_text.get_height() // 2))
 
@@ -244,7 +314,7 @@ def _draw_base(screen: pygame.Surface, mission: MissionState, *, camera_x: float
     for y in range(bay.y + 3, bay.bottom, 3):
         pygame.draw.line(screen, (104, 110, 124), (bay.x + 2, y), (bay.right - 2, y), 1)
 
-    tiny_font = pygame.font.SysFont("consolas", max(8, int(font_size * 0.75)), bold=True)
+    tiny_font = get_world_font("consolas", max(8, int(font_size * 0.75)), bold=True)
     lore_text = tiny_font.render("MAIL SORTING EQUIP", True, (196, 146, 92))
     lore_x = entry.centerx - lore_text.get_width() // 2
     lore_y = max(r.y + 4, entry.y - lore_text.get_height() - 5)
@@ -356,6 +426,10 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
     for c in mission.compounds:
         r = pygame.Rect(int(c.pos.x - camera_x), int(c.pos.y), int(c.width), int(c.height))
 
+        # Cull compounds far outside visible range (they're large, use larger margin)
+        if not _is_on_screen(float(c.pos.x), camera_x, screen.get_width(), margin=200):
+            continue
+
         if is_airport_special:
             compound_center_x = float(c.pos.x) + float(c.width) * 0.5
             terminal_index = _terminal_index_for_compound(compound_center_x, float(c.width))
@@ -377,7 +451,7 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
 
             # Elevated jetway set piece: smoke plume behind roof + intense side flames.
             if is_elevated_terminal:
-                smoke_layer = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
+                smoke_layer = get_volatile_surface(screen.get_width(), screen.get_height(), pygame.SRCALPHA)
                 plume_x = r.x + int(r.width * 0.72)
                 plume_base_y = r.y + 4
                 for i in range(7):
@@ -666,6 +740,10 @@ def _draw_airport_lz_tower(screen: pygame.Surface, mission: MissionState, *, cam
 
     t = float(getattr(mission, "elapsed_seconds", 0.0))
     x = int(tower_world_x - camera_x)
+    # Cull tower if far outside visible range
+    if not _is_on_screen(float(tower_world_x), camera_x, screen.get_width(), margin=250):
+        return
+    
 
     # Tower footing and apron pad.
     apron = pygame.Rect(x - 56, ground_y - 7, 112, 7)
@@ -775,8 +853,14 @@ def _draw_airport_lz_tower(screen: pygame.Surface, mission: MissionState, *, cam
 def _draw_hostages(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
     vip_positions: list[tuple[int, int]] = []
     mission_time = float(getattr(mission, "elapsed_seconds", 0.0))
+    screen_width = screen.get_width()
+    
     for i, h in enumerate(mission.hostages):
         if h.state in (HostageState.IDLE, HostageState.BOARDED):
+            continue
+
+        # Cull hostages far outside visible range (keep reasonable margin for context)
+        if not _is_on_screen(h.pos.x, camera_x, screen_width, margin=300):
             continue
 
         x = int(h.pos.x - camera_x)
@@ -818,7 +902,7 @@ def _draw_vip_crown(screen: pygame.Surface, x: int, y: int, *, mission_time: flo
     alpha = int(127.5 * (math.sin(mission_time * 5.2) + 1.0))
     alpha = max(36, min(255, alpha))
 
-    crown = pygame.Surface((20, 14), pygame.SRCALPHA)
+    crown = get_volatile_surface(20, 14, pygame.SRCALPHA)
     points = [(2, 12), (5, 5), (9, 9), (12, 3), (15, 9), (18, 5), (18, 12)]
     pygame.draw.polygon(crown, (255, 220, 70, alpha), points)
     pygame.draw.polygon(crown, (255, 245, 185, min(255, alpha + 20)), points, 1)
@@ -945,7 +1029,7 @@ def _draw_engineer_wrench_indicator(screen: pygame.Surface, mission: MissionStat
 	wrench_y = engineer_y - 14
 	
 	# Draw wrench on a surface for proper centering (similar to VIP crown)
-	wrench_surf = pygame.Surface((16, 14), pygame.SRCALPHA)
+	wrench_surf = get_volatile_surface(16, 14, pygame.SRCALPHA)
 	wx, wy = 8, 7  # Center of surface
 	
 	# Draw wrench symbol using simple shapes centered on surface
@@ -961,9 +1045,16 @@ def _draw_engineer_wrench_indicator(screen: pygame.Surface, mission: MissionStat
 
 
 def _draw_projectiles(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
+    screen_width = screen.get_width()
+    
     for p in mission.projectiles:
         if not bool(getattr(p, "alive", False)):
             continue
+        
+        # Cull projectiles outside visible range
+        if not _is_on_screen(p.pos.x, camera_x, screen_width, margin=100):
+            continue
+            
         x = int(p.pos.x - camera_x)
         y = int(p.pos.y)
         # Barak MRAD missile: draw as a large missile with flame and smoke, rotated by current_angle
@@ -972,7 +1063,7 @@ def _draw_projectiles(screen: pygame.Surface, mission: MissionState, *, camera_x
             missile_w = 6
             surf_w = 32
             surf_h = 48
-            missile_surf = pygame.Surface((surf_w, surf_h), pygame.SRCALPHA)
+            missile_surf = get_volatile_surface(surf_w, surf_h, pygame.SRCALPHA)
             cx, cy = surf_w // 2, surf_h // 2
             # Draw missile body (white)
             body_rect = pygame.Rect(cx - missile_w // 2, cy - missile_len, missile_w, missile_len)
@@ -1022,8 +1113,13 @@ def _draw_projectiles(screen: pygame.Surface, mission: MissionState, *, camera_x
 def _draw_enemies(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
     ground_y = mission.base.pos.y + mission.base.height
     t = float(getattr(mission, "elapsed_seconds", 0.0))
+    screen_width = screen.get_width()
 
     for e in mission.enemies:
+        # Cull enemies outside visible range + margin
+        if not _is_on_screen(e.pos.x, camera_x, screen_width, margin=150):
+            continue
+            
         if e.kind is EnemyKind.TANK:
             # Load and draw karrar.png sprite
             img = get_enemy_image('karrar.png')
@@ -1079,7 +1175,7 @@ def _draw_enemies(screen: pygame.Surface, mission: MissionState, *, camera_x: fl
                 # Main launcher rectangle (rotates)
                 rect = pygame.Rect(0, 0, launcher_len, launcher_w)
                 rect.center = (base_x + (launcher_len/2) * math.cos(-angle)/2, base_y - (launcher_len/2) * math.sin(-angle)/2)
-                launcher_surf = pygame.Surface((launcher_len, launcher_w), pygame.SRCALPHA)
+                launcher_surf = get_volatile_surface(launcher_len, launcher_w, pygame.SRCALPHA)
                 army_green = (80, 81, 63)        # #50513f html color code
                 dark_green = (60, 90, 30)        # outline
                 pygame.draw.rect(launcher_surf, army_green, (0, 0, launcher_len, launcher_w))
@@ -1127,7 +1223,7 @@ def _draw_air_mine(screen: pygame.Surface, x: int, y: int, t: float) -> None:
     ring_alpha = int(70 + pulse * 120)
     ring_size = ring_radius * 2 + 8
 
-    ring = pygame.Surface((ring_size, ring_size), pygame.SRCALPHA)
+    ring = get_volatile_surface(ring_size, ring_size, pygame.SRCALPHA)
     cx = ring_size // 2
     cy = ring_size // 2
     pygame.draw.circle(ring, (240, 240, 240, ring_alpha), (cx, cy), ring_radius, 2)
@@ -1201,7 +1297,7 @@ def _draw_supply_drops(screen: pygame.Surface, mission: MissionState, *, camera_
 
         pulse = 0.55 + 0.45 * math.sin((t * 6.0) + float(getattr(d, "age_s", 0.0)) * 4.0 + ring_phase_offset)
         ring_r = int(10 + pulse * 3)
-        ring = pygame.Surface((ring_r * 2 + 4, ring_r * 2 + 4), pygame.SRCALPHA)
+        ring = get_volatile_surface(ring_r * 2 + 4, ring_r * 2 + 4, pygame.SRCALPHA)
         pygame.draw.circle(ring, (accent[0], accent[1], accent[2], ring_alpha), (ring.get_width() // 2, ring.get_height() // 2), ring_r, 1)
         screen.blit(ring, (x - ring.get_width() // 2, y - ring.get_height() // 2))
 
@@ -1250,17 +1346,16 @@ def _draw_end(
     crashes: int,
     sentiment: float,
 ) -> None:
-    panel = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
+    panel = get_volatile_surface(screen.get_width(), screen.get_height(), pygame.SRCALPHA)
     panel.fill((0, 0, 0, 120))
     screen.blit(panel, (0, 0))
 
-    pygame.font.init()
-    font = pygame.font.SysFont("consolas", 72, bold=True)
+    font = get_world_font("consolas", 72, bold=True)
     surf = font.render(text, True, (255, 255, 255))
     rect = surf.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2))
     screen.blit(surf, rect)
 
-    small = pygame.font.SysFont("consolas", 22)
+    small = get_world_font("consolas", 22)
     band = sentiment_band_label(sentiment)
     lines = [
         f"Result: {reason}",

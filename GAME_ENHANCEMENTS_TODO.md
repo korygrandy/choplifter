@@ -59,9 +59,9 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 - P0 perf work completed: duplicate rain/fog/dust/lightning simulation was removed from render-prep path so weather sim runs once per frame.
 - P0 perf work completed: frame-phase timing instrumentation + debug perf counters were added (main-loop EMA + debug overlay display).
 - P1 perf work completed: transformed sprite caching was added for helicopter rotate/flip variants and meal-truck facing flips to reduce per-frame transform overhead.
-- P1 perf work in progress: initial temporary-surface reuse was added in `render/overlays.py`, `debug_overlay.py`, and helicopter damage-flash rendering to cut per-frame allocations in hot UI/render paths.
-- P1 perf work in progress: temporary-surface reuse was extended into `render/hud.py` (CRT/toast/crown paths) to further reduce per-frame HUD allocations.
-- P1 perf work in progress: temporary-surface reuse was extended into `render/particles.py` (rain/fog/wind-dust/fire-plume sprite caches) to reduce particle-path allocations.
+- P1 perf work completed: temporary-surface reuse was extended across `render/overlays.py`, `render/hud.py`, `debug_overlay.py`, `render/helicopter.py`, and `render/world.py`, including volatile-surface clearing to prevent alpha/smoke persistence artifacts.
+- P1 perf work completed: draw culling was added in `render/world.py` for hostages, projectiles, enemies, compounds, and the airport tower to skip off-screen composition work.
+- P1 perf work completed: world-render font caching was added for repeated placard/LZ/end-screen text to avoid per-frame `SysFont(...)` recreation.
 
 ### Gameplay Validation (Highest Priority)
 
@@ -113,7 +113,7 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
     - Significant reduction in per-frame `pygame.transform.rotate/flip` calls.
     - No visual drift/artifact across facing and roll transitions.
 
-- [ ] `P1` Reduce per-frame temporary surface allocations in hot render paths.
+- [x] `P1` Reduce per-frame temporary surface allocations in hot render paths.
   - Scope:
     - Reuse alpha panels/overlays where dimensions are stable.
     - Replace repeated `pygame.Surface(...)` construction with cached buffers.
@@ -122,11 +122,15 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
     - `src/choplifter/render/overlays.py`
     - `src/choplifter/render/particles.py`
     - `src/choplifter/debug_overlay.py`
+    - `src/choplifter/render/helicopter.py`
+    - `src/choplifter/render/world.py`
   - Done criteria:
     - Fewer transient allocations in profile snapshots.
     - No UI layering or alpha-blend regressions.
+  - Status:
+    - Completed with bounded scratch/overlay caches, reusable volatile surfaces in world rendering, cached helicopter door panels, and a follow-up fix to clear reused volatile surfaces before draw.
 
-- [ ] `P1` Add draw culling for off-screen entities/effects before expensive composition.
+- [x] `P1` Add draw culling for off-screen entities/effects before expensive composition.
   - Scope:
     - Introduce shared viewport visibility helper.
     - Skip transform/composite work when object bounds are outside camera view + padding.
@@ -136,6 +140,8 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
   - Done criteria:
     - Reduced draw-call count in dense scenes.
     - No pop-in for fast-moving entities at screen edges.
+  - Status:
+    - Completed in `src/choplifter/render/world.py` via shared `_is_on_screen(...)` culling for hostages, projectiles, enemies, compounds, and the airport tower; no additional `frame_render.py` culling was required for closure.
 
 - [ ] `P2` Add adaptive particle quality budget tied to frame time.
   - Scope:
@@ -799,7 +805,7 @@ This is the active backlog after the latest mission/main refactor and packaging 
 
 - [ ] Evaluate a "lite media" build mode that skips video dependencies for smaller distribution builds. (deferred/skipped for now)
 
-- [ ] Convert largest WAV effects to compressed audio where quality remains acceptable. (deferred/skipped for now; `.ogg` assets already integrated and playing)
+- [x] Convert largest SFX set to compressed OGG audio. (`.ogg` assets are integrated and runtime loading has been updated.)
 
 ### High Priority Gameplay Requests (Post-Merge)
 
@@ -837,7 +843,7 @@ This is the active backlog after the latest mission/main refactor and packaging 
 - Largest media payloads in `src/choplifter/assets`:
   - `intro.mpg`.
   - `hostage-rescue-cutscene.mpg`.
-  - `chopper-flying.wav` about `9.92 MB`
+  - `chopper-flying.ogg` remains one of the larger individual SFX assets after migration.
 
 - Packaging/runtime contributors in onedir:
   - bundled ffmpeg from `imageio-ffmpeg` about `83.58 MB` (inside `_internal`)
@@ -863,10 +869,9 @@ This is the active backlog after the latest mission/main refactor and packaging 
     - Use existing fallback intro/title-card behavior when video is unavailable.
   - Expected win: roughly `-100 MB` more (ffmpeg + numpy + related hooks), plus skipped video assets.
 
-- [ ] Compress/convert WAV SFX to OGG. (deferred/skipped for now)
-  - Convert largest SFX (`chopper-flying.wav`, `fighter-jet-flyby.wav`, etc.) to `.ogg`.
-  - Update asset loading in `src/choplifter/audio.py` and `src/choplifter/audio_extra.py` to prefer `.ogg`.
-  - Expected win: usually `-10 MB` to `-25 MB` depending quality settings.
+- [x] Compress/convert WAV SFX to OGG.
+  - Largest SFX were migrated to `.ogg` and runtime loading was updated in `src/choplifter/audio.py`, `src/choplifter/audio_extra.py`, and `src/choplifter/intro_video.py`.
+  - Follow-up: re-measure onefile/onedir outputs to capture the actual size delta from the audio migration.
 
 - [x] Stop shipping non-runtime source assets.
   - Exclude files such as `chopper-one.xcf` from packaged output.
