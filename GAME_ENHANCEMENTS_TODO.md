@@ -1273,6 +1273,47 @@ This is the active backlog after the latest mission/main refactor and packaging 
   - [x] Add balancing guardrails so one event cannot dominate outcome unfairly.
   - [x] Add tests for score computation and persistence.
 
+## Classic Choplifter Fidelity Audit (2026-03-12)
+
+Priority additions to preserve 1982 rescue-first essence while improving modern presentation.
+
+### P0 (Next Up)
+
+- [ ] City Siege objective/event overlay parity pass.
+  - Refactor City Siege overlay flow to match Airport mission command-prompt style center-screen event HUD behavior.
+
+- [ ] Mission/background select messaging bug sweep.
+  - Resolve missing UI selection message rendering and remove any stale legacy background/message lookup paths.
+
+- [ ] Tower LZ deboard placement correction.
+  - Render deboarded passengers near the terminal frontage (left-side building area), not clustered in front of the ATC tower column.
+
+- [ ] Shared vehicle damage framework.
+  - Add vehicle damage handling parity for bus, meal truck, raider, and drone entities (helicopter/ground-cannon style health/damage states).
+  - Keep bus immune until escort-protection phase starts, then enable mission-appropriate damage intake.
+
+- [ ] BARAK visual damage progression.
+  - Add damage-state VFX for BARAK vehicle: smoke density scales with damage, plus engine-front fire breakout at or below 70% health.
+
+### P1 (Classic Flavor + Modern Presentation)
+
+- [ ] Add Sikorsky HH-60W "Jolly Green II" selectable helicopter option.
+  - Include selection card, runtime sprite integration, and baseline tuning parity with existing selectable helicopters.
+
+- [ ] Add scrolling helicopter biography panel.
+  - Show selected helicopter background/spec flavor text in a readable scrolling panel on selection/briefing flow.
+
+- [ ] Mission Enhancements (final third mission style pass).
+  - Add and balance `Search & Destroy` + `Sabotage/Infiltration` objective chain (for example: destroy power nodes to disable shield and expose main factory objective).
+
+### P1/P2 Gap Follow-ups (Cross-Check from Prior Checklist)
+
+- [ ] Boarding UX: add/confirm subtle helicopter-side boarding ring/zone visualization near skid level.
+- [ ] Boarding UX: add explicit regression matrix for each board-failure reason plus successful board path in one suite.
+- [ ] Boarding UX: validate door transition feedback sync (SFX + animation timing coherence).
+- [ ] Threat readability: move tell timing windows into tunable config band (target 300-700ms learnable range) and run false-positive tuning pass.
+- [ ] Sentiment progression: add mission-end event log panel and analytics hooks for outcome-band distribution during playtests.
+
 ## Reprioritized Game Enhancements (Pygame/PC)
 
 Ordered from least complex to most complex.
