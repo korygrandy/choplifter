@@ -90,6 +90,7 @@ thermal_mode = False
 from ..game_types import EnemyKind, HostageState, ProjectileKind
 from ..barak_mrad import BARAK_LAUNCHER_VISIBLE_STATES
 from ..airport_fuselage import (
+    FUSELAGE_DAMAGE_STAGE_HALF,
     FUSELAGE_DAMAGE_STAGE_TOTAL,
     get_airport_fuselage_damage_stage,
 )
@@ -100,6 +101,7 @@ _airport_fuselage_total_image_cache: pygame.Surface | None | bool = False
 
 FUSELAGE_BACKDROP_OFFSET_X = -245
 FUSELAGE_BACKDROP_OFFSET_Y = -175
+FUSELAGE_BACKDROP_FADE_WIDTH_PX = 220.0
 
 
 def _load_fuselage_damage_sprite(*, total: bool) -> pygame.Surface | None:
@@ -112,9 +114,11 @@ def _load_fuselage_damage_sprite(*, total: bool) -> pygame.Surface | None:
         return cache if isinstance(cache, pygame.Surface) else None
 
     candidates = [
+        "airplane-fuselage-fully-damaged.png",
         "plane-fuselage-totally-amaged.png",
         "plane-fuselage-totally-damaged.png",
     ] if total else [
+        "airplane-fuselage-half-damaged.png",
         "plan-fuselage-half-damaged.png",
         "plane-fuselage-half-damaged.png",
     ]
@@ -221,6 +225,17 @@ def _is_on_screen(world_x: float, camera_x: float, screen_width: int, margin: in
     """
     screen_x = world_x - camera_x
     return -margin <= screen_x <= screen_width + margin
+
+
+def _horizontal_view_overlap_alpha(rect: pygame.Rect, screen_width: int, *, fade_width_px: float) -> int:
+    """Return alpha based on how much of rect overlaps horizontal viewport."""
+    overlap = min(rect.right, screen_width) - max(rect.left, 0)
+    if overlap <= 0:
+        return 0
+    if fade_width_px <= 0.0:
+        return 255
+    ratio = max(0.0, min(1.0, float(overlap) / float(fade_width_px)))
+    return int(255.0 * ratio)
 
 def _compound_has_awaiting_passengers(mission: MissionState, compound: object) -> bool:
     start = max(0, int(getattr(compound, "hostage_start", 0)))
@@ -604,12 +619,34 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
             )
             fuselage_backdrop_drawn = False
             if is_fuselage_terminal:
-                backdrop = _load_airplane_backdrop_sprite()
+                backdrop: pygame.Surface | None
+                if fuselage_damage_stage >= FUSELAGE_DAMAGE_STAGE_TOTAL:
+                    backdrop = _load_fuselage_damage_sprite(total=True)
+                elif fuselage_damage_stage >= FUSELAGE_DAMAGE_STAGE_HALF:
+                    backdrop = _load_fuselage_damage_sprite(total=False)
+                else:
+                    backdrop = _load_airplane_backdrop_sprite()
                 if backdrop is not None:
                     backdrop_x = r.x + FUSELAGE_BACKDROP_OFFSET_X
                     backdrop_y = r.y + FUSELAGE_BACKDROP_OFFSET_Y
-                    screen.blit(backdrop, (backdrop_x, backdrop_y))
-                    fuselage_backdrop_drawn = True
+                    backdrop_rect = backdrop.get_rect(topleft=(backdrop_x, backdrop_y))
+                    did_draw_backdrop = False
+                    backdrop_alpha = _horizontal_view_overlap_alpha(
+                        backdrop_rect,
+                        screen.get_width(),
+                        fade_width_px=FUSELAGE_BACKDROP_FADE_WIDTH_PX,
+                    )
+                    if backdrop_alpha < 255 and backdrop_alpha > 0:
+                        faded_backdrop = backdrop.copy()
+                        faded_backdrop.set_alpha(backdrop_alpha)
+                        screen.blit(faded_backdrop, backdrop_rect)
+                        did_draw_backdrop = True
+                    elif backdrop_alpha >= 255:
+                        screen.blit(backdrop, backdrop_rect)
+                        did_draw_backdrop = True
+                    else:
+                        did_draw_backdrop = False
+                    fuselage_backdrop_drawn = did_draw_backdrop
 
             # Elevated jetway set piece: smoke plume behind roof + intense side flames.
             if is_elevated_terminal:
@@ -678,7 +715,10 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                 pygame.draw.rect(screen, edge_color, draw_rect, 2, border_radius=2)
 
             if is_fuselage_terminal:
-                _draw_fuselage_damage_overlay(screen, draw_rect, fuselage_damage_stage, t)
+                if not fuselage_backdrop_drawn:
+                    _draw_fuselage_damage_overlay(screen, draw_rect, fuselage_damage_stage, t)
+                elif fuselage_damage_stage > 0:
+                    _draw_fuselage_damage_particles(screen, draw_rect, fuselage_damage_stage, t)
 
             # Jetway roof cap.
             roof_h = max(6, int(c.height * 0.16))
@@ -1582,9 +1622,9 @@ def _sentiment_reason_lines(
 
         riskier_earned = bonus_awarded and route_norm == "elevated"
         if riskier_earned:
-            lines.append("Riskier Path Bonus: EARNED (upper compounds rescued first)")
+            lines.append("Riskier Path Bonus: EARNED (Upper Terminals rescued first)")
         else:
-            lines.append("Riskier Path Bonus: NOT EARNED (rescue upper compounds first)")
+            lines.append("Riskier Path Bonus: NOT EARNED (rescue Upper Terminals first)")
 
     return lines
 

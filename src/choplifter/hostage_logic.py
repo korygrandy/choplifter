@@ -55,6 +55,9 @@ def _remaining_at_terminal(hostage_state, terminal_index: int) -> int:
 	remaining = getattr(hostage_state, "terminal_remaining", None) or []
 	if terminal_index < 0 or terminal_index >= len(remaining):
 		return 0
+	open_for_boarding = list(getattr(hostage_state, "terminal_open_for_boarding", []) or [])
+	if terminal_index < len(open_for_boarding) and not bool(open_for_boarding[terminal_index]):
+		return 0
 	count = int(remaining[terminal_index])
 	# During active loading, deduct passengers already boarded from that terminal.
 	if (
@@ -66,6 +69,40 @@ def _remaining_at_terminal(hostage_state, terminal_index: int) -> int:
 		loaded_from_terminal = max(0, loaded_total - base_total)
 		count = max(0, count - loaded_from_terminal)
 	return max(0, count)
+
+
+def _compute_terminal_open_for_boarding(mission, pickup_xs: list[float]) -> list[bool]:
+	if not pickup_xs:
+		return []
+	compounds = list(getattr(mission, "compounds", []) or []) if mission is not None else []
+	if not compounds:
+		return [True for _ in pickup_xs]
+
+	open_states: list[bool] = []
+	for px in pickup_xs:
+		best_compound = None
+		best_d = 1e9
+		for c in compounds:
+			pos = getattr(c, "pos", None)
+			if pos is None:
+				continue
+			center_x = float(pos.x) + float(getattr(c, "width", 0.0)) * 0.5
+			d = abs(center_x - float(px))
+			if d < best_d:
+				best_d = d
+				best_compound = c
+
+		if best_compound is None:
+			open_states.append(True)
+			continue
+
+		max_match_distance = max(90.0, float(getattr(best_compound, "width", 0.0)) * 0.9)
+		if best_d <= max_match_distance:
+			open_states.append(bool(getattr(best_compound, "is_open", False)))
+		else:
+			open_states.append(True)
+
+	return open_states
 
 
 def _find_near_terminal_index(hostage_state, truck_x: float, pickup_radius: float, passed_offset: float) -> int:
@@ -156,6 +193,7 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 		remaining = [0 for _ in pickup_xs]
 		remaining[0] = int(getattr(hostage_state, "total_hostages", 16))
 	hostage_state.terminal_remaining = remaining
+	hostage_state.terminal_open_for_boarding = _compute_terminal_open_for_boarding(mission, pickup_xs)
 
 	tech_operating = bool(tech_state is not None and getattr(tech_state, "is_deployed", False))
 	tech_on_truck = bool(meal_truck_state is not None and getattr(meal_truck_state, "tech_has_deployed", False))

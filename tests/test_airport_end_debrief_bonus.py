@@ -24,6 +24,7 @@ class AirportEndDebriefBonusTests(unittest.TestCase):
 
         self.assertTrue(any("Riskier Path Bonus" in line and "+3.0" in line for line in lines))
         self.assertTrue(any("Riskier Path Bonus: EARNED" in line for line in lines))
+        self.assertTrue(any("Upper Terminals rescued first" in line for line in lines))
 
     def test_debrief_shows_riskier_path_not_earned_for_lower_first(self) -> None:
         lines = _sentiment_reason_lines(
@@ -39,6 +40,7 @@ class AirportEndDebriefBonusTests(unittest.TestCase):
 
         self.assertTrue(any("Route Bonus" in line and "+2.0" in line for line in lines))
         self.assertTrue(any("Riskier Path Bonus: NOT EARNED" in line for line in lines))
+        self.assertTrue(any("rescue Upper Terminals first" in line for line in lines))
 
 
 if __name__ == "__main__":

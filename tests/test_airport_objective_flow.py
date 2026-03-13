@@ -28,7 +28,7 @@ class AirportObjectiveFlowTests(unittest.TestCase):
             tech_state=SimpleNamespace(state="on_chopper", is_deployed=False, on_bus=False),
         )
 
-        self.assertEqual(objective.status_text, "Tip: elevated rescues first for safer route bonus")
+        self.assertEqual(objective.status_text, "Tip: any order works; elevated-first is riskiest (+bonus)")
 
         objective = update_airport_objectives(
             objective,
@@ -70,7 +70,7 @@ class AirportObjectiveFlowTests(unittest.TestCase):
         )
 
         self.assertEqual(objective.mission_phase, "resume_lower_rescue")
-        self.assertEqual(objective.status_text, "Resume lower-terminal rescues")
+        self.assertEqual(objective.status_text, "Resume Lower Terminal rescues")
 
     def test_marks_complete_only_after_combined_rescue_target_met(self) -> None:
         mission = SimpleNamespace(elapsed_seconds=42.0, stats=SimpleNamespace(saved=9))
@@ -109,7 +109,7 @@ class AirportObjectiveFlowTests(unittest.TestCase):
         )
 
         self.assertEqual(objective.mission_phase, "truck_driving_to_bunker")
-        self.assertEqual(objective.status_text, "Drive meal truck to jetway terminal")
+        self.assertEqual(objective.status_text, "Drive meal truck to Jetway Terminal")
 
     def test_awards_one_time_route_bonus_when_both_streams_progress(self) -> None:
         mission = SimpleNamespace(
