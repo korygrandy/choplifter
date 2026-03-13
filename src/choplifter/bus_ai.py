@@ -28,6 +28,8 @@ BUS_DECEL_DISTANCE_PX: float = 240.0
 BUS_STOP_X: float = 500.0
 BUS_CREEP_SPEED_PX_PER_SEC: float = 20.0
 BUS_DOOR_ANIMATION_DURATION: float = 0.3  # Duration for opening/closing animation
+_AIRPORT_ENEMY_BULLET_DAMAGE: float = 11.0
+_AIRPORT_ENEMY_BOMB_DAMAGE: float = 36.0
 
 
 def _clamp01(value: float) -> float:
@@ -422,32 +424,61 @@ def draw_airport_bus(target: pygame.Surface, bus_state: BusState, camera_x: floa
         pygame.draw.rect(target, (170, 235, 170), pygame.Rect(badge_center[0] - 4, badge_center[1] - 5, 6, 2))
 
 
-def _closest_alive_raider_in_bus_lz(bus_left: float, bus_right: float, mission) -> object | None:
-    """Return the closest alive raider within the bus horizontal footprint, or None.
+def _closest_alive_raider_in_bus_lz(bus_left: float, bus_top: float, bus_right: float, bus_bottom: float, projectile, mission) -> object | None:
+    """Return the alive raider overlapping the bus art that best matches the shot.
 
-    A raider in the LZ should absorb player fire before the bus does.
-    The check uses the raider's render half-width (18 px) as extra tolerance.
+    When a raider sprite overlaps the bus silhouette, player fire should resolve
+    against the raider before the bus. Preference is given to the raider nearest
+    the projectile position so overlap hits feel consistent.
     """
     enemy_state = getattr(mission, "airport_enemy_state", None)
     enemies = getattr(enemy_state, "enemies", None)
     if not enemies:
         return None
-    bus_cx = (bus_left + bus_right) * 0.5
-    lz_x_min = bus_left - 18.0
-    lz_x_max = bus_right + 18.0
+
+    projectile_pos = getattr(projectile, "pos", None)
+    shot_x = float(getattr(projectile_pos, "x", (bus_left + bus_right) * 0.5))
+    shot_y = float(getattr(projectile_pos, "y", (bus_top + bus_bottom) * 0.5))
+
     best = None
-    best_dist = float("inf")
+    best_score = float("inf")
     for e in enemies:
         if str(getattr(e, "kind", "")).lower() != "raider":
             continue
         if float(getattr(e, "health", 1.0)) <= 0.0:
             continue
+
         ex = float(getattr(e, "x", -99999.0))
-        if not (lz_x_min <= ex <= lz_x_max):
+        ey = float(getattr(e, "y", -99999.0))
+        raider_left = ex - 18.0
+        raider_right = ex + 18.0
+        raider_top = ey - 24.0
+        raider_bottom = ey
+
+        overlaps_bus = (
+            raider_right >= bus_left
+            and raider_left <= bus_right
+            and raider_bottom >= bus_top
+            and raider_top <= bus_bottom
+        )
+        if not overlaps_bus:
             continue
-        dist = abs(ex - bus_cx)
-        if dist < best_dist:
-            best_dist = dist
+
+        dx = 0.0
+        if shot_x < raider_left:
+            dx = raider_left - shot_x
+        elif shot_x > raider_right:
+            dx = shot_x - raider_right
+
+        dy = 0.0
+        if shot_y < raider_top:
+            dy = raider_top - shot_y
+        elif shot_y > raider_bottom:
+            dy = shot_y - raider_bottom
+
+        score = dx * dx + dy * dy
+        if score < best_score:
+            best_score = score
             best = e
     return best
 
@@ -486,9 +517,9 @@ def apply_airport_bus_friendly_fire(bus_state: BusState | None, mission, *, logg
             continue
 
         # If an alive raider occupies the bus LZ, route the hit to the raider.
-        raider = _closest_alive_raider_in_bus_lz(bus_left, bus_right, mission)
+        raider = _closest_alive_raider_in_bus_lz(bus_left, bus_top, bus_right, bus_bottom, p, mission)
         if raider is not None:
-            damage = 18.0 if getattr(p, "kind", None) is ProjectileKind.BOMB else 4.0
+            damage = _AIRPORT_ENEMY_BOMB_DAMAGE if getattr(p, "kind", None) is ProjectileKind.BOMB else _AIRPORT_ENEMY_BULLET_DAMAGE
             result = apply_vehicle_damage(
                 raider,
                 damage,
