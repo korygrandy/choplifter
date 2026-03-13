@@ -125,9 +125,15 @@ def _compound_has_awaiting_passengers(mission: MissionState, compound: object) -
         return False
     hostages = list(getattr(mission, "hostages", []) or [])
     end = min(len(hostages), start + count)
+    awaiting_states = {
+        HostageState.IDLE,
+        HostageState.PANIC,
+        HostageState.MOVING_TO_LZ,
+        HostageState.WAITING,
+    }
     for h in hostages[start:end]:
         state = getattr(h, "state", None)
-        if state not in (HostageState.SAVED, HostageState.KIA):
+        if state in awaiting_states:
             return True
     return False
 
@@ -422,6 +428,12 @@ def _draw_fuselage_wreck(screen: pygame.Surface, r: pygame.Rect, t: float) -> No
     pygame.draw.polygon(screen, (255, 190, 42), [(fx + 1, fy - 2), (fx + fw // 2 + 1, fy - fh // 2), (fx + 1, fy - fh + 4)])
 
 
+def _airport_terminal_sign_label(*, is_elevated_terminal: bool, is_fuselage_terminal: bool) -> str:
+    if is_elevated_terminal:
+        return "D4" if is_fuselage_terminal else "D5"
+    return "D6"
+
+
 def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:
     mission_id = str(getattr(mission, "mission_id", "")).lower()
     is_airport_special = mission_id in ("airport", "airport_special_ops")
@@ -581,6 +593,30 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
             door_x = r.centerx - door_w_total // 2
             door_area = pygame.Rect(door_x, door_y, door_w_total, door_h)
             leaf_w = max(10, door_w_total // 2 - 1)
+
+            terminal_label = _airport_terminal_sign_label(
+                is_elevated_terminal=is_elevated_terminal,
+                is_fuselage_terminal=is_fuselage_terminal,
+            )
+            sign_font = get_world_font("consolas", 11, bold=True)
+            sign_text = sign_font.render(terminal_label, True, (236, 240, 248))
+            sign_pad_x = 6
+            sign_pad_y = 3
+            sign_rect = pygame.Rect(
+                0,
+                0,
+                sign_text.get_width() + sign_pad_x * 2,
+                sign_text.get_height() + sign_pad_y * 2,
+            )
+            sign_rect.midbottom = (door_area.centerx, door_area.y - 4)
+            min_x = r.x + 2
+            max_x = r.right - sign_rect.width - 2
+            sign_rect.x = int(max(min_x, min(max_x, sign_rect.x)))
+            if sign_rect.y < r.y + 2:
+                sign_rect.y = r.y + 2
+            pygame.draw.rect(screen, (46, 58, 74), sign_rect, border_radius=2)
+            pygame.draw.rect(screen, (132, 152, 178), sign_rect, 1, border_radius=2)
+            screen.blit(sign_text, (sign_rect.x + sign_pad_x, sign_rect.y + sign_pad_y))
 
             # Doors animate in explicit cycles: open -> release small group -> close.
             if boarding_active and airport_hostage_state is not None:

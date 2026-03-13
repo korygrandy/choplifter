@@ -48,10 +48,16 @@ def configure_airport_passenger_distribution(*, mission: object, total_passenger
         fallback_x = 1500.0
         return [fallback_x], int(total_passengers), fallback_x
 
-    min_y = min(float(c.pos.y) for c in compounds)
-    elevated_indices = [i for i, c in enumerate(compounds) if abs(float(c.pos.y) - min_y) <= 1.0]
-    if not elevated_indices:
-        elevated_indices = [min(range(len(compounds)), key=lambda i: float(compounds[i].pos.y))]
+    # Airport flow assumes two elevated extraction terminals and at least one
+    # lower-compound rescue lane when 3+ compounds are present.
+    sorted_by_height = sorted(
+        range(len(compounds)),
+        key=lambda i: (float(compounds[i].pos.y), float(compounds[i].pos.x)),
+    )
+    if len(compounds) >= 3:
+        elevated_indices = sorted_by_height[:2]
+    else:
+        elevated_indices = sorted_by_height[:1]
 
     elevated_center_xs = sorted(
         float(compounds[i].pos.x) + float(compounds[i].width) * 0.5 for i in elevated_indices
@@ -61,10 +67,19 @@ def configure_airport_passenger_distribution(*, mission: object, total_passenger
     lower_indices = [i for i in range(len(compounds)) if i not in elevated_indices]
     total = max(1, int(total_passengers))
     if lower_indices:
-        elevated_total = random.randint(4, max(4, total - 2)) if total >= 6 else max(1, total // 2)
+        # Reserve at least one lower-compound rescue when possible so elevated-only
+        # extraction cannot complete the full airport objective.
+        if total <= 1:
+            elevated_total = total
+        else:
+            min_elevated = 1 if total < 6 else 4
+            min_elevated = min(min_elevated, total - 1)
+            max_elevated = total - 1
+            elevated_total = random.randint(min_elevated, max_elevated)
+        lower_total = total - elevated_total
     else:
         elevated_total = total
-    lower_total = max(0, total - elevated_total)
+        lower_total = 0
 
     for c in compounds:
         c.hostage_count = 0

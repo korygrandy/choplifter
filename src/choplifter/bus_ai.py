@@ -25,6 +25,7 @@ from .vehicle_damage import apply_vehicle_damage, is_airport_bus_vulnerable
 # Cache for loaded bus sprite
 _bus_sprite_cache: Optional[pygame.Surface] = None
 _bus_sprite_doors_open_cache: Optional[pygame.Surface] = None
+_bus_sprite_boarded_cache: Optional[pygame.Surface] = None
 BUS_SPEED_PX_PER_SEC: float = 80.0
 BUS_ACCEL_TIME_S: float = 1.4
 BUS_DECEL_DISTANCE_PX: float = 240.0
@@ -81,6 +82,30 @@ def _load_bus_sprite_doors_open() -> Optional[pygame.Surface]:
         return _bus_sprite_doors_open_cache
     except Exception:
         return None
+
+
+def _load_bus_sprite_boarded() -> Optional[pygame.Surface]:
+    """Load the bus (boarded passengers) sprite from assets. Returns None if loading fails."""
+    global _bus_sprite_boarded_cache
+
+    if _bus_sprite_boarded_cache is not None:
+        return _bus_sprite_boarded_cache
+
+    try:
+        module_dir = Path(__file__).resolve().parent
+        bus_asset_path = module_dir / "assets" / "city-bus-boarded.png"
+        _bus_sprite_boarded_cache = pygame.image.load(str(bus_asset_path)).convert_alpha()
+        return _bus_sprite_boarded_cache
+    except Exception:
+        return None
+
+
+def _get_bus_closed_sprite(*, boarded_count: int) -> Optional[pygame.Surface]:
+    if int(boarded_count) > 0:
+        boarded_sprite = _load_bus_sprite_boarded()
+        if boarded_sprite is not None:
+            return boarded_sprite
+    return _load_bus_sprite()
 
 
 @dataclass
@@ -389,7 +414,7 @@ def draw_airport_bus(target: pygame.Surface, bus_state: BusState, camera_x: floa
         amp = float(getattr(bus_state, "shift_jerk_px", 0.0))
         screen_x += int(math.sin(phase * math.pi * 2.2) * amp * norm)
     
-    closed_sprite = _load_bus_sprite()
+    closed_sprite = _get_bus_closed_sprite(boarded_count=int(boarded_count))
     open_sprite = _load_bus_sprite_doors_open()
     blend_open = _bus_door_open_blend(bus_state)
 

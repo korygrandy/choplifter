@@ -22,6 +22,18 @@ class AirportLowerCompoundWindowLightingTests(unittest.TestCase):
 
         self.assertFalse(_compound_has_awaiting_passengers(mission, compound))
 
+    def test_boarded_or_exiting_passengers_no_longer_keep_lower_compound_lit(self) -> None:
+        mission = SimpleNamespace(
+            hostages=[
+                SimpleNamespace(state=HostageState.BOARDED),
+                SimpleNamespace(state=HostageState.EXITING),
+                SimpleNamespace(state=HostageState.SAVED),
+            ]
+        )
+        compound = SimpleNamespace(hostage_start=0, hostage_count=3)
+
+        self.assertFalse(_compound_has_awaiting_passengers(mission, compound))
+
 
 if __name__ == "__main__":
     unittest.main()
