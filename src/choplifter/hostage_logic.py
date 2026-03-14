@@ -318,6 +318,14 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 				passed_offset,
 			)
 			if float(getattr(meal_truck_state, "x", 0.0)) > right_boundary_x:
+				loaded_total = int(getattr(hostage_state, "meal_truck_loaded_hostages", 0))
+				base_total = int(getattr(hostage_state, "truck_load_base", 0))
+				loaded_from_terminal = max(0, loaded_total - base_total)
+				if 0 <= loading_index < len(hostage_state.terminal_remaining) and loaded_from_terminal > 0:
+					hostage_state.terminal_remaining[loading_index] = max(
+						0,
+						int(hostage_state.terminal_remaining[loading_index]) - loaded_from_terminal,
+					)
 				hostage_state.loading_terminal_index = -1
 				hostage_state.loading_terminal_initial_count = 0
 				hostage_state.truck_load_base = int(getattr(hostage_state, "meal_truck_loaded_hostages", 0))
