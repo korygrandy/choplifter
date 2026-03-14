@@ -99,8 +99,8 @@ from ..mission_helpers import sentiment_band_label, sentiment_contributions
 _airport_fuselage_half_image_cache: pygame.Surface | None | bool = False
 _airport_fuselage_total_image_cache: pygame.Surface | None | bool = False
 
-FUSELAGE_BACKDROP_OFFSET_X = -190 + 40   # Moved 40px right
-FUSELAGE_BACKDROP_OFFSET_Y = -195 + 35 + 4    # Lowered by 39px (moved down 4 more)
+FUSELAGE_BACKDROP_OFFSET_X = -150
+FUSELAGE_BACKDROP_OFFSET_Y = -195 + 35 + 8    # Lowered by 43px (moved down 8 total from baseline tweak)
 FUSELAGE_BACKDROP_FADE_WIDTH_PX = 220.0
 
 
@@ -746,6 +746,8 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                 flame_w = 14 + int(flame_core * 6)
                 flame_origin_x = r.right - 4
                 flame_origin_y = r.bottom - 9
+                if is_fuselage_terminal:
+                    flame_origin_y -= 26
 
                 outer = [
                     (flame_origin_x, flame_origin_y),
@@ -772,17 +774,18 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                 if is_fuselage_terminal and not fuselage_backdrop_drawn:
                     _draw_fuselage_wreck(screen, r, t)
 
-            # Keep elevated jetways warm-toned, but give the lower terminal its own cooler terminal facade.
+            # Keep elevated jetways warm-toned, and retone lower terminal to desert architecture colors.
             if is_elevated_terminal:
                 body_color = (212, 198, 172) if not c.is_open else (118, 92, 58)
                 edge_color = (78, 72, 60)
                 roof_color = (194, 184, 164)
                 seam_color = (172, 158, 132)
             else:
-                body_color = (168, 182, 196) if not c.is_open else (124, 138, 154)
-                edge_color = (58, 72, 88)
-                roof_color = (142, 156, 174)
-                seam_color = (112, 126, 146)
+                # Undamaged lower terminal: sun-bleached stucco; damaged/open: deeper weathered brown.
+                body_color = (198, 170, 126) if not c.is_open else (126, 94, 62)
+                edge_color = (88, 66, 44)
+                roof_color = (176, 148, 110)
+                seam_color = (150, 122, 86)
             draw_rect = r
             if is_fuselage_terminal:
                 square_side = max(42, min(r.width, r.height))
@@ -809,7 +812,8 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
             roof = pygame.Rect(draw_rect.x - 3, draw_rect.y - roof_h + 2, draw_rect.width + 6, roof_h)
             if not is_fuselage_terminal:
                 pygame.draw.rect(screen, roof_color, roof, border_radius=3)
-                pygame.draw.rect(screen, (96, 88, 72), roof, 1, border_radius=3)
+                roof_edge = (96, 88, 72) if is_elevated_terminal else (94, 70, 46)
+                pygame.draw.rect(screen, roof_edge, roof, 1, border_radius=3)
 
             # Side panel seams.
             if not is_fuselage_terminal:
@@ -821,16 +825,27 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                 # Ground-level terminal gets a dedicated ribbon window band and a small entrance canopy.
                 ribbon_h = max(8, int(draw_rect.height * 0.18))
                 ribbon = pygame.Rect(draw_rect.x + 7, draw_rect.y + 7, max(24, draw_rect.width - 14), ribbon_h)
-                ribbon_color = (78, 102, 128) if passengers_inside else (52, 70, 90)
+                ribbon_color = (124, 98, 70) if passengers_inside else (92, 72, 52)
                 pygame.draw.rect(screen, ribbon_color, ribbon, border_radius=2)
-                pygame.draw.rect(screen, (32, 46, 62), ribbon, 1, border_radius=2)
+                pygame.draw.rect(screen, (62, 46, 30), ribbon, 1, border_radius=2)
+
+                # Bright terminal accent strip so the lower structure reads differently from barracks compounds.
+                accent_glow = int((math.sin(t * 3.8 + compound_center_x * 0.01) + 1.0) * 20)
+                accent_color = (170 + accent_glow, 126 + accent_glow // 2, 72 + accent_glow // 3)
+                accent = pygame.Rect(draw_rect.x + 5, ribbon.bottom + 3, max(18, draw_rect.width - 10), 2)
+                pygame.draw.rect(screen, accent_color, accent, border_radius=1)
 
                 canopy_w = max(30, int(draw_rect.width * 0.42))
                 canopy_h = max(5, int(draw_rect.height * 0.08))
                 canopy = pygame.Rect(0, 0, canopy_w, canopy_h)
                 canopy.midbottom = (draw_rect.centerx, draw_rect.bottom - max(18, int(draw_rect.height * 0.28)))
-                pygame.draw.rect(screen, (96, 114, 132), canopy, border_radius=2)
-                pygame.draw.rect(screen, (52, 66, 80), canopy, 1, border_radius=2)
+                pygame.draw.rect(screen, (136, 108, 74), canopy, border_radius=2)
+                pygame.draw.rect(screen, (82, 60, 40), canopy, 1, border_radius=2)
+
+                # Add subtle vertical mullions so the facade reads as a glass terminal wall.
+                for mx in (0.30, 0.50, 0.70):
+                    x = draw_rect.x + int(draw_rect.width * mx)
+                    pygame.draw.line(screen, (124, 98, 70), (x, ribbon.bottom + 2), (x, draw_rect.bottom - 6), 1)
 
             # Upper porthole row: warm amber flicker when occupied, dark when empty.
             if is_elevated_terminal and not is_fuselage_terminal:
@@ -852,8 +867,13 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                     pygame.draw.circle(screen, (18, 22, 28), (px, port_y), port_r, 1)
 
             # French door pair near lower center with long vertical windows.
-            door_h = max(18, int(draw_rect.height * 0.38))
-            door_w_total = max(26, int(draw_rect.width * 0.32))
+            if not is_elevated_terminal and not is_fuselage_terminal:
+                # Lower terminal uses a wider sliding-glass entry profile.
+                door_h = max(20, int(draw_rect.height * 0.34))
+                door_w_total = max(36, int(draw_rect.width * 0.46))
+            else:
+                door_h = max(18, int(draw_rect.height * 0.38))
+                door_w_total = max(26, int(draw_rect.width * 0.32))
             door_y = draw_rect.bottom - door_h - 3
             door_x = draw_rect.centerx - door_w_total // 2
             door_area = pygame.Rect(door_x, door_y, door_w_total, door_h)
@@ -884,6 +904,17 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                 pygame.draw.rect(screen, (132, 152, 178), sign_rect, 1, border_radius=2)
                 screen.blit(sign_text, (sign_rect.x + sign_pad_x, sign_rect.y + sign_pad_y))
 
+                if not is_elevated_terminal and not is_fuselage_terminal:
+                    # Tiny arrivals/departures board above D6 for a stronger terminal identity.
+                    board_font = get_world_font("consolas", 8, bold=True)
+                    board_text = board_font.render("ARR  DEP", True, (244, 214, 164))
+                    board_rect = pygame.Rect(0, 0, board_text.get_width() + 8, board_text.get_height() + 4)
+                    board_rect.midbottom = (sign_rect.centerx, sign_rect.y - 3)
+                    board_rect.clamp_ip(pygame.Rect(draw_rect.x + 2, draw_rect.y + 2, draw_rect.width - 4, draw_rect.height - 4))
+                    pygame.draw.rect(screen, (66, 48, 30), board_rect, border_radius=2)
+                    pygame.draw.rect(screen, (134, 102, 66), board_rect, 1, border_radius=2)
+                    screen.blit(board_text, (board_rect.x + 4, board_rect.y + 2))
+
             # Doors animate in explicit cycles: open -> release small group -> close.
             if boarding_active and airport_hostage_state is not None:
                 rate = max(0.2, float(getattr(airport_hostage_state, "transfer_rate_s", 0.5)))
@@ -901,16 +932,30 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                     door_open_t = 0.0
             else:
                 door_open_t = 0.0
-            slide_px = int(door_open_t * 6.0)
+            slide_px = int(door_open_t * (8.0 if (not is_elevated_terminal and not is_fuselage_terminal) else 6.0))
 
             left_door = pygame.Rect(door_area.x - slide_px, door_area.y, leaf_w, door_h)
             right_door = pygame.Rect(door_area.centerx + slide_px, door_area.y, leaf_w, door_h)
-            door_color = (164, 154, 132)
+            door_color = (164, 154, 132) if is_elevated_terminal else (152, 118, 78)
             if not is_fuselage_terminal:
                 pygame.draw.rect(screen, door_color, left_door, border_radius=1)
                 pygame.draw.rect(screen, door_color, right_door, border_radius=1)
                 pygame.draw.rect(screen, edge_color, left_door, 1, border_radius=1)
                 pygame.draw.rect(screen, edge_color, right_door, 1, border_radius=1)
+
+                if not is_elevated_terminal:
+                    # Subtle animated center seam to suggest automatic sliding doors.
+                    seam_x = door_area.centerx
+                    seam_top = door_area.y + 1
+                    seam_bottom = door_area.bottom - 1
+                    seam_pulse = int((math.sin(t * 10.0 + compound_center_x * 0.03) + 1.0) * 36)
+                    seam_strength = max(30, seam_pulse + (56 if door_open_t > 0.05 else 0))
+                    seam_color = (
+                        min(255, 158 + seam_strength // 2),
+                        min(255, 122 + seam_strength // 3),
+                        min(255, 80 + seam_strength // 5),
+                    )
+                    pygame.draw.line(screen, seam_color, (seam_x, seam_top), (seam_x, seam_bottom), 1)
 
             # Window glow: warm amber double-flicker when occupied, dim off-state when empty.
             if passengers_inside:
@@ -925,12 +970,14 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                     )
                 else:
                     win_fill = (
-                        min(255, int(152 + mix * 56)),
-                        min(255, int(194 + mix * 46)),
-                        min(255, int(218 + mix * 34)),
+                        min(255, int(210 + mix * 36)),
+                        min(255, int(166 + mix * 26)),
+                        min(255, int(108 + mix * 20)),
                     )
             else:
-                win_fill = (52, 62, 76) if is_elevated_terminal else (44, 60, 78)
+                win_fill = (52, 62, 76) if is_elevated_terminal else (72, 58, 44)
+
+            glass_outline = (34, 42, 52) if is_elevated_terminal else (62, 46, 30)
 
             # Long windows on each french door leaf.
             left_glass = left_door.inflate(-6, -4)
@@ -938,16 +985,22 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
             if not is_fuselage_terminal:
                 pygame.draw.rect(screen, win_fill, left_glass, border_radius=1)
                 pygame.draw.rect(screen, win_fill, right_glass, border_radius=1)
-                pygame.draw.rect(screen, (34, 42, 52), left_glass, 1, border_radius=1)
-                pygame.draw.rect(screen, (34, 42, 52), right_glass, 1, border_radius=1)
+                pygame.draw.rect(screen, glass_outline, left_glass, 1, border_radius=1)
+                pygame.draw.rect(screen, glass_outline, right_glass, 1, border_radius=1)
 
-            # Additional right-side window beside the french doors.
-            side_window = pygame.Rect(door_area.right + 4, door_area.y + 1, max(8, int(r.width * 0.11)), door_h - 2)
-            side_window = pygame.Rect(door_area.right + 4, door_area.y + 1, max(8, int(draw_rect.width * 0.11)), door_h - 2)
-            side_window.clamp_ip(pygame.Rect(draw_rect.x + 2, draw_rect.y + 2, draw_rect.width - 4, draw_rect.height - 4))
+            # Side glazing beside entry. Lower terminal uses both left + right sidelights.
+            side_w = max(8, int(draw_rect.width * 0.11))
+            side_windows = [
+                pygame.Rect(door_area.right + 4, door_area.y + 1, side_w, door_h - 2),
+            ]
+            if not is_elevated_terminal and not is_fuselage_terminal:
+                side_windows.append(pygame.Rect(door_area.x - 4 - side_w, door_area.y + 1, side_w, door_h - 2))
             if not is_fuselage_terminal:
-                pygame.draw.rect(screen, win_fill, side_window, border_radius=1)
-                pygame.draw.rect(screen, (34, 42, 52), side_window, 1, border_radius=1)
+                clip = pygame.Rect(draw_rect.x + 2, draw_rect.y + 2, draw_rect.width - 4, draw_rect.height - 4)
+                for side_window in side_windows:
+                    side_window.clamp_ip(clip)
+                    pygame.draw.rect(screen, win_fill, side_window, border_radius=1)
+                    pygame.draw.rect(screen, glass_outline, side_window, 1, border_radius=1)
 
             # Render waiting civilians on top of elevated terminal roofs.
             # For each passenger currently mid-burst through the jetway door, remove one
@@ -1053,39 +1106,6 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
 
     if is_airport_special:
         _draw_airport_terminal_impact_events(screen, mission, camera_x=camera_x)
-
-        color = (150, 112, 68) if not c.is_open else (118, 92, 58)
-
-        # Main bunker body.
-        pygame.draw.rect(screen, color, r, border_radius=2)
-        pygame.draw.rect(screen, (26, 26, 26), r, 2, border_radius=2)
-
-        # Roof cap to make compounds read as fortified bunkers.
-        roof_h = max(6, int(c.height * 0.14))
-        roof = pygame.Rect(r.x - 4, r.y - roof_h + 1, r.width + 8, roof_h)
-        pygame.draw.rect(screen, (98, 84, 58), roof, border_radius=3)
-        pygame.draw.rect(screen, (36, 36, 36), roof, 1, border_radius=3)
-
-        # Vent slits / panel lines.
-        slit_y = r.y + max(4, r.height // 4)
-        for i in range(3):
-            sx = r.x + 8 + i * max(12, r.width // 4)
-            pygame.draw.line(screen, (78, 62, 40), (sx, slit_y), (sx + 10, slit_y), 2)
-
-        # Corner turret domes.
-        turret_r = max(3, min(6, r.height // 5))
-        turret_y = roof.y + roof_h // 2
-        left_turret_x = r.x + 8
-        right_turret_x = r.right - 8
-        pygame.draw.circle(screen, (92, 102, 96), (left_turret_x, turret_y), turret_r)
-        pygame.draw.circle(screen, (92, 102, 96), (right_turret_x, turret_y), turret_r)
-        pygame.draw.circle(screen, (32, 32, 32), (left_turret_x, turret_y), turret_r, 1)
-        pygame.draw.circle(screen, (32, 32, 32), (right_turret_x, turret_y), turret_r, 1)
-
-        if c.is_open:
-            gap = pygame.Rect(r.centerx - 12, r.bottom - 15, 24, 15)
-            pygame.draw.rect(screen, (35, 35, 35), gap)
-            pygame.draw.rect(screen, (70, 70, 70), gap, 1)
 
 
 def _draw_airport_lz_tower(screen: pygame.Surface, mission: MissionState, *, camera_x: float) -> None:

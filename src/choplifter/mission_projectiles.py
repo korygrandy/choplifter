@@ -691,8 +691,8 @@ def _update_projectiles(
                     if _barak_should_force_detonate_stuck_diversion(
                         missile=p,
                         distance_to_nose=dist_to_nose,
-                        close_radius=max(24.0, arm_radius * 0.9),
-                        timeout_s=0.28,
+                        close_radius=max(30.0, arm_radius * 1.1),
+                        timeout_s=0.14,
                         dt=dt,
                     ):
                         mission.explosions.emit_fire_plume(p.pos, strength=0.70)

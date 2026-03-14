@@ -242,21 +242,44 @@ class IntroVideoPlayer:
 
     def _draw_terminal_loading_prompt(self, screen: pygame.Surface) -> None:
         if self._loading_font is None:
-            self._loading_font = pygame.font.SysFont("consolas", 28, bold=True)
+            self._loading_font = pygame.font.SysFont("consolas", 24, bold=True)
 
-        text_full = "Loading..."
-        chars_per_second = 11.0
-        typed_count = max(0, min(len(text_full), int(self._audio_wait_s * chars_per_second)))
-        typed = text_full[:typed_count]
-        cursor = "_" if int(self._audio_wait_s * 2.8) % 2 == 0 else " "
-        terminal_text = f"> {typed}{cursor}"
+        memorial_text = (
+            "In memory of Sgt. 1st Class Nicole M Amor of the U.S. Army Reserve "
+            "103rd Sustainment Command, KIA Kuwait. Iraq : 03012026"
+        )
 
-        glow = self._loading_font.render(terminal_text, True, (36, 120, 46))
-        main = self._loading_font.render(terminal_text, True, (74, 248, 102))
+        memorial_rate = 34.0
+
+        cursor = "_" if int(self._audio_wait_s * 3.0) % 2 == 0 else " "
+        count = max(0, min(len(memorial_text), int(self._audio_wait_s * memorial_rate)))
+        terminal_text = f"> {memorial_text[:count]}{cursor}"
+
         x = 34
-        y = screen.get_height() - 72
-        screen.blit(glow, (x + 2, y + 2))
-        screen.blit(main, (x, y))
+        y = screen.get_height() - 108
+        max_width = screen.get_width() - x * 2
+
+        words = terminal_text.split(" ")
+        lines: list[str] = []
+        current = ""
+        for word in words:
+            candidate = word if not current else f"{current} {word}"
+            if self._loading_font.size(candidate)[0] <= max_width:
+                current = candidate
+            else:
+                if current:
+                    lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+
+        line_h = self._loading_font.get_linesize()
+        for i, line in enumerate(lines[-3:]):
+            yy = y + i * line_h
+            glow = self._loading_font.render(line, True, (36, 120, 46))
+            main = self._loading_font.render(line, True, (74, 248, 102))
+            screen.blit(glow, (x + 2, yy + 2))
+            screen.blit(main, (x, yy))
 
     def update(self, dt: float) -> None:
         if self.done:

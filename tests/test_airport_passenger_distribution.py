@@ -16,7 +16,7 @@ def _compound(*, x: float, y: float, width: float = 90.0) -> SimpleNamespace:
 
 
 class AirportPassengerDistributionTests(unittest.TestCase):
-    def test_three_compounds_always_keep_some_lower_compound_rescues(self) -> None:
+    def test_three_compounds_enforce_mandatory_airport_baseline_split(self) -> None:
         random.seed(7)
         mission = SimpleNamespace(
             compounds=[
@@ -32,13 +32,14 @@ class AirportPassengerDistributionTests(unittest.TestCase):
         )
 
         total = sum(int(getattr(c, "hostage_count", 0)) for c in mission.compounds)
+        lower_compound_count = int(getattr(mission.compounds[2], "hostage_count", 0))
         self.assertEqual(len(pickup_points), 2)
-        self.assertGreaterEqual(elevated_total, 1)
-        self.assertGreaterEqual(lower_total, 1)
-        self.assertTrue(all(int(getattr(c, "hostage_count", 0)) >= 1 for c in mission.compounds))
+        self.assertGreaterEqual(elevated_total, 2)
+        self.assertGreaterEqual(lower_total, 4)
+        self.assertGreaterEqual(lower_compound_count, 4)
         self.assertEqual(total, 16)
 
-    def test_same_height_compounds_still_reserve_lower_lane(self) -> None:
+    def test_same_height_compounds_still_enforce_mandatory_baseline_split(self) -> None:
         random.seed(11)
         mission = SimpleNamespace(
             compounds=[
@@ -54,10 +55,11 @@ class AirportPassengerDistributionTests(unittest.TestCase):
         )
 
         total = sum(int(getattr(c, "hostage_count", 0)) for c in mission.compounds)
+        lower_compound_count = int(getattr(mission.compounds[2], "hostage_count", 0))
         self.assertEqual(len(pickup_points), 2)
-        self.assertGreaterEqual(elevated_total, 1)
-        self.assertGreaterEqual(lower_total, 1)
-        self.assertTrue(all(int(getattr(c, "hostage_count", 0)) >= 1 for c in mission.compounds))
+        self.assertGreaterEqual(elevated_total, 2)
+        self.assertGreaterEqual(lower_total, 4)
+        self.assertGreaterEqual(lower_compound_count, 4)
         self.assertEqual(total, 16)
 
 

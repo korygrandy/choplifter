@@ -266,8 +266,29 @@ def try_start_hostage_rescue_cutscene(
     start_mission_cutscene_fn: Callable[..., bool],
 ) -> HostageRescueCutsceneResult:
     """Start the one-shot hostage rescue cutscene when threshold is reached."""
-    if boarded_now < cutscene_config.HOSTAGE_RESCUE_CUTSCENE_THRESHOLD:
-        return HostageRescueCutsceneResult(started=False, doors_open_before_cutscene=None)
+    mission_id = str(getattr(mission, "mission_id", "")).strip().lower()
+    is_airport = mission_id in (
+        "airport",
+        "airport_special_ops",
+        "airportspecialops",
+        "mission2",
+        "m2",
+    )
+
+    if is_airport:
+        stats = getattr(mission, "stats", None)
+        lower_rescued = int(getattr(stats, "saved", 0)) if stats is not None else 0
+        hostage_state = getattr(mission, "airport_hostage_state", None)
+        elevated_rescued = int(getattr(hostage_state, "rescued_hostages", 0)) if hostage_state is not None else 0
+
+        # Airport-specific trigger: play once when the first rescue route resolves as either
+        # lower-first (any lower rescue) or elevated-first (elevated rescued before any lower rescue).
+        airport_triggered = lower_rescued > 0 or (elevated_rescued > 0 and lower_rescued <= 0)
+        if not airport_triggered:
+            return HostageRescueCutsceneResult(started=False, doors_open_before_cutscene=None)
+    else:
+        if boarded_now < cutscene_config.HOSTAGE_RESCUE_CUTSCENE_THRESHOLD:
+            return HostageRescueCutsceneResult(started=False, doors_open_before_cutscene=None)
 
     cutscenes_played = getattr(mission, "cutscenes_played", set())
     if cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID in cutscenes_played:

@@ -34,7 +34,7 @@ class BarakHoverDamageTests(unittest.TestCase):
 
         self.assertTrue(_projectile_hits_enemy(projectile, enemy, heli, tuning))
 
-    def test_same_high_shot_does_not_hit_tank_body(self) -> None:
+    def test_hover_bullet_can_hit_tank_turret_profile(self) -> None:
         heli = HelicopterSettings(ground_y=300.0)
         tuning = MissionTuning()
         enemy = Enemy(
@@ -45,12 +45,12 @@ class BarakHoverDamageTests(unittest.TestCase):
         )
         projectile = Projectile(
             kind=ProjectileKind.BULLET,
-            pos=Vec2(140.0, 238.0),
+            pos=Vec2(180.0, 238.0),
             vel=Vec2(95.0, 0.0),
             ttl=1.0,
         )
 
-        self.assertFalse(_projectile_hits_enemy(projectile, enemy, heli, tuning))
+        self.assertTrue(_projectile_hits_enemy(projectile, enemy, heli, tuning))
 
     def test_hover_bullet_swept_path_hits_launcher_even_if_endpoint_passes_beyond_it(self) -> None:
         heli = HelicopterSettings(ground_y=300.0)
@@ -95,6 +95,25 @@ class BarakHoverDamageTests(unittest.TestCase):
         )
 
         self.assertTrue(_projectile_hits_enemy(projectile, enemy, heli, tuning))
+
+    def test_hover_bullet_swept_path_can_hit_tank_profile(self) -> None:
+        heli = HelicopterSettings(ground_y=300.0)
+        tuning = MissionTuning()
+        enemy = Enemy(
+            kind=EnemyKind.TANK,
+            pos=Vec2(180.0, 288.0),
+            vel=Vec2(0.0, 0.0),
+            health=100.0,
+        )
+        projectile = Projectile(
+            kind=ProjectileKind.BULLET,
+            pos=Vec2(210.0, 246.0),
+            vel=Vec2(95.0, 0.0),
+            ttl=1.0,
+        )
+        previous_pos = Vec2(150.0, 246.0)
+
+        self.assertTrue(_projectile_hits_enemy(projectile, enemy, heli, tuning, previous_pos=previous_pos))
 
 
 if __name__ == "__main__":

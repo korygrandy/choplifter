@@ -71,24 +71,44 @@ def configure_airport_passenger_distribution(*, mission: object, total_passenger
     base_assignment = [0] * len(compounds)
 
     # Airport Special Ops has three active rescue terminals:
-    # two elevated + one lower lane. Guarantee >=1 each when total allows.
+    # two elevated + one lower lane.
+    #
+    # Hard baseline for the authored mission beat:
+    # - elevated fuselage terminal: >=1
+    # - elevated jetway terminal: >=1
+    # - lower terminal lane (ground/roof/outside staging): >=4
+    #
+    # This guarantees at least 6 mandatory rescue passengers before any random fill.
     active_terminal_indices = list(elevated_indices)
     if lower_indices:
         active_terminal_indices.append(lower_indices[0])
     active_terminal_indices = sorted(set(active_terminal_indices))
 
-    if active_terminal_indices and total >= len(active_terminal_indices):
-        for idx in active_terminal_indices:
-            base_assignment[idx] = 1
-        remaining = total - len(active_terminal_indices)
-        for _ in range(remaining):
-            idx = random.choice(active_terminal_indices)
-            base_assignment[idx] += 1
-    elif active_terminal_indices:
-        # Not enough total passengers to guarantee one per terminal.
-        # Fill terminals left-to-right until we run out.
-        for idx in active_terminal_indices[:total]:
-            base_assignment[idx] += 1
+    if active_terminal_indices:
+        mandatory_by_terminal: dict[int, int] = {}
+
+        # Elevated terminals (sorted left-to-right) each get at least one.
+        for idx in elevated_indices:
+            mandatory_by_terminal[idx] = max(mandatory_by_terminal.get(idx, 0), 1)
+
+        # Primary lower lane gets at least four when present.
+        if lower_indices:
+            primary_lower_idx = lower_indices[0]
+            mandatory_by_terminal[primary_lower_idx] = max(mandatory_by_terminal.get(primary_lower_idx, 0), 4)
+
+        mandatory_total = sum(mandatory_by_terminal.values())
+
+        if total >= mandatory_total:
+            for idx, count in mandatory_by_terminal.items():
+                base_assignment[idx] = int(count)
+            remaining = total - mandatory_total
+            for _ in range(remaining):
+                idx = random.choice(active_terminal_indices)
+                base_assignment[idx] += 1
+        else:
+            # Fallback for custom low-passenger configs: keep left-to-right fill behavior.
+            for idx in active_terminal_indices[:total]:
+                base_assignment[idx] += 1
 
     # Assign hostage counts
     for idx, c in enumerate(compounds):

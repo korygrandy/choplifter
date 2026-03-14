@@ -72,6 +72,44 @@ def _distance_segment_to_segment_sq(a0: Vec2, a1: Vec2, b0: Vec2, b1: Vec2) -> f
     )
 
 
+def _point_in_aabb(point: Vec2, *, left: float, top: float, right: float, bottom: float) -> bool:
+    return left <= point.x <= right and top <= point.y <= bottom
+
+
+def _segment_hits_aabb(start: Vec2, end: Vec2, *, left: float, top: float, right: float, bottom: float) -> bool:
+    if _point_in_aabb(start, left=left, top=top, right=right, bottom=bottom):
+        return True
+    if _point_in_aabb(end, left=left, top=top, right=right, bottom=bottom):
+        return True
+
+    dx = end.x - start.x
+    dy = end.y - start.y
+    t0 = 0.0
+    t1 = 1.0
+
+    for p, q in (
+        (-dx, start.x - left),
+        (dx, right - start.x),
+        (-dy, start.y - top),
+        (dy, bottom - start.y),
+    ):
+        if abs(p) <= 1e-9:
+            if q < 0.0:
+                return False
+            continue
+        r = q / p
+        if p < 0.0:
+            if r > t1:
+                return False
+            t0 = max(t0, r)
+        else:
+            if r < t0:
+                return False
+            t1 = min(t1, r)
+
+    return t0 <= t1
+
+
 def _projectile_hits_barak_launcher(p: Projectile, e: Enemy, previous_pos: Vec2 | None = None) -> bool:
     if str(getattr(e, "mrad_state", "")) not in BARAK_LAUNCHER_VISIBLE_STATES:
         return False
@@ -98,10 +136,41 @@ def _projectile_hits_enemy(
     previous_pos: Vec2 | None = None,
 ) -> bool:
     if e.kind is EnemyKind.TANK:
-        w, h = 44.0, 18.0
-        left = e.pos.x - w * 0.5
-        top = heli.ground_y - h
-        return left <= p.pos.x <= left + w and top <= p.pos.y <= top + h
+        body_w, body_h = 54.0, 30.0
+        body_left = e.pos.x - body_w * 0.5
+        body_top = heli.ground_y - body_h
+        body_right = body_left + body_w
+        body_bottom = body_top + body_h
+
+        # Add an elevated turret/upper profile so hover-level strafing shots can register.
+        turret_w, turret_h = 34.0, 54.0
+        turret_left = e.pos.x - turret_w * 0.5
+        turret_top = body_top - 40.0
+        turret_right = turret_left + turret_w
+        turret_bottom = turret_top + turret_h
+
+        if previous_pos is None:
+            body_hit = _point_in_aabb(p.pos, left=body_left, top=body_top, right=body_right, bottom=body_bottom)
+            turret_hit = _point_in_aabb(p.pos, left=turret_left, top=turret_top, right=turret_right, bottom=turret_bottom)
+            return body_hit or turret_hit
+
+        body_hit = _segment_hits_aabb(
+            previous_pos,
+            p.pos,
+            left=body_left,
+            top=body_top,
+            right=body_right,
+            bottom=body_bottom,
+        )
+        turret_hit = _segment_hits_aabb(
+            previous_pos,
+            p.pos,
+            left=turret_left,
+            top=turret_top,
+            right=turret_right,
+            bottom=turret_bottom,
+        )
+        return body_hit or turret_hit
 
     if e.kind is EnemyKind.BARAK_MRAD:
         # MRAP body is taller/wider than the legacy tank box, especially readable while moving.
