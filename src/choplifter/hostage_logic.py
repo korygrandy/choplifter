@@ -155,6 +155,17 @@ def _is_leftmost_terminal(hostage_state, terminal_index: int) -> bool:
 	return abs(float(pickup_xs[terminal_index]) - leftmost_x) <= 0.5
 
 
+def _leftmost_terminal_index(hostage_state) -> int:
+	pickup_xs = list(getattr(hostage_state, "terminal_pickup_xs", ()) or ())
+	if not pickup_xs:
+		return 0
+	leftmost_x = min(float(px) for px in pickup_xs)
+	for i, px in enumerate(pickup_xs):
+		if abs(float(px) - leftmost_x) <= 0.5:
+			return i
+	return 0
+
+
 def _loading_right_boundary_x(hostage_state, terminal_x: float, terminal_index: int, pickup_radius: float, passed_offset: float) -> float:
 	if _is_leftmost_terminal(hostage_state, terminal_index):
 		# Match the tighter left-elevated cutoff: stop once truck passes
@@ -186,6 +197,9 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 
 	if bus_state is None or helicopter is None:
 		return hostage_state
+
+	fuselage_terminal_index = int(_leftmost_terminal_index(hostage_state))
+	prev_fuselage_remaining = int(_remaining_at_terminal(hostage_state, fuselage_terminal_index))
 
 	pickup_xs = list(getattr(hostage_state, "terminal_pickup_xs", ()) or ())
 	if not pickup_xs:
@@ -223,6 +237,12 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 			continue
 		if audio is not None and hasattr(audio, "play_bus_door"):
 			audio.play_bus_door()
+		if (
+			i == fuselage_terminal_index
+			and audio is not None
+			and hasattr(audio, "play_fuselage_about_to_collapse")
+		):
+			audio.play_fuselage_about_to_collapse()
 		unlock_beeped[i] = True
 	hostage_state.terminal_unlock_beeped = unlock_beeped
 
@@ -418,6 +438,15 @@ def update_airport_hostage_logic(hostage_state, dt: float, *, bus_state=None, he
 			hostage_state.rescue_completed_s = float(getattr(mission, "elapsed_seconds", 0.0))
 			if audio is not None and hasattr(audio, "play_bus_door"):
 				audio.play_bus_door()
+
+	fuselage_remaining_now = int(_remaining_at_terminal(hostage_state, fuselage_terminal_index))
+	if (
+		prev_fuselage_remaining > 1
+		and fuselage_remaining_now == 1
+		and audio is not None
+		and hasattr(audio, "play_lets_go")
+	):
+		audio.play_lets_go()
 
 	return hostage_state
 

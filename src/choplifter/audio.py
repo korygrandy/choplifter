@@ -306,6 +306,8 @@ class AudioBank:
     airport_ai_mission_brief: pygame.mixer.Sound | None
     satellite_reallocating: pygame.mixer.Sound | None
     barak_explosion: pygame.mixer.Sound | None
+    fuselage_about_to_collapse: pygame.mixer.Sound | None
+    lets_go: pygame.mixer.Sound | None
 
     def play_barak_mrad_deploy(self) -> None:
         if self.barak_mrad_deploy is None:
@@ -586,6 +588,12 @@ class AudioBank:
             satellite_reallocating = _try_load_asset_sound(asset_dir / "satellite-reallocating.ogg")
             if satellite_reallocating is not None:
                 satellite_reallocating.set_volume(0.70)
+            fuselage_about_to_collapse = _try_load_asset_sound(asset_dir / "fuselage-about-to-collapse.ogg")
+            if fuselage_about_to_collapse is not None:
+                fuselage_about_to_collapse.set_volume(0.58)
+            lets_go = _try_load_asset_sound(asset_dir / "lets-go.ogg")
+            if lets_go is not None:
+                lets_go.set_volume(0.66)
             barak_explosion = (
                 _try_load_asset_sound(asset_dir / "barak-explosion.ogg")
                 or _try_load_asset_sound(asset_dir / "barrak-explosion.ogg")
@@ -626,6 +634,8 @@ class AudioBank:
                 airport_ai_mission_brief=airport_ai_mission_brief,
                 satellite_reallocating=satellite_reallocating,
                 barak_explosion=barak_explosion,
+                fuselage_about_to_collapse=fuselage_about_to_collapse,
+                lets_go=lets_go,
             )
         except Exception as e:
             print(f"[AudioBank] Failed to initialize: {e}")
@@ -663,6 +673,8 @@ class AudioBank:
                 airport_ai_mission_brief=None,
                 satellite_reallocating=None,
                 barak_explosion=None,
+                fuselage_about_to_collapse=None,
+                lets_go=None,
             )
             r2 = _sine_pcm16(freq_hz=988.0, duration_s=0.10, volume=0.22, sample_rate=sample_rate)
             rescue = pygame.mixer.Sound(buffer=_mix_pcm16([r1, r2], volume=0.85))
@@ -944,3 +956,9 @@ class AudioBank:
 
     def play_barak_explosion(self) -> None:
         self._play(self.barak_explosion, bus="sfx")
+
+    def play_fuselage_about_to_collapse(self) -> None:
+        self._play(self.fuselage_about_to_collapse, bus="sfx")
+
+    def play_lets_go(self) -> None:
+        self._play(self.lets_go, bus="sfx")

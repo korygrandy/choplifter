@@ -259,6 +259,156 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
   - `tests/test_airport_tech_boarding_gate.py`
   - `tests/test_mission_tech_transitions.py`
 
+### Backlog Audit Additions (2026-03-14)
+
+Cross-check source request: boarding UX, threat readability, sentiment/debrief progression,
+flare diversion behavior, and BARAK MRAD state cycle hardening.
+
+#### Boarding UX and Feedback
+
+- [ ] Define boarding UX states: approaching, boarding, boarded, blocked.
+- [ ] Add per-hostage visual indicator for boardability (icon/color change in valid pickup zone).
+- [ ] Add short text toast for boarding outcomes: Boarding, Too high, Too fast, Doors closed, Not grounded.
+- [ ] Add helicopter-side boarding ring/zone visualization near skid level.
+- [ ] Add grounded HUD chip that lights only when all grounding conditions are true.
+- [ ] Add explicit door-state indicator near boarding prompt (Doors: Open/Closed).
+- [ ] Add door transition feedback SFX/animation sync for clear open/close readability.
+- [ ] Add debounce/cooldown for boarding prompts to prevent frame-to-frame flicker.
+- [ ] Accessibility pass for readability: color + shape redundancy and minimum contrast.
+- [x] Add telemetry counters: failed board attempts by reason.
+- [ ] Add test cases for each board-failure reason and successful boarding path.
+- [ ] Tune boarding thresholds (height, vertical speed, horizontal speed) from playtest data.
+
+#### Threat Readability Pass
+
+- [x] Create threat tell matrix documenting each enemy pre-attack tell, timing, and range.
+- [x] Tanks: turret pre-aim animation window before firing.
+- [x] Tanks: muzzle flash tell before shot; distinct audio cue parity review remains open.
+- [x] Jets: entry warning cue (audio + edge awareness indicator state).
+- [x] Jets: long-range recognition cue (contrail/silhouette readability path).
+- [ ] Mines: subtle blinking/glint cadence with distance-based visibility scaling (explicit authored pass).
+- [x] Mines: proximity warning when danger radius is entered.
+- [ ] Standardize tell timing windows into a learnable 300-700ms target envelope.
+- [ ] Ensure each threat has unique color/motion/sound signature without overlap confusion.
+- [ ] Add colorblind-safe alternatives for threat categories.
+- [ ] Add debug overlay toggle for active threat states and tell windows.
+- [ ] Balance false positives (warning spam) vs missed warnings.
+
+#### Sentiment, Debrief, and Progression
+
+- [x] Define sentiment model inputs (rescues, losses, collateral, pacing/objective context).
+- [x] Define score bands and labels (Excellent, Good, Mixed, Poor, Critical).
+- [ ] Add debrief sentiment meter with trend arrow vs previous mission.
+- [x] Add explicit reason lines in debrief (for example +rescues, -collateral).
+- [ ] Persist sentiment state in campaign/session progression data.
+- [ ] Tie sentiment bands to progression effects (reputation modifiers, branching, support bonuses/penalties).
+- [ ] Add safeguards so one event cannot dominate final sentiment outcome.
+- [ ] Add mission-end summary event log for player transparency.
+- [ ] Add debrief audio/visual tone variation by sentiment band.
+- [ ] Move sentiment balancing weights to data config for no-code tuning.
+- [x] Add tests for sentiment computation helpers (progression integration coverage still open).
+- [ ] Add analytics hooks for outcome distribution across playtests.
+
+#### Missile/Flare Diversion Behavior
+
+- [ ] Normalize naming to flare consistently (cleanup any lingering flar typo variants where present).
+- [x] Define diversion eligibility rules (flare window, distance, angle, exclusions).
+- [x] Add missile target-selection step that checks flare decoy before player lock.
+- [x] Implement decoy vector override behavior for diversion target.
+- [x] Add smooth retarget interpolation to avoid unnatural instant turns.
+- [ ] Add lock-break feedback pass (missile trail bend emphasis + dedicated diversion audio cue).
+- [ ] Add cooldown/anti-abuse rule so one flare cannot redirect unlimited missiles.
+- [x] Handle edge cases: no active flare, flare expiry mid-flight, multi-flare selection.
+- [x] Add config knobs: diversion chance, max turn rate, effective radius, flare lifetime.
+- [ ] Add debug overlay state for diverted vs not-diverted decisions (logging exists).
+- [x] Add unit tests for diversion override logic.
+- [ ] Run gameplay balancing pass for diversion fairness/readability.
+
+#### BARAK MRAD and Launcher State Cycle
+
+- [x] Define canonical state cycle: Retract -> Move -> Deploy -> Launch -> Retract/Reload.
+- [x] Add explicit state constants and reduce stringly-typed literals.
+- [x] Add per-state timers/guards and transition conditions.
+- [x] Implement retract completion gate before move/reload progression.
+- [x] Implement move behavior with position goals and safe interruption handling.
+- [x] Implement deploy animation with angle + extension synchronization.
+- [x] Keep launch logic isolated as one-shot trigger with clear reset flags.
+- [x] Add transition fail-safes to prevent stuck states.
+- [x] Add transition SFX/VFX hooks at state boundaries.
+- [x] Add cooldown/reload behavior after launch before next cycle.
+- [ ] Expand debug state inspector to include next transition forecast in addition to current state/timers.
+- [x] Add deterministic tests for full cycle progression and interruption scenarios.
+- [ ] Extend difficulty scaling hooks (faster deploy/reload and smarter reposition behavior).
+
+### Execution Sprint Slice (2026-03-14)
+
+This is the recommended implementation order for the next cycle based on impact vs effort and current mission polish status.
+
+#### P0 - Immediate Clarity and Reliability
+
+- [ ] `P0` Boarding feedback pass (minimum viable UX set):
+  - Add boarding outcome toasts for `Boarding`, `Too high`, `Too fast`, `Doors closed`, `Not grounded`.
+  - Add explicit nearby door-state indicator near boarding prompt.
+  - Add boarding-prompt debounce/cooldown to eliminate flicker.
+  - Done criteria:
+    - Boarding outcomes are understandable without debug overlays.
+    - No prompt flicker in normal hover/land interactions.
+
+- [ ] `P0` Threat-readability closure pass:
+  - Standardize tell timing windows into learnable target envelope (300-700ms where applicable).
+  - Add debug overlay toggle for active tell state + remaining tell window.
+  - Run warning spam vs missed-warning balancing pass.
+  - Done criteria:
+    - Threat tells are readable and distinct in quick smoke and combat stress pass.
+
+- [ ] `P0` Playflow regression hardening:
+  - Add/expand automated tests for transfer pacing + escort transitions and key failure outcomes.
+  - Ensure airport critical suites run in smoke command card.
+  - Done criteria:
+    - No regressions in transfer/escort/failure gates across two consecutive smoke cycles.
+
+#### P1 - Progression and Accessibility
+
+- [ ] `P1` Sentiment debrief and progression integration:
+  - Add debrief sentiment meter with trend arrow vs previous mission.
+  - Persist sentiment state across session progression.
+  - Add balancing config file for weights (no-code tuning path).
+  - Done criteria:
+    - Debrief clearly explains outcome and trend.
+    - Sentiment survives mission transitions.
+
+- [ ] `P1` Boarding accessibility and affordance polish:
+  - Add helicopter-side boarding ring at skid level.
+  - Add grounded HUD chip with strict grounding truth.
+  - Add color+shape redundancy and minimum contrast pass for boarding/threat cues.
+  - Done criteria:
+    - Boarding affordances remain readable under weather and effects load.
+
+- [ ] `P1` Flare diversion readability polish:
+  - Add diversion lock-break feedback polish (trail bend emphasis + dedicated cue).
+  - Add diverted/not-diverted overlay state view in debug mode.
+  - Done criteria:
+    - Diversion decisions are obvious to players and verifiable in debug.
+
+#### P2 - Balance and Content Completion
+
+- [ ] `P2` Flare anti-abuse and fairness balancing:
+  - Add anti-abuse/cooldown control so one flare cannot redirect unlimited missiles.
+  - Run balance pass across early/mid/high pressure encounters.
+  - Done criteria:
+    - Flares remain useful but not dominant.
+
+- [ ] `P2` Threat-category differentiation completion:
+  - Finalize unique color/motion/sound signatures and colorblind-safe alternatives.
+  - Done criteria:
+    - Players can identify threat type quickly without relying on color alone.
+
+- [ ] `P2` Analytics and telemetry extension:
+  - Add outcome-distribution hooks for playtests.
+  - Add mission-end event log summary for transparency.
+  - Done criteria:
+    - Playtest reports include actionable distribution trends.
+
 ### Assets and Content
 
 - [x] Create/integrate `city-bus-doors-open.png` (integrated for finalized door visual state).

@@ -306,6 +306,29 @@ class AirportFuselageDamageTests(unittest.TestCase):
         )
         self.assertEqual(audio.bus_door_calls, 2)
 
+    def test_fuselage_unlock_plays_collapse_callout_once(self) -> None:
+        mission = SimpleNamespace(
+            mission_id="airport",
+            compounds=[
+                _make_compound(x=1000.0, y=220.0, health=100.0, is_open=False),
+                _make_compound(x=1300.0, y=220.0, health=100.0, is_open=False),
+            ],
+            elapsed_seconds=10.0,
+        )
+        hostage_state = create_airport_hostage_state(total_hostages=4, pickup_points=[1000.0, 1300.0])
+        hostage_state.terminal_remaining = [2, 2]
+        bus_state = SimpleNamespace(x=1600.0, stop_x=500.0)
+        helicopter = SimpleNamespace()
+
+        class _Audio:
+            def __init__(self) -> None:
+                self.fuselage_collapse_calls = 0
+
+            def play_fuselage_about_to_collapse(self) -> None:
+                self.fuselage_collapse_calls += 1
+
+        audio = _Audio()
+
         hostage_state = update_airport_hostage_logic(
             hostage_state,
             0.016,
@@ -316,7 +339,110 @@ class AirportFuselageDamageTests(unittest.TestCase):
             meal_truck_state=None,
             tech_state=None,
         )
-        self.assertEqual(audio.bus_door_calls, 2)
+        self.assertEqual(audio.fuselage_collapse_calls, 0)
+
+        mission.compounds[0].is_open = True
+        hostage_state = update_airport_hostage_logic(
+            hostage_state,
+            0.016,
+            bus_state=bus_state,
+            helicopter=helicopter,
+            mission=mission,
+            audio=audio,
+            meal_truck_state=None,
+            tech_state=None,
+        )
+        self.assertEqual(audio.fuselage_collapse_calls, 1)
+
+        hostage_state = update_airport_hostage_logic(
+            hostage_state,
+            0.016,
+            bus_state=bus_state,
+            helicopter=helicopter,
+            mission=mission,
+            audio=audio,
+            meal_truck_state=None,
+            tech_state=None,
+        )
+        self.assertEqual(audio.fuselage_collapse_calls, 1)
+
+    def test_lets_go_callout_fires_when_fuselage_reaches_one_remaining(self) -> None:
+        mission = SimpleNamespace(
+            mission_id="airport",
+            compounds=[
+                _make_compound(x=1000.0, y=220.0, health=100.0, is_open=True),
+                _make_compound(x=1300.0, y=220.0, health=100.0, is_open=False),
+            ],
+            elapsed_seconds=0.0,
+        )
+        hostage_state = create_airport_hostage_state(total_hostages=4, pickup_points=[1000.0, 1300.0])
+        hostage_state.state = "truck_loading"
+        hostage_state.active_terminal_index = 0
+        hostage_state.loading_terminal_index = 0
+        hostage_state.loading_terminal_initial_count = 3
+        hostage_state.terminal_remaining = [3, 1]
+        hostage_state.truck_load_base = 0
+        hostage_state.meal_truck_loaded_hostages = 0
+        hostage_state.boarding_started_s = 0.0
+        hostage_state.transfer_rate_s = 0.5
+
+        bus_state = SimpleNamespace(x=1800.0, stop_x=500.0)
+        helicopter = SimpleNamespace()
+        meal_truck_state = SimpleNamespace(
+            extension_progress=1.0,
+            box_state="extended",
+            x=1027.0,
+            tech_has_deployed=True,
+        )
+        tech_state = SimpleNamespace(is_deployed=True)
+
+        class _Audio:
+            def __init__(self) -> None:
+                self.lets_go_calls = 0
+
+            def play_lets_go(self) -> None:
+                self.lets_go_calls += 1
+
+        audio = _Audio()
+
+        mission.elapsed_seconds = 0.5
+        hostage_state = update_airport_hostage_logic(
+            hostage_state,
+            0.016,
+            bus_state=bus_state,
+            helicopter=helicopter,
+            mission=mission,
+            audio=audio,
+            meal_truck_state=meal_truck_state,
+            tech_state=tech_state,
+        )
+        self.assertEqual(audio.lets_go_calls, 0)
+
+        mission.elapsed_seconds = 1.4
+        hostage_state = update_airport_hostage_logic(
+            hostage_state,
+            0.016,
+            bus_state=bus_state,
+            helicopter=helicopter,
+            mission=mission,
+            audio=audio,
+            meal_truck_state=meal_truck_state,
+            tech_state=tech_state,
+        )
+        self.assertEqual(audio.lets_go_calls, 1)
+
+        mission.elapsed_seconds = 1.6
+        hostage_state = update_airport_hostage_logic(
+            hostage_state,
+            0.016,
+            bus_state=bus_state,
+            helicopter=helicopter,
+            mission=mission,
+            audio=audio,
+            meal_truck_state=meal_truck_state,
+            tech_state=tech_state,
+        )
+        self.assertEqual(audio.lets_go_calls, 1)
 
 
 if __name__ == "__main__":
