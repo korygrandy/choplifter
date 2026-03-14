@@ -62,6 +62,7 @@ class BarakGroundedCollisionTests(unittest.TestCase):
             mission_id="airport",
             airport_bus_state=SimpleNamespace(x=300.0, y=220.0, health=100.0),
             airport_hostage_state=SimpleNamespace(state="boarded"),
+            mission_tech=SimpleNamespace(on_bus=True),
         )
         self.assertFalse(_barak_collision_prefers_bus(mission=mission, diverted_collision=False))
 

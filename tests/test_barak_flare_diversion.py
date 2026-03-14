@@ -299,6 +299,40 @@ class BarakFlareDiversionTests(unittest.TestCase):
         self.assertGreater(dist, 10.0)
         self.assertLess(dist, 70.0)
 
+    def test_prelaunch_flare_sidewind_targets_above_helicopter(self) -> None:
+        mission = SimpleNamespace(
+            tuning=SimpleNamespace(
+                barak_flare_diversion_radius=320.0,
+                barak_flare_diversion_max_flare_age_s=1.8,
+                barak_flare_diversion_chance=1.0,
+                barak_flare_near_miss_radius_px=34.0,
+                barak_flare_spin_rate_deg=520.0,
+                barak_flare_spin_amplitude_px=10.0,
+            ),
+            flares=SimpleNamespace(
+                particles=[SimpleNamespace(pos=Vec2(520.0, 160.0), age=0.2, ttl=1.1)]
+            ),
+        )
+        missile = SimpleNamespace(
+            pos=Vec2(500.0, 220.0),
+            flare_diversion_resolved=False,
+            flare_diversion_allowed=False,
+            flare_seen_post_liftoff=True,
+            diversion_spin_phase=0.0,
+            diversion_miss_side=0,
+            diversion_pass_armed=False,
+            barak_prelaunch_flare_sidewind=True,
+        )
+        helicopter = SimpleNamespace(pos=Vec2(740.0, 240.0), facing=Facing.RIGHT)
+
+        target, diverted = _barak_homing_target(mission=mission, missile=missile, helicopter=helicopter, dt=0.1)
+        heli_target = _barak_target_point(helicopter)
+
+        self.assertTrue(diverted)
+        self.assertLess(target.y, heli_target.y - 30.0)
+        self.assertGreater(target.y, heli_target.y - 52.0)
+        self.assertNotEqual(missile.diversion_miss_side, 0)
+
     def test_turn_toward_angle_caps_steering_rate(self) -> None:
         current = 0.0
         target = 1.2

@@ -163,6 +163,7 @@ class BarakMradStateCycleTests(unittest.TestCase):
             mrad_state="unknown_state",
         )
         mission = self._build_mission(tuning, enemy)
+        mission._barak_first_deploy_started = True
         heli = SimpleNamespace(ground_y=300.0)
         helicopter = SimpleNamespace(pos=Vec2(700.0, 190.0), facing=Facing.RIGHT, grounded=False)
 

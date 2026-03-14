@@ -362,6 +362,14 @@ def _update_enemies(
                             current_angle=missile_angle,
                         )
                     )
+                    # If flare was already active before launch, use the prelaunch
+                    # sidewind profile in projectile homing (above-chopper path).
+                    try:
+                        mission.projectiles[-1].barak_prelaunch_flare_sidewind = bool(
+                            float(getattr(mission, "flare_invuln_seconds", 0.0)) > 0.0
+                        )
+                    except Exception:
+                        pass
                     e.missile_fired = True
                     mission._barak_first_missile_released = True
                     if logger is not None:

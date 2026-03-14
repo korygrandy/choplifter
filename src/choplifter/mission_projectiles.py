@@ -414,6 +414,27 @@ def _barak_homing_target(
     if bool(getattr(missile, "flare_diversion_allowed", False)):
         heli_target = _barak_target_point(helicopter)
 
+        # Flare active before BARAK launch: sidewind above the helicopter
+        # instead of veering relative to launcher origin.
+        if bool(getattr(missile, "barak_prelaunch_flare_sidewind", False)) and not bool(
+            getattr(missile, "diversion_pass_armed", False)
+        ):
+            if int(getattr(missile, "diversion_miss_side", 0)) == 0:
+                side_hint = float(missile.pos.x) - float(heli_target.x)
+                missile.diversion_miss_side = 1 if side_hint >= 0.0 else -1
+
+            spin_rate_deg = float(getattr(tuning, "barak_flare_spin_rate_deg", 520.0))
+            missile.diversion_spin_phase = float(getattr(missile, "diversion_spin_phase", 0.0)) + (
+                math.radians(max(0.0, spin_rate_deg)) * max(0.0, dt)
+            )
+            phase = float(getattr(missile, "diversion_spin_phase", 0.0))
+            side = 1.0 if int(getattr(missile, "diversion_miss_side", 1)) >= 0 else -1.0
+
+            y_offset = -40.0
+            lateral = side * 18.0 + math.cos(phase) * 6.0
+            vertical = math.sin(phase) * 4.0
+            return Vec2(heli_target.x + lateral, heli_target.y + y_offset + vertical), True
+
         if int(getattr(missile, "diversion_miss_side", 0)) == 0:
             side_hint = (flare_pos.x - heli_target.x) if flare_pos is not None else (missile.pos.x - heli_target.x)
             missile.diversion_miss_side = 1 if side_hint >= 0.0 else -1
@@ -663,6 +684,37 @@ def _update_projectiles(
                 if diverted and logger is not None:
                     logger.debug("BARAK_DIVERTED: target=(%.1f, %.1f)", target.x, target.y)
                 p.vel = Vec2(math.cos(p.current_angle) * speed, math.sin(p.current_angle) * speed)
+
+                # Emergency fallback: in rare edge cases a missile can visually
+                # "pin" near the chopper nose (especially around abrupt heading
+                # changes). Force a short-timeout detonation to prevent sticky
+                # vertical missiles while preserving normal direct-hit damage
+                # rules when applicable.
+                if not _barak_collision_prefers_bus(mission=mission, diverted_collision=diverted):
+                    nose = _barak_target_point(helicopter)
+                    dist_to_nose = math.hypot(p.pos.x - nose.x, p.pos.y - nose.y)
+                    if _barak_should_force_detonate_stuck_diversion(
+                        missile=p,
+                        distance_to_nose=dist_to_nose,
+                        close_radius=26.0,
+                        timeout_s=0.11,
+                        dt=dt,
+                    ):
+                        in_lz = _barak_is_in_lz_zone(mission=mission, helicopter=helicopter)
+                        should_damage_heli = (not diverted) and _barak_should_apply_damage(
+                            grounded=bool(helicopter.grounded),
+                            in_lz=in_lz,
+                        )
+                        mission.explosions.emit_fire_plume(p.pos, strength=0.72)
+                        mission.explosions.emit_explosion(p.pos, strength=0.58)
+                        mission.impact_sparks.emit_hit(p.pos, p.vel, strength=0.96)
+                        mission.burning.add_site(p.pos, intensity=0.22)
+                        if should_damage_heli:
+                            damage_helicopter(mission, helicopter, 18.0, logger, source="BARAK_MISSILE")
+                        if logger is not None:
+                            logger.debug("BARAK_NOSE_STICK_DETONATE: dist=%.1f diverted=%s", dist_to_nose, diverted)
+                        p.alive = False
+                        continue
 
                 if diverted:
                     nose = _barak_target_point(helicopter)
