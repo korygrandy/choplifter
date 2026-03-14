@@ -120,15 +120,17 @@ def run() -> None:
     )
     context_swapped = False
 
-    def apply_mission_preview_wrapper() -> None:
+    def apply_mission_preview_wrapper(*, selected_mission_id_override: str | None = None, selected_chopper_asset_override: str | None = None) -> None:
         nonlocal context_swapped
+        effective_mission_id = selected_mission_id_override or selected_mission_id
+        effective_chopper_asset = selected_chopper_asset_override or selected_chopper_asset
         apply_mission_preview_to_context(
             loop_ctx=loop_ctx,
             runtime=runtime,
             create_mission_and_helicopter_fn=create_mission_and_helicopter,
             heli_settings=heli_settings,
-            selected_mission_id=selected_mission_id,
-            selected_chopper_asset=selected_chopper_asset,
+            selected_mission_id=effective_mission_id,
+            selected_chopper_asset=effective_chopper_asset,
             take_mission_stats_snapshot_fn=take_mission_stats_snapshot,
             boarded_count_fn=boarded_count,
             sky_smoke=sky_smoke,

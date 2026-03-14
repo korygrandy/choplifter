@@ -7,7 +7,9 @@ import pytest
 from src.choplifter.game_types import HostageState
 from src.choplifter.helicopter import Facing
 from src.choplifter.mission_hostages import _handle_unload, _update_hostages
+from src.choplifter.mission_tech import MissionTechState, update_mission_tech
 from src.choplifter.settings import HelicopterSettings
+from src.choplifter.vehicle_assets import AirportMealTruckState, update_airport_meal_truck
 
 
 pytestmark = pytest.mark.airport_smoke
@@ -210,6 +212,67 @@ class AirportTechBoardingGateTests(unittest.TestCase):
         _handle_unload(mission, helicopter, HelicopterSettings(), 0.25)
 
         self.assertEqual(mission.hostages[0].state, HostageState.EXITING)
+
+    def test_tower_reboard_sequence_clears_truck_and_reenables_lower_boarding(self) -> None:
+        mission = _mission(mission_id="airport", tech_state_name="waiting_at_lz")
+        mission.hostages = [_hostage(x=10.0, y=200.0)]
+
+        tech_state = MissionTechState(
+            state="waiting_at_lz",
+            on_bus=False,
+            is_deployed=True,
+            tech_x=420.0,
+            tech_y=210.0,
+            lz_wait_x=420.0,
+            lz_wait_y=210.0,
+            boarding_animation_state="idle",
+        )
+        helicopter = SimpleNamespace(
+            grounded=True,
+            doors_open=True,
+            pos=SimpleNamespace(x=450.0, y=190.0),
+        )
+        bus_state = SimpleNamespace(door_state="open", door_animation_progress=0.5, x=1100.0, y=210.0)
+
+        updated_tech = update_mission_tech(
+            tech_state,
+            0.016,
+            helicopter=helicopter,
+            bus_state=bus_state,
+        )
+        self.assertEqual(updated_tech.state, "on_chopper")
+
+        truck = AirportMealTruckState(
+            x=1400.0,
+            y=210.0,
+            plane_lz_x=1500.0,
+            speed_px_per_s=80.0,
+            tech_has_deployed=True,
+        )
+        updated_truck = update_airport_meal_truck(
+            truck,
+            1.0,
+            tech_state=updated_tech,
+            bus_state=bus_state,
+        )
+        self.assertFalse(updated_truck.tech_has_deployed)
+        self.assertEqual(updated_truck.x, 1400.0)
+
+        mission.mission_tech = updated_tech
+        lower_lane_helicopter = SimpleNamespace(
+            grounded=True,
+            doors_open=True,
+            pos=SimpleNamespace(x=0.0, y=0.0),
+        )
+        _update_hostages(
+            mission,
+            lower_lane_helicopter,
+            0.016,
+            HelicopterSettings(),
+            boarded_count_fn=lambda m: 0,
+        )
+
+        self.assertEqual(mission.hostages[0].state, HostageState.MOVING_TO_LZ)
 
 
 if __name__ == "__main__":

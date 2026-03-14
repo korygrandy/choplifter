@@ -772,10 +772,17 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                 if is_fuselage_terminal and not fuselage_backdrop_drawn:
                     _draw_fuselage_wreck(screen, r, t)
 
-            # Jetway body: light tan when closed, darker brown when destroyed/open (matches lower compound deactivated color).
-            body_color = (212, 198, 172) if not c.is_open else (118, 92, 58)
-            edge_color = (78, 72, 60)
-            roof_color = (194, 184, 164)
+            # Keep elevated jetways warm-toned, but give the lower terminal its own cooler terminal facade.
+            if is_elevated_terminal:
+                body_color = (212, 198, 172) if not c.is_open else (118, 92, 58)
+                edge_color = (78, 72, 60)
+                roof_color = (194, 184, 164)
+                seam_color = (172, 158, 132)
+            else:
+                body_color = (168, 182, 196) if not c.is_open else (124, 138, 154)
+                edge_color = (58, 72, 88)
+                roof_color = (142, 156, 174)
+                seam_color = (112, 126, 146)
             draw_rect = r
             if is_fuselage_terminal:
                 square_side = max(42, min(r.width, r.height))
@@ -805,11 +812,25 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                 pygame.draw.rect(screen, (96, 88, 72), roof, 1, border_radius=3)
 
             # Side panel seams.
-            seam_color = (172, 158, 132)
             if not is_fuselage_terminal:
                 for i in range(1, 4):
                     sx = draw_rect.x + int((draw_rect.width / 4.0) * i)
                     pygame.draw.line(screen, seam_color, (sx, draw_rect.y + 4), (sx, draw_rect.bottom - 4), 1)
+
+            if not is_elevated_terminal and not is_fuselage_terminal:
+                # Ground-level terminal gets a dedicated ribbon window band and a small entrance canopy.
+                ribbon_h = max(8, int(draw_rect.height * 0.18))
+                ribbon = pygame.Rect(draw_rect.x + 7, draw_rect.y + 7, max(24, draw_rect.width - 14), ribbon_h)
+                ribbon_color = (78, 102, 128) if passengers_inside else (52, 70, 90)
+                pygame.draw.rect(screen, ribbon_color, ribbon, border_radius=2)
+                pygame.draw.rect(screen, (32, 46, 62), ribbon, 1, border_radius=2)
+
+                canopy_w = max(30, int(draw_rect.width * 0.42))
+                canopy_h = max(5, int(draw_rect.height * 0.08))
+                canopy = pygame.Rect(0, 0, canopy_w, canopy_h)
+                canopy.midbottom = (draw_rect.centerx, draw_rect.bottom - max(18, int(draw_rect.height * 0.28)))
+                pygame.draw.rect(screen, (96, 114, 132), canopy, border_radius=2)
+                pygame.draw.rect(screen, (52, 66, 80), canopy, 1, border_radius=2)
 
             # Upper porthole row: warm amber flicker when occupied, dark when empty.
             if is_elevated_terminal and not is_fuselage_terminal:
@@ -896,13 +917,20 @@ def _draw_compounds(screen: pygame.Surface, mission: MissionState, *, camera_x: 
                 breath = (math.sin(t * 6.5) + 1.0) * 0.5
                 stutter = (math.sin(t * 21.0 + compound_center_x * 0.08) + 1.0) * 0.5
                 mix = breath * 0.6 + stutter * 0.4
-                win_fill = (
-                    min(255, int(192 + mix * 60)),
-                    min(255, int(148 + mix * 52)),
-                    int(38 + mix * 28),
-                )
+                if is_elevated_terminal:
+                    win_fill = (
+                        min(255, int(192 + mix * 60)),
+                        min(255, int(148 + mix * 52)),
+                        int(38 + mix * 28),
+                    )
+                else:
+                    win_fill = (
+                        min(255, int(152 + mix * 56)),
+                        min(255, int(194 + mix * 46)),
+                        min(255, int(218 + mix * 34)),
+                    )
             else:
-                win_fill = (52, 62, 76)
+                win_fill = (52, 62, 76) if is_elevated_terminal else (44, 60, 78)
 
             # Long windows on each french door leaf.
             left_glass = left_door.inflate(-6, -4)

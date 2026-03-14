@@ -178,6 +178,37 @@ class MissionTechTransitionTests(unittest.TestCase):
 
         self.assertEqual(updated.state, "falling")
 
+    def test_on_chopper_does_not_redeploy_when_elevated_passengers_are_cleared(self) -> None:
+        tech_state = MissionTechState(
+            state="on_chopper",
+            tech_x=500.0,
+            tech_y=180.0,
+        )
+        helicopter = SimpleNamespace(
+            grounded=True,
+            doors_open=True,
+            pos=SimpleNamespace(x=500.0, y=180.0),
+        )
+        meal_truck_state = SimpleNamespace(x=520.0, y=210.0)
+        hostage_state = SimpleNamespace(
+            terminal_remaining=[0, 0, 0],
+            total_hostages=16,
+            rescued_hostages=8,
+            boarded_hostages=0,
+            meal_truck_loaded_hostages=0,
+        )
+
+        updated = update_mission_tech(
+            tech_state,
+            0.016,
+            helicopter=helicopter,
+            meal_truck_state=meal_truck_state,
+            hostage_state=hostage_state,
+        )
+
+        self.assertEqual(updated.state, "on_chopper")
+        self.assertFalse(updated.is_deployed)
+
 
 if __name__ == "__main__":
     unittest.main()

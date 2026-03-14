@@ -106,7 +106,13 @@ def handle_nonpaused_gamepad_mode_flow(
     if gamepad_mode.mission_selection_changed:
         next_selected_mission_id = mission_choices[next_selected_mission_index][0]
         audio.play_menu_select()
-        apply_mission_preview()
+        try:
+            apply_mission_preview(
+                selected_mission_id_override=next_selected_mission_id,
+                selected_chopper_asset_override=next_selected_chopper_asset,
+            )
+        except TypeError:
+            apply_mission_preview()
     if previous_mode == "select_mission" and gamepad_mode.selected_mission_backtracked:
         set_toast(f"Mission selected: {mission_choices[next_selected_mission_index][1]}")
 

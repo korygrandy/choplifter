@@ -146,9 +146,13 @@ def update_airport_meal_truck(
 	# Check if tech has been deployed to truck (activates truck driving)
 	if tech_state is not None:
 		tech_state_name = str(getattr(tech_state, "state", "on_chopper"))
-		# Tech is deployed if state is anything except "on_chopper"
-		if tech_state_name != "on_chopper":
-			meal_truck_state.tech_has_deployed = True
+		meal_truck_state.tech_has_deployed = tech_state_name in (
+			"deployed_to_truck",
+			"driving_to_extraction",
+			"extracting",
+			"transferring",
+			"boarding_bus",
+		)
 
 	# In driver mode, use driver input to control truck movement and lift
 	if meal_truck_state.driver_mode_active and driver_input is not None:

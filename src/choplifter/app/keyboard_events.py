@@ -54,12 +54,24 @@ def handle_keyboard_event(event: pygame.event.Event, *, mode: str, controls: Any
             selected_mission_index = cycle_index(selected_mission_index, -1, len(mission_choices))
             selected_mission_id = mission_choices[selected_mission_index][0]
             audio.play_menu_select()
-            apply_mission_preview()
+            try:
+                apply_mission_preview(
+                    selected_mission_id_override=selected_mission_id,
+                    selected_chopper_asset_override=selected_chopper_asset,
+                )
+            except TypeError:
+                apply_mission_preview()
         elif event.key in (pygame.K_RIGHT, pygame.K_d):
             selected_mission_index = cycle_index(selected_mission_index, 1, len(mission_choices))
             selected_mission_id = mission_choices[selected_mission_index][0]
             audio.play_menu_select()
-            apply_mission_preview()
+            try:
+                apply_mission_preview(
+                    selected_mission_id_override=selected_mission_id,
+                    selected_chopper_asset_override=selected_chopper_asset,
+                )
+            except TypeError:
+                apply_mission_preview()
         elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
             mode = "select_chopper"
             set_toast(f"Mission selected: {mission_choices[selected_mission_index][1]}")

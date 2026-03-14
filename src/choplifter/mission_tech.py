@@ -71,6 +71,20 @@ def _tech_boarding_jitter_x(tech_state) -> float:
 	return float((int(seed_x) % 5) - 2)
 
 
+def _has_remaining_elevated_passengers(hostage_state) -> bool:
+	if hostage_state is None:
+		return False
+	remaining = list(getattr(hostage_state, "terminal_remaining", []) or [])
+	if remaining:
+		return sum(max(0, int(v)) for v in remaining) > 0
+	# Fallback for sparse test stubs that only expose aggregate counters.
+	total = int(getattr(hostage_state, "total_hostages", 0))
+	rescued = int(getattr(hostage_state, "rescued_hostages", 0))
+	boarded = int(getattr(hostage_state, "boarded_hostages", 0))
+	loaded = int(getattr(hostage_state, "meal_truck_loaded_hostages", 0))
+	return max(0, total - rescued - boarded - loaded) > 0
+
+
 def update_mission_tech(
 	tech_state: MissionTechState | None,
 	dt: float,
@@ -171,10 +185,12 @@ def update_mission_tech(
 			heli_x = float(getattr(helicopter.pos, "x", 0.0))
 			truck_x = float(getattr(meal_truck_state, "x", 0.0))
 			near_truck = abs(heli_x - truck_x) <= 120.0
+			has_elevated_remaining = _has_remaining_elevated_passengers(hostage_state)
 			supports_deploy = bool(
 				getattr(helicopter, "grounded", False)
 				and getattr(helicopter, "doors_open", False)
 				and near_truck
+				and has_elevated_remaining
 			)
 			
 			if supports_deploy:

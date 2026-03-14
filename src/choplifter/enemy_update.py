@@ -70,6 +70,38 @@ def _intro_audio_still_playing() -> bool:
         return False
 
 
+def _barak_first_deploy_unlocked(mission: MissionState, *, delay_s: float = 2.0) -> bool:
+    """Gate BARAK first deploy until intro audio ends plus a short cooldown."""
+    if bool(getattr(mission, "_barak_first_deploy_started", False)):
+        return True
+
+    mission_t = float(getattr(mission, "elapsed_seconds", 0.0))
+    intro_done_at = getattr(mission, "_barak_intro_audio_done_at_s", None)
+
+    if intro_done_at is None:
+        if _intro_audio_still_playing():
+            return False
+        setattr(mission, "_barak_intro_audio_done_at_s", mission_t)
+        return False
+
+    return mission_t >= float(intro_done_at) + max(0.0, float(delay_s))
+
+
+def _try_enter_barak_deploy(
+    mission: MissionState,
+    e: Enemy,
+    *,
+    logger: logging.Logger | None,
+    reason: str,
+    fx_strength: float,
+) -> bool:
+    if not _barak_first_deploy_unlocked(mission):
+        return False
+    _enter_barak_deploy(mission, e, logger=logger, reason=reason, fx_strength=fx_strength)
+    setattr(mission, "_barak_first_deploy_started", True)
+    return True
+
+
 def _tank_turret_muzzle_pos(mission: MissionState, e: Enemy) -> Vec2:
     mission_id = str(getattr(mission, "mission_id", "")).lower()
     is_airport = mission_id in ("airport", "airport_special_ops")
@@ -243,13 +275,15 @@ def _update_enemies(
                 elif e.mrad_state == BARAK_STATE_RELOAD:
                     _transition_barak_state(e, BARAK_STATE_MOVE, logger=logger, reason="fail_safe")
                 else:
-                    _enter_barak_deploy(
+                    entered = _try_enter_barak_deploy(
                         mission,
                         e,
                         logger=logger,
                         reason="fail_safe",
                         fx_strength=0.35,
                     )
+                    if not entered:
+                        _transition_barak_state(e, BARAK_STATE_MOVE, logger=logger, reason="intro_delay_gate")
 
             if e.mrad_state == BARAK_STATE_MOVE:
                 if e.pos.x < target_x:
@@ -258,7 +292,7 @@ def _update_enemies(
                         e.pos.x = target_x
                         e.vel.x = 0.0
                         e.entered_screen = True
-                        _enter_barak_deploy(
+                        _try_enter_barak_deploy(
                             mission,
                             e,
                             logger=logger,
@@ -268,7 +302,7 @@ def _update_enemies(
                 else:
                     e.vel.x = 0.0
                     e.entered_screen = True
-                    _enter_barak_deploy(
+                    _try_enter_barak_deploy(
                         mission,
                         e,
                         logger=logger,

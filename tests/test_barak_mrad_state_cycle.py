@@ -230,6 +230,76 @@ class BarakMradStateCycleTests(unittest.TestCase):
         self.assertTrue(enemy.missile_fired)
         self.assertTrue(bool(getattr(mission, "_barak_first_missile_released", False)))
 
+    def test_first_deploy_waits_two_seconds_after_intro_audio_finishes(self) -> None:
+        tuning = MissionTuning(barak_state_fail_safe_s=6.0)
+        enemy = Enemy(
+            kind=EnemyKind.BARAK_MRAD,
+            pos=Vec2(404.0, 260.0),
+            vel=Vec2(0.0, 0.0),
+            health=100.0,
+            mrad_state=BARAK_STATE_MOVE,
+        )
+        mission = self._build_mission(tuning, enemy)
+        heli = SimpleNamespace(ground_y=300.0)
+        helicopter = SimpleNamespace(pos=Vec2(700.0, 190.0), facing=Facing.RIGHT, grounded=False)
+
+        with patch("src.choplifter.enemy_update._intro_audio_still_playing", return_value=True):
+            _update_enemies(
+                mission,
+                helicopter,
+                0.05,
+                heli,
+                logger=None,
+                mine_explode=lambda *_a, **_k: None,
+                spawn_enemy_bullet_toward=lambda *_a, **_k: None,
+                damage_helicopter=lambda *_a, **_k: None,
+            )
+        self.assertEqual(enemy.mrad_state, BARAK_STATE_MOVE)
+        self.assertEqual(mission.audio.deploy_calls, 0)
+
+        with patch("src.choplifter.enemy_update._intro_audio_still_playing", return_value=False):
+            mission.elapsed_seconds = 0.0
+            _update_enemies(
+                mission,
+                helicopter,
+                0.05,
+                heli,
+                logger=None,
+                mine_explode=lambda *_a, **_k: None,
+                spawn_enemy_bullet_toward=lambda *_a, **_k: None,
+                damage_helicopter=lambda *_a, **_k: None,
+            )
+            self.assertEqual(enemy.mrad_state, BARAK_STATE_MOVE)
+
+            mission.elapsed_seconds = 1.9
+            _update_enemies(
+                mission,
+                helicopter,
+                0.05,
+                heli,
+                logger=None,
+                mine_explode=lambda *_a, **_k: None,
+                spawn_enemy_bullet_toward=lambda *_a, **_k: None,
+                damage_helicopter=lambda *_a, **_k: None,
+            )
+            self.assertEqual(enemy.mrad_state, BARAK_STATE_MOVE)
+
+            mission.elapsed_seconds = 2.01
+            _update_enemies(
+                mission,
+                helicopter,
+                0.05,
+                heli,
+                logger=None,
+                mine_explode=lambda *_a, **_k: None,
+                spawn_enemy_bullet_toward=lambda *_a, **_k: None,
+                damage_helicopter=lambda *_a, **_k: None,
+            )
+
+        self.assertEqual(enemy.mrad_state, BARAK_STATE_DEPLOY)
+        self.assertGreaterEqual(mission.audio.deploy_calls, 1)
+        self.assertTrue(bool(getattr(mission, "_barak_first_deploy_started", False)))
+
 
 if __name__ == "__main__":
     unittest.main()
