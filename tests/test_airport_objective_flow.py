@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import unittest
 import pytest
 
-from src.choplifter.objective_manager import update_airport_objectives
+from src.choplifter.objective_manager import ESCORT_THREAT_WARNING_TEXT, update_airport_objectives
 
 
 pytestmark = pytest.mark.airport_smoke
@@ -156,6 +156,22 @@ class AirportObjectiveFlowTests(unittest.TestCase):
         self.assertTrue(bool(getattr(mission, "airport_route_bonus_awarded", False)))
         self.assertAlmostEqual(float(getattr(mission, "airport_route_bonus_value", 0.0)), 2.0)
         self.assertAlmostEqual(float(mission.sentiment), 47.0)
+
+    def test_shows_escort_threat_warning_when_tech_is_on_bus(self) -> None:
+        mission = SimpleNamespace(elapsed_seconds=24.0, stats=SimpleNamespace(saved=5))
+        hostage_state = SimpleNamespace(state="boarded", rescued_hostages=4, interrupted_transfers=0)
+        tech_state = SimpleNamespace(state="transfer_complete", is_deployed=True, on_bus=True)
+
+        objective = update_airport_objectives(
+            None,
+            0.016,
+            mission=mission,
+            hostage_state=hostage_state,
+            tech_state=tech_state,
+        )
+
+        self.assertEqual(objective.mission_phase, "escort_to_lz")
+        self.assertEqual(objective.status_text, ESCORT_THREAT_WARNING_TEXT)
 
 
 if __name__ == "__main__":

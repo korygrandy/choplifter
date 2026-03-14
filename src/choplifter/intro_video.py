@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 from typing import Any
 
 import pygame
@@ -97,6 +98,10 @@ class IntroVideoPlayer:
     _audio_wait_s: float = 0.0
     _audio_wait_timeout_s: float = 6.0
     _loading_font: pygame.font.Font | None = None
+    _enable_terminal_typing_sfx: bool = False
+    _typing_sfx: pygame.mixer.Sound | None = None
+    _typing_prev_typed_count: int = 0
+    _typing_last_play_s: float = 0.0
     done: bool = False
 
     _last_error: str | None = None
@@ -106,7 +111,7 @@ class IntroVideoPlayer:
         return IntroVideoPlayer._last_error
 
     @staticmethod
-    def try_create(path: Path) -> "IntroVideoPlayer | None":
+    def try_create(path: Path, *, enable_terminal_typing_sfx: bool = False) -> "IntroVideoPlayer | None":
         IntroVideoPlayer._last_error = None
         try:
             if not path.exists():
@@ -129,7 +134,14 @@ class IntroVideoPlayer:
             fps = float(meta.get("fps") or 30.0)
             duration_s = float(meta.get("duration") or 0.0)
             it = reader.iter_data()
-            player = IntroVideoPlayer(path=path, fps=fps, duration_s=duration_s, _reader=reader, _iter=it)
+            player = IntroVideoPlayer(
+                path=path,
+                fps=fps,
+                duration_s=duration_s,
+                _reader=reader,
+                _iter=it,
+                _enable_terminal_typing_sfx=bool(enable_terminal_typing_sfx),
+            )
             # Start audio extraction in background to avoid frame hitch on cutscene start.
             player._audio_extract_future = _VIDEO_IO_EXECUTOR.submit(_extract_audio_track_to_temp, path)
             return player
@@ -143,6 +155,7 @@ class IntroVideoPlayer:
             return None
 
     def close(self, *, immediate: bool = False) -> None:
+        self._stop_typing_sfx()
         self._stop_audio(immediate=immediate)
         if self._audio_extract_future is not None and self._audio_path is None and self._audio_extract_future.done():
             try:
@@ -240,46 +253,107 @@ class IntroVideoPlayer:
             and self._audio_wait_s < self._audio_wait_timeout_s
         )
 
+    def _stop_typing_sfx(self) -> None:
+        if self._typing_sfx is None:
+            return
+        try:
+            self._typing_sfx.stop()
+        except Exception:
+            pass
+
+    def _ensure_typing_sfx_loaded(self) -> None:
+        if not self._enable_terminal_typing_sfx or self._typing_sfx is not None:
+            return
+        try:
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+            sfx_path = self.path.parent / "typing-on-keyboard.ogg"
+            if sfx_path.exists():
+                self._typing_sfx = pygame.mixer.Sound(str(sfx_path))
+        except Exception:
+            self._typing_sfx = None
+
+    def _tick_typing_sfx(self, *, typed_count: int) -> None:
+        if not self._enable_terminal_typing_sfx:
+            return
+
+        # Keep keyboard SFX brief: only during the first 3 seconds of intro typing.
+        if float(self._audio_wait_s) > 3.0:
+            self._stop_typing_sfx()
+            return
+
+        self._ensure_typing_sfx_loaded()
+        if self._typing_sfx is None:
+            return
+
+        if typed_count <= self._typing_prev_typed_count:
+            return
+
+        now_s = time.monotonic()
+        if (now_s - self._typing_last_play_s) < 0.055:
+            self._typing_prev_typed_count = typed_count
+            return
+
+        self._typing_last_play_s = now_s
+        self._typing_prev_typed_count = typed_count
+        try:
+            self._typing_sfx.play()
+        except Exception:
+            pass
+
     def _draw_terminal_loading_prompt(self, screen: pygame.Surface) -> None:
         if self._loading_font is None:
             self._loading_font = pygame.font.SysFont("consolas", 24, bold=True)
 
-        memorial_text = (
-            "In memory of Sgt. 1st Class Nicole M Amor of the U.S. Army Reserve "
-            "103rd Sustainment Command, KIA Kuwait. Iraq : 03012026"
-        )
+        ready_text = "READY."
+        load_command = 'LOAD "CHOPLIFTER",8,1'
+        ready_hold_s = 0.42
+        load_rate = 22.0
 
-        memorial_rate = 34.0
+        elapsed = max(0.0, float(self._audio_wait_s))
+        load_typed = 0
 
-        cursor = "_" if int(self._audio_wait_s * 3.0) % 2 == 0 else " "
-        count = max(0, min(len(memorial_text), int(self._audio_wait_s * memorial_rate)))
-        terminal_text = f"> {memorial_text[:count]}{cursor}"
+        if elapsed > ready_hold_s:
+            load_elapsed = elapsed - ready_hold_s
+            load_typed = max(0, min(len(load_command), int(load_elapsed * load_rate)))
 
-        x = 34
-        y = screen.get_height() - 108
-        max_width = screen.get_width() - x * 2
+        self._tick_typing_sfx(typed_count=load_typed)
 
-        words = terminal_text.split(" ")
-        lines: list[str] = []
-        current = ""
-        for word in words:
-            candidate = word if not current else f"{current} {word}"
-            if self._loading_font.size(candidate)[0] <= max_width:
-                current = candidate
-            else:
-                if current:
-                    lines.append(current)
-                current = word
-        if current:
-            lines.append(current)
+        # Commodore 64 inspired palette.
+        border_color = (112, 164, 255)      # light blue border
+        background_color = (40, 40, 160)  # dark blue background
+        text_color = (255, 255, 255)      # white text
 
+        screen.fill(border_color)
+        w, h = screen.get_size()
+        border_px = max(14, min(w, h) // 24)
+        inner = pygame.Rect(border_px, border_px, max(1, w - border_px * 2), max(1, h - border_px * 2))
+        pygame.draw.rect(screen, background_color, inner)
+
+        x = inner.x + 26
+        y = inner.y + 22
         line_h = self._loading_font.get_linesize()
-        for i, line in enumerate(lines[-3:]):
-            yy = y + i * line_h
-            glow = self._loading_font.render(line, True, (36, 120, 46))
-            main = self._loading_font.render(line, True, (74, 248, 102))
-            screen.blit(glow, (x + 2, yy + 2))
+
+        def _draw_line(text: str, line_index: int) -> None:
+            yy = y + line_index * line_h
+            main = self._loading_font.render(text, True, text_color)
             screen.blit(main, (x, yy))
+
+        _draw_line(ready_text, 0)
+        active_command = load_command[:load_typed]
+        _draw_line(active_command, 1)
+
+        # Block cursor on second line while command types, then at command end.
+        show_cursor = (int(elapsed * 3.2) % 2) == 0
+        if show_cursor:
+            cursor_line_index = 1
+            cursor_text = active_command
+
+            cursor_x = x + self._loading_font.size(cursor_text)[0] + 2
+            cursor_y = y + cursor_line_index * line_h + 3
+            cursor_w = max(10, self._loading_font.size("M")[0] - 2)
+            cursor_h = max(8, line_h - 6)
+            pygame.draw.rect(screen, text_color, (cursor_x, cursor_y, cursor_w, cursor_h))
 
     def update(self, dt: float) -> None:
         if self.done:
@@ -337,6 +411,8 @@ class IntroVideoPlayer:
         if self._frame is None:
             if self._is_waiting_on_audio():
                 self._draw_terminal_loading_prompt(screen)
+            else:
+                self._stop_typing_sfx()
             return
 
         sw, sh = screen.get_size()
@@ -363,3 +439,5 @@ class IntroVideoPlayer:
 
         if self._is_waiting_on_audio():
             self._draw_terminal_loading_prompt(screen)
+        else:
+            self._stop_typing_sfx()

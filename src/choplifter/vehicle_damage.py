@@ -98,9 +98,15 @@ def is_airport_bus_vulnerable(mission: object | None) -> bool:
 
     objective_state = getattr(mission, "airport_objective_state", None)
     mission_phase = str(getattr(objective_state, "mission_phase", "")).strip().lower()
-    if mission_phase == "escort_to_lz":
+    tech_state = getattr(mission, "mission_tech", None)
+    tech_on_bus = bool(tech_state is not None and bool(getattr(tech_state, "on_bus", False)))
+
+    if mission_phase == "escort_to_lz" and tech_on_bus:
         return True
 
     hostage_state = getattr(mission, "airport_hostage_state", None)
     hostage_phase = str(getattr(hostage_state, "state", "")).strip().lower()
-    return hostage_phase in ("boarded", "rescued")
+    if hostage_phase == "rescued":
+        return True
+
+    return hostage_phase == "boarded" and tech_on_bus

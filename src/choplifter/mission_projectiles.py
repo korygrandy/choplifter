@@ -134,6 +134,9 @@ def _projectile_hits_airport_spawn_enemy(*, projectile: Projectile, previous: Ve
     if kind == "raider":
         center = Vec2(float(getattr(enemy, "x", 0.0)), float(getattr(enemy, "y", 0.0)) - 12.0)
         radius = 18.0
+    elif kind == "raider_mine":
+        center = Vec2(float(getattr(enemy, "x", 0.0)), float(getattr(enemy, "y", 0.0)) - 5.0)
+        radius = 11.0
     else:
         center = Vec2(float(getattr(enemy, "x", 0.0)), float(getattr(enemy, "y", 0.0)))
         radius = 15.0

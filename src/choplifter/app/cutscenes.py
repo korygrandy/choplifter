@@ -30,7 +30,10 @@ def init_intro_cutscene(state: IntroCutsceneState, *, assets_dir: Path, logger: 
     intro_video_path = next((p for p in intro_candidates if p.exists()), intro_candidates[0])
     state.video_path = intro_video_path
 
-    state.video = IntroVideoPlayer.try_create(intro_video_path)
+    state.video = IntroVideoPlayer.try_create(
+        intro_video_path,
+        enable_terminal_typing_sfx=True,
+    )
     if state.video is None:
         logger.info(
             "INTRO_VIDEO: disabled path=%s exists=%s reason=%s",
@@ -100,7 +103,10 @@ def start_mission_cutscene(
     Returns True if cutscene playback started (caller should enter cutscene mode).
     """
 
-    cutscene_video = IntroVideoPlayer.try_create(cutscene_path)
+    cutscene_video = IntroVideoPlayer.try_create(
+        cutscene_path,
+        enable_terminal_typing_sfx=False,
+    )
     if cutscene_video is None:
         logger.info(
             "MISSION_CUTSCENE: skipped id=%s mission_id=%s path=%s exists=%s reason=%s",

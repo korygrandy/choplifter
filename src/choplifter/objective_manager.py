@@ -15,6 +15,7 @@ AIRPORT_MISSION_IDS = ("airport", "airport_special_ops", "airportspecialops", "m
 
 ELEVATED_FIRST_SENTIMENT_BONUS = 3.0
 LOWER_FIRST_SENTIMENT_BONUS = 2.0
+ESCORT_THREAT_WARNING_TEXT = "Escort bus to tower LZ - fend off drones, minesweepers, and raider mines"
 
 
 # Top-center objective strip typewriter state.
@@ -126,7 +127,10 @@ def update_airport_objectives(objective_state, dt: float, *, mission=None, hosta
 		objective_state.route_tip_shown = True
 	elif boarded:
 		objective_state.mission_phase = "escort_to_lz"
-		objective_state.status_text = "Escort bus to tower LZ"
+		if tech_on_bus:
+			objective_state.status_text = ESCORT_THREAT_WARNING_TEXT
+		else:
+			objective_state.status_text = "Escort bus to tower LZ"
 	elif hostage_state is not None and str(getattr(hostage_state, "state", "")) == "transferring_to_bus":
 		objective_state.mission_phase = "transferring_to_bus"
 		objective_state.status_text = "Transfer civilians to bus"

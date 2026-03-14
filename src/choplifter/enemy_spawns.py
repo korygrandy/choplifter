@@ -39,7 +39,7 @@ class AirportSpawnEnemy:
 	x: float
 	y: float
 	vx: float
-	kind: str  # "uav" or "raider"
+	kind: str  # "uav", "raider" (minesweeper), or "raider_mine"
 	ttl_s: float
 	max_health: float = 32.0
 	health: float = 32.0
@@ -72,6 +72,23 @@ def _next_spawn_delay(elapsed_s: float) -> float:
 	return random.uniform(2.8, 4.2)
 
 
+def _is_mission_tech_bus_escort_active(*, mission: object | None, bus_state: object | None) -> bool:
+	"""Threat waves are active only while mission tech is driving bus escort."""
+	if mission is None or bus_state is None:
+		return False
+
+	if not bool(getattr(bus_state, "is_moving", False)):
+		return False
+
+	objective_state = getattr(mission, "airport_objective_state", None)
+	mission_phase = str(getattr(objective_state, "mission_phase", "")).strip().lower()
+	if mission_phase != "escort_to_lz":
+		return False
+
+	tech_state = getattr(mission, "mission_tech", None)
+	return bool(tech_state is not None and bool(getattr(tech_state, "on_bus", False)))
+
+
 def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_state=None, meal_truck_state=None, target_x: float | None = None):
 	if enemy_state is None:
 		enemy_state = create_airport_enemy_state()
@@ -84,9 +101,28 @@ def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_sta
 	if mission is not None and hasattr(mission, "base"):
 		ground_y = float(mission.base.pos.y + mission.base.height)
 
+	escort_attacks_active = _is_mission_tech_bus_escort_active(mission=mission, bus_state=bus_state)
+	if not escort_attacks_active:
+		# Keep airport threats dormant until mission-tech bus escort starts.
+		enemy_state.enemies = []
+		enemy_state.spawn_cooldown_s = max(0.2, float(enemy_state.spawn_cooldown_s))
+		return enemy_state
+
 	if enemy_state.spawn_cooldown_s <= 0.0:
-		spawn_x = world_width + random.uniform(40.0, 180.0)
-		kind = "uav" if random.random() < 0.5 else "raider"
+		spawn_roll = random.random()
+		if spawn_roll < 0.46:
+			kind = "uav"
+		elif spawn_roll < 0.82:
+			kind = "raider"
+		else:
+			kind = "raider_mine"
+
+		if kind == "raider_mine":
+			bus_anchor_x = float(getattr(bus_state, "x", world_width * 0.55))
+			spawn_x = bus_anchor_x + random.uniform(90.0, 240.0)
+			spawn_x = max(120.0, min(world_width - 80.0, spawn_x))
+		else:
+			spawn_x = world_width + random.uniform(40.0, 180.0)
 
 		if kind == "uav":
 			y = max(90.0, ground_y - random.uniform(165.0, 235.0))
@@ -97,13 +133,23 @@ def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_sta
 			phase = "approach"
 			weave_phase = random.uniform(0.0, math.pi * 2.0)
 		else:
-			y = ground_y  # Bottom-aligned to ground, same as city bus
-			vx = -random.uniform(55.0, 80.0)
-			ttl_s = 24.0
-			max_health = 52.0
-			vy = 0.0
-			phase = "approach"
-			weave_phase = 0.0
+			if kind == "raider":
+				y = ground_y  # Bottom-aligned to ground, same as city bus
+				vx = -random.uniform(55.0, 80.0)
+				ttl_s = 24.0
+				max_health = 52.0
+				vy = 0.0
+				phase = "approach"
+				weave_phase = 0.0
+			else:
+				# Raider mine: short-lived static ground hazard during escort.
+				y = ground_y
+				vx = 0.0
+				ttl_s = 9.0
+				max_health = 24.0
+				vy = 0.0
+				phase = "armed"
+				weave_phase = 0.0
 
 		enemy_state.enemies.append(
 			AirportSpawnEnemy(
@@ -157,9 +203,15 @@ def update_airport_enemy_spawns(enemy_state, dt: float, *, mission=None, bus_sta
 			continue
 		if bus_state is not None:
 			dx = abs(e.x - target_ref_x)
-			if dx <= 18.0:
-				# UAV dive impacts are heavier than raider impacts.
-				base_damage = 12.0 if e.kind == "uav" else 5.0
+			impact_radius = 18.0 if e.kind != "raider_mine" else 22.0
+			if dx <= impact_radius:
+				# UAV dive impacts are heavier than raiders/mines.
+				if e.kind == "uav":
+					base_damage = 12.0
+				elif e.kind == "raider_mine":
+					base_damage = 9.0
+				else:
+					base_damage = 5.0
 				target_vehicle = bus_state
 				target_is_bus = True
 				if meal_truck_state is not None:
@@ -212,7 +264,7 @@ def draw_airport_enemies(target: pygame.Surface, enemy_state, *, camera_x: float
 				[(x, y), (x - 10, y + 4), (x - 14, y + 1), (x - 10, y - 3)],
 				1,
 			)
-		else:
+		elif e.kind == "raider":
 			sprite = _get_raider_sprite()
 			if sprite is not None:
 				# Draw centred horizontally, bottom-aligned to ground position.
@@ -232,6 +284,15 @@ def draw_airport_enemies(target: pygame.Surface, enemy_state, *, camera_x: float
 					[(x, y), (x - 10, y + 20), (x + 10, y + 20)],
 					1,
 				)
+		else:
+			# Raider mine: armed ground explosive the player can pick off.
+			mine_body = (170, 170, 185)
+			mine_spike = (65, 65, 75)
+			mine_y = y - 5
+			pygame.draw.circle(target, mine_body, (x, mine_y), 7)
+			for sx, sy in ((0, -10), (8, -4), (8, 4), (0, 10), (-8, 4), (-8, -4)):
+				pygame.draw.line(target, mine_spike, (x, mine_y), (x + sx, mine_y + sy), 2)
+			pygame.draw.circle(target, (32, 32, 38), (x, mine_y), 7, 1)
 
 		if health_ratio <= 0.70:
 			smoke_alpha = 120 if health_ratio > 0.35 else 180
@@ -242,7 +303,14 @@ def draw_airport_enemies(target: pygame.Surface, enemy_state, *, camera_x: float
 
 		if health_ratio <= 0.35:
 			fire_color = (255, 145, 72)
-			fire_x = x + (9 if e.kind == "raider" else -3)
-			fire_y = y - (18 if e.kind == "raider" else 4)
+			if e.kind == "raider":
+				fire_x = x + 9
+				fire_y = y - 18
+			elif e.kind == "raider_mine":
+				fire_x = x
+				fire_y = y - 6
+			else:
+				fire_x = x - 3
+				fire_y = y + 4
 			pygame.draw.circle(target, fire_color, (fire_x, fire_y), 3)
 			pygame.draw.circle(target, (255, 210, 120), (fire_x, fire_y), 1)

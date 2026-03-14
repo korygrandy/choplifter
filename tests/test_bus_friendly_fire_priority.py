@@ -27,6 +27,7 @@ class BusFriendlyFirePriorityTests(unittest.TestCase):
             airport_enemy_state=enemy_state,
             airport_hostage_state=SimpleNamespace(state="boarded"),
             airport_objective_state=SimpleNamespace(mission_phase="escort_to_lz"),
+            mission_tech=SimpleNamespace(on_bus=True),
             stats=SimpleNamespace(enemies_destroyed=0),
             impact_sparks=_DummySparks(),
             explosions=_DummyExplosions(),
