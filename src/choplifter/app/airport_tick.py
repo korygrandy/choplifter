@@ -99,6 +99,20 @@ def _apply_airport_transition_haptics(
         haptics.rumble_airport_event(event="tech_kia", logger=logger)
 
 
+def _maybe_show_escort_attack_toast(*, mission: Any, objective_state: Any, tech_state: Any, bus_state: Any, set_toast: Any) -> None:
+    if mission is None or set_toast is None:
+        return
+    if bool(getattr(mission, "_airport_escort_attack_toast_shown", False)):
+        return
+
+    mission_phase = str(getattr(objective_state, "mission_phase", "")).strip().lower()
+    tech_on_bus = bool(tech_state is not None and bool(getattr(tech_state, "on_bus", False)))
+    bus_moving = bool(bus_state is not None and bool(getattr(bus_state, "is_moving", False)))
+    if mission_phase == "escort_to_lz" and tech_on_bus and bus_moving:
+        set_toast("Escort under attack: fend off drones, minesweepers, and raider mines")
+        mission._airport_escort_attack_toast_shown = True
+
+
 @dataclass
 class AirportTickResult:
     bus_state: Any
@@ -278,6 +292,13 @@ def update_airport_mission_tick(
         bus_state=bus_state,
         meal_truck_state=meal_truck_state,
         tech_state=tech_state,
+    )
+    _maybe_show_escort_attack_toast(
+        mission=mission,
+        objective_state=objective_state,
+        tech_state=tech_state,
+        bus_state=bus_state,
+        set_toast=set_toast,
     )
 
     # --- Cutscene ---
