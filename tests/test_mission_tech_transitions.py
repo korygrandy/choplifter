@@ -156,6 +156,49 @@ class MissionTechTransitionTests(unittest.TestCase):
 
         self.assertEqual(updated.state, "on_chopper")
 
+    def test_transferring_auto_completes_engineer_transfer_on_final_elevated_handoff(self) -> None:
+        tech_state = MissionTechState(
+            state="transferring",
+            on_bus=False,
+            is_deployed=True,
+            tech_x=1300.0,
+            tech_y=210.0,
+            deploy_timer_s=3.0,
+            boarding_animation_state="boarding_bus",
+        )
+        meal_truck_state = SimpleNamespace(x=1320.0, y=210.0)
+        bus_state = SimpleNamespace(
+            x=1160.0,
+            y=210.0,
+            width=64,
+            door_state="open",
+            door_animation_progress=0.5,
+        )
+        hostage_state = SimpleNamespace(
+            state="boarded",
+            boarded_hostages=8,
+            rescued_hostages=0,
+            total_hostages=8,
+            terminal_remaining=[0, 0],
+            meal_truck_loaded_hostages=0,
+        )
+
+        updated = update_mission_tech(
+            tech_state,
+            0.016,
+            meal_truck_state=meal_truck_state,
+            bus_state=bus_state,
+            hostage_state=hostage_state,
+        )
+
+        self.assertEqual(updated.state, "transfer_complete")
+        self.assertTrue(updated.on_bus)
+        self.assertEqual(updated.boarding_animation_state, "idle")
+        self.assertEqual(updated.tech_x, 1160.0)
+        self.assertEqual(updated.tech_y, 210.0)
+        self.assertEqual(bus_state.door_state, "closing")
+        self.assertEqual(bus_state.door_animation_progress, 0.0)
+
     def test_mission_tech_falls_after_airborne_grace_window(self) -> None:
         tech_state = MissionTechState(
             state="on_chopper",

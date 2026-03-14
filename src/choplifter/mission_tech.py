@@ -85,6 +85,35 @@ def _has_remaining_elevated_passengers(hostage_state) -> bool:
 	return max(0, total - rescued - boarded - loaded) > 0
 
 
+def _is_final_elevated_transfer_complete(hostage_state) -> bool:
+	"""Return True once the final elevated-transfer passenger has boarded/rescued.
+
+	Requires explicit terminal tracking fields to avoid changing behavior for older
+	test stubs that only provide aggregate counters.
+	"""
+	if hostage_state is None:
+		return False
+
+	remaining = list(getattr(hostage_state, "terminal_remaining", []) or [])
+	if not remaining:
+		return False
+	if sum(max(0, int(v)) for v in remaining) > 0:
+		return False
+
+	loaded = max(0, int(getattr(hostage_state, "meal_truck_loaded_hostages", 0)))
+	if loaded > 0:
+		return False
+
+	state_name = str(getattr(hostage_state, "state", "")).strip().lower()
+	if state_name in ("boarded", "rescued"):
+		return True
+
+	boarded = max(0, int(getattr(hostage_state, "boarded_hostages", 0)))
+	rescued = max(0, int(getattr(hostage_state, "rescued_hostages", 0)))
+	total = max(0, int(getattr(hostage_state, "total_hostages", 0)))
+	return total > 0 and (boarded + rescued) >= total
+
+
 def update_mission_tech(
 	tech_state: MissionTechState | None,
 	dt: float,
@@ -303,23 +332,37 @@ def update_mission_tech(
 			rescued = int(getattr(hostage_state, "rescued_hostages", 0))
 			total_hostages = int(getattr(hostage_state, "total_hostages", 16))
 			if hostage_state_name in ("boarded", "rescued") or boarded >= total_hostages or rescued >= total_hostages:
-				# Trigger a short visible tech boarding pass from truck to bus.
-				tech_state.state = "boarding_bus"
-				tech_state.on_bus = False
-				tech_state.boarding_animation_state = "boarding_bus"
-				tech_state.boarding_animation_timer = 0.0
-				tech_state.boarding_start_x = float(getattr(meal_truck_state, "x", tech_state.tech_x)) if meal_truck_state is not None else float(tech_state.tech_x)
-				tech_state.boarding_start_y = float(getattr(meal_truck_state, "y", tech_state.tech_y)) if meal_truck_state is not None else float(tech_state.tech_y)
-				if bus_state is not None:
-					tech_state.boarding_end_x = _bus_door_boarding_x(bus_state) + _tech_boarding_jitter_x(tech_state)
-					tech_state.boarding_end_y = float(getattr(bus_state, "y", tech_state.tech_y))
-					if str(getattr(bus_state, "door_state", "closed")) in ("closed", "closing"):
-						bus_state.door_state = "opening"
-						bus_state.door_animation_progress = 0.0
-						if audio is not None and hasattr(audio, "play_bus_door"):
-							audio.play_bus_door()
-					if audio is not None and hasattr(audio, "play_hang_on_yall"):
-						audio.play_hang_on_yall()
+				if _is_final_elevated_transfer_complete(hostage_state):
+					# Final elevated transfer: auto-board engineer with the last passenger handoff.
+					tech_state.state = "transfer_complete"
+					tech_state.on_bus = True
+					tech_state.boarding_animation_state = "idle"
+					if bus_state is not None:
+						tech_state.tech_x = float(getattr(bus_state, "x", tech_state.tech_x))
+						tech_state.tech_y = float(getattr(bus_state, "y", tech_state.tech_y))
+						if str(getattr(bus_state, "door_state", "closed")) in ("open", "opening"):
+							bus_state.door_state = "closing"
+							bus_state.door_animation_progress = 0.0
+							if audio is not None and hasattr(audio, "play_bus_door"):
+								audio.play_bus_door()
+				else:
+					# Trigger a short visible tech boarding pass from truck to bus.
+					tech_state.state = "boarding_bus"
+					tech_state.on_bus = False
+					tech_state.boarding_animation_state = "boarding_bus"
+					tech_state.boarding_animation_timer = 0.0
+					tech_state.boarding_start_x = float(getattr(meal_truck_state, "x", tech_state.tech_x)) if meal_truck_state is not None else float(tech_state.tech_x)
+					tech_state.boarding_start_y = float(getattr(meal_truck_state, "y", tech_state.tech_y)) if meal_truck_state is not None else float(tech_state.tech_y)
+					if bus_state is not None:
+						tech_state.boarding_end_x = _bus_door_boarding_x(bus_state) + _tech_boarding_jitter_x(tech_state)
+						tech_state.boarding_end_y = float(getattr(bus_state, "y", tech_state.tech_y))
+						if str(getattr(bus_state, "door_state", "closed")) in ("closed", "closing"):
+							bus_state.door_state = "opening"
+							bus_state.door_animation_progress = 0.0
+							if audio is not None and hasattr(audio, "play_bus_door"):
+								audio.play_bus_door()
+						if audio is not None and hasattr(audio, "play_hang_on_yall"):
+							audio.play_hang_on_yall()
 
 	# --- State: boarding_bus ---
 	# Tech visibly moves from meal truck to bus before becoming on_bus.

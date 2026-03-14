@@ -182,18 +182,18 @@ This is the active Airport Special Ops checklist. If an item here conflicts with
 
 ### Airport Pivot: Dual Elevated Compounds (Risk-First)
 
-- [ ] `P0` Add second elevated extraction compound (`elevated_fuselage_passenger_compound`) on the left side with parity behavior to the existing `elevated_jetway_passenger_compound`.
+- [x] `P0` Add second elevated extraction compound (`elevated_fuselage_passenger_compound`) on the left side with parity behavior to the existing `elevated_jetway_passenger_compound`.
 
-- [ ] `P0` Update elevated passenger allocation to distribute civilians across both elevated compounds at mission start/reset (not a single elevated pickup point).
+- [x] `P0` Update elevated passenger allocation to distribute civilians across both elevated compounds at mission start/reset (not a single elevated pickup point).
 
-- [ ] `P0` Update mission-tech and meal-truck extraction sequencing so both elevated compounds can be serviced without soft-locks:
+- [x] `P0` Update mission-tech and meal-truck extraction sequencing so both elevated compounds can be serviced without soft-locks:
   - pickup targeting/order for terminal A/B
   - truck loading/retraction/transferring loops per terminal
   - completion gate only after both elevated compounds are emptied.
 
-- [ ] `P0` Expand objective/event flow text and state progression to explicitly handle dual elevated extraction before transfer completion.
+- [x] `P0` Expand objective/event flow text and state progression to explicitly handle dual elevated extraction before transfer completion.
 
-- [ ] `P0` Add regression tests for dual elevated flow (distribution, terminal switching, transfer completion, rescue aggregation, and interruption/reboard paths).
+- [x] `P0` Add regression tests for dual elevated flow (distribution, terminal switching, transfer completion, rescue aggregation, and interruption/reboard paths).
 
 - [ ] `P1` Add burning plane fuselage visual set and overlay composition under the new raised left elevated compound (layering + collision/readability validation).
 

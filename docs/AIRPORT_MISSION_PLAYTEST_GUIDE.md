@@ -1,8 +1,10 @@
-# Airport Special Ops - End-to-End Playtest Guide
+# Airport Special Ops - Playtest Guide (Polished State)
 
-**Branch:** `feature/airport-special-ops-mission`  
-**Mission IDs:** `airport` / `airport_special_ops`  
-**Validated End-to-End Flow:** Tech deploy -> meal-truck extraction -> bus transfer -> escort/deboard -> tech reboard -> lower rescue continuation -> combined-rescue win
+Last Updated: 2026-03-14
+Branch: feature/airport-special-ops-mission
+Mission IDs: airport / airport_special_ops
+
+This guide is the current acceptance baseline for Airport Special Ops after the latest mission-flow stabilization and BARAK behavior updates.
 
 ---
 
@@ -11,10 +13,10 @@
 ```powershell
 # From workspace root with venv active
 py run.py
-# Select "Airport Special Ops"
+# Select Airport Special Ops
 ```
 
-Automated smoke suite:
+Optional smoke automation:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\run_airport_smoke.ps1
@@ -22,224 +24,218 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_airport_smoke.ps1
 
 ---
 
-## Smoke Pass Command Card
+## Smoke Report Card
 
-Capture these fields for every smoke pass run:
+Capture these values for every pass:
 
-- `Input device`: keyboard / gamepad / mixed
-- `Objective text`: exact strip text at each phase gate
-- `Bus health`: start, first escort impact, post-respawn impact window
-- `Crash count`: before and after escort crash validation
-- `Passenger count`: visible `xN` during transfer/deboard
-- `Result`: `PASS` or `FAIL`
+- Input path: keyboard / gamepad / mixed
+- Objective strip sequence: exact text seen at each major gate
+- Bus health samples: start, first escort impact, post-respawn window
+- Crash count: before and after escort crash window checks
+- Passenger transfer evidence: visible xN marker and final rescue totals
+- Result: PASS or FAIL
 
-Use this compact report template:
+Template:
 
 ```text
 Airport Smoke Report
 - Input: <keyboard|gamepad|mixed>
-- Objective checkpoints: <text sequence or mismatch>
+- Objective sequence: <exact text checkpoints>
 - Bus health samples: <values>
 - Crash count: <before -> after>
-- Passenger xN checks: <observed>
+- Passenger checks: <xN and final totals>
 - Result: <PASS|FAIL>
 - Notes: <optional>
 ```
 
 ---
 
-## Airport Gameplay Truth
+## Mission Truth (Acceptance Baseline)
 
-Use this as the acceptance baseline:
+- Airport mission success uses combined rescued civilians target of 16.
+- Rescue is split into two lanes:
+  - Elevated compounds (fuselage + jetway) use meal truck -> bus pipeline.
+  - Lower compounds use helicopter rescue flow.
+- Elevated flow is complete only after both elevated compounds are emptied.
+- Transfer and escort are phase-gated by objective state and runtime conditions.
+- Engineer must end up on bus for escort phase logic and threat activation.
+- Final elevated transfer behavior:
+  - When the final elevated passenger handoff completes, engineer auto-transfers to bus.
+- Tower LZ sequence remains:
+  - bus reaches LZ band -> engineer disembarks -> reboard gate for continuation.
 
-- Total airport win target is combined rescued civilians `16` (lower terminals + elevated transfer path).
-- Elevated civilians must use the meal-truck -> bus pipeline.
-- Lower civilians must be rescued via helicopter compound flow.
-- Bus reaching tower LZ/deboard is a major phase gate, not automatic full mission completion when lower rescues remain.
-- Mission tech must be reboarded at tower LZ before lower-rescue continuation messaging appears.
+---
+
+## New/Important Behavioral Gates To Verify
+
+### Escort Threat Activation
+
+Airport escort threats (drones, minesweepers/raiders, raider mines) are active only when:
+
+- objective phase is escort_to_lz
+- mission tech is on_bus
+- bus is moving
+
+Expected UX:
+
+- Objective strip uses escort threat warning text during this phase.
+- One-time toast appears on escort activation:
+  Escort under attack: fend off drones, minesweepers, and raider mines
+
+### BARAK Missile Behavior
+
+- Pre-launch flare active: BARAK diversion sidewinds above chopper (~40 px high profile).
+- Post-launch flare activation: keep current near-nose diverted detonation behavior.
+- Nose-stick prevention: missiles should not remain vertically pinned to chopper nose; fallback detonation should resolve quickly.
 
 ---
 
 ## Global Pass Criteria
 
-- No soft-locks across any phase transition.
-- Objective strip text stays aligned with phase progression.
-- Keyboard/gamepad parity holds for mission-critical interactions.
-- Driver modes lock helicopter weapons (gun + flare).
-- Crash/respawn keeps mission continuity and applies temporary escort-risk tuning.
-- Mission ends only when combined rescued reaches `16`.
+- No soft-locks through full route:
+  tech deploy -> elevated extraction(s) -> transfer -> escort -> tower LZ -> tech reboard -> lower continuation -> win
+- Objective strip text matches state progression without stale prompts.
+- Keyboard and gamepad parity for mission-critical actions.
+- Driver mode weapon lockouts still apply.
+- Crash/respawn preserves mission continuity.
+- Mission ends only on combined rescue target meeting 16.
 
 ---
 
-## 10-Minute Smoke Pass
+## 10-Minute Quick Smoke
 
-Run this before the full matrix to catch high-impact regressions quickly.
+| # | Action | Expected |
+| --- | --- | --- |
+| Q1 | Start airport mission and deploy engineer to meal truck | Engineer exits chopper and truck phase begins |
+| Q2 | Complete one elevated extraction and transfer cycle | Transfer lane works, doors and xN marker update |
+| Q3 | Complete final elevated passenger handoff | Engineer auto-transfers with final handoff |
+| Q4 | Confirm escort phase starts with threats active | Threat warning objective text + one-time escort toast |
+| Q5 | Trigger a BARAK engagement with flare before launch | Missile sidewinds above chopper |
+| Q6 | Trigger flare after BARAK missile launch | Near-nose diversion behavior remains intact |
+| Q7 | During escort, induce one crash and recover | Bus continues; post-respawn risk window observable |
+| Q8 | Reach tower LZ and reboard engineer | Continuation prompt clears after valid reboard |
+| Q9 | Finish remaining lower rescues (if needed) | Combined total reaches 16 and mission succeeds |
 
-| # | Action | Expected Result |
-|---|--------|-----------------|
-| S1 | Start `Airport Special Ops` and deploy tech to meal truck | Tech leaves chopper and truck flow starts |
-| S2 | Reach transfer and confirm bus door open/close cycle | Transfer starts and bus door state does not get stuck |
-| S3 | Enter then exit bus driver mode once | Bus control handoff works; chopper weapons are locked while driving |
-| S4 | Let bus reach tower LZ and verify tech reboard prompt | Objective shows tech pickup prompt at tower LZ |
-| S5 | Reboard tech (grounded + doors open) | Objective advances to lower-rescue continuation (if total < `16`) |
-| S6 | Force one chopper crash during active escort | Bus keeps moving; post-respawn escort-risk window is observable |
-| S7 | Complete one lower rescue action (or verify prior saved count) | Combined rescue progression still updates correctly |
+Quick result:
 
-Smoke pass result:
-
-- `PASS`: all S1-S7 behave as expected.
-- `FAIL`: any blocker/soft-lock/objective mismatch; run full matrix and file issue with phase details.
-
----
-
-## Objective Text Sequence Check
-
-At minimum, objective strip should progress through these key statuses in the correct context:
-
-1. `Deploy mission tech to meal truck`
-2. `Drive meal truck to damaged plane`
-3. `Extend meal-truck lift at damaged plane` (when at jetway with lift not extended)
-4. `Load civilians onto meal truck`
-5. `Drive meal truck to bus transfer lane`
-6. `Transfer civilians to bus`
-7. `Escort bus to tower LZ`
-8. `Land at tower LZ and pick up mission tech`
-9. `Resume lower-terminal rescues` (when combined rescued is still below `16`)
-10. `All civilians rescued` (when combined rescued reaches `16`)
+- PASS: Q1-Q9 all valid with no blockers.
+- FAIL: any objective mismatch, stuck transition, or unrecoverable state.
 
 ---
 
-## Full End-To-End Functional Matrix
+## Objective Text Checkpoints
 
-| # | Action | Expected Result |
-|---|--------|-----------------|
-| 1 | Start `Airport Special Ops` | Airport world loads with mission tech on chopper and normal HUD state |
-| 2 | Confirm initial entities | Bus, meal truck, objective marker, and airport hostages render without errors |
-| 3 | Land near meal truck and open doors (`E` / gamepad `A`) | Tech deploys from chopper to truck; tech state leaves `on_chopper` |
-| 4 | Observe post-deploy control state | Chopper remains flyable; truck path logic activates |
-| 5 | Follow truck to elevated jetway area | Truck enters extraction zone; lift extension behavior begins |
-| 6 | Validate lift extraction behavior | Hostage loading starts only when truck/lift/tech conditions are met |
-| 7 | Validate loading pacing | Passengers board meal truck one-by-one around `~0.5s` cadence |
-| 8 | Validate interrupted-transfer recovery | Recalling/interrupting tech resets hostage transfer state without soft-lock |
-| 9 | After load complete, observe truck moving toward bus | Truck transitions to transfer lane behavior |
-| 10 | Validate transfer gate | Bus transfer starts only when truck is near bus and loaded passengers exist |
-| 11 | During transfer, observe bus door visuals | Door open/close transitions and blend timing are smooth; no stuck door state |
-| 12 | Validate transfer completion | Hostages move from truck count to bus count; tech reaches bus transfer-complete path |
-| 13 | Let escort run to tower LZ (auto or manual) | Bus advances toward `stop_x~500`; objective reflects escort phase |
-| 14 | Validate deboard trigger | Deboard/rescue at tower LZ occurs reliably even if bus is still moving in LZ band |
-| 15 | Validate tech disembark/reboard gate | Objective switches to pickup prompt until grounded + doors-open reboard occurs |
-| 16 | Reboard tech at tower LZ | Objective switches to lower-rescue continuation when total is below `16` |
-| 17 | Rescue lower-terminal civilians via chopper compounds | Lower-rescue flow increments combined rescue total normally |
-| 18 | Reach combined rescued `16` | Mission ends with success debrief (`All civilians rescued`) |
+Expected major checkpoints (contextual):
+
+1. Deploy mission tech to meal truck
+2. Drive meal truck to Fuselage Terminal or Jetway Terminal
+3. Extend meal-truck lift at [active elevated terminal]
+4. Load civilians onto meal truck at [active elevated terminal]
+5. Drive meal truck to bus transfer lane
+6. Transfer civilians to bus
+7. Escort bus to tower LZ - fend off drones, minesweepers, and raider mines
+8. Land at tower LZ and pick up mission tech
+9. Resume Lower Terminal rescues (if combined total < 16)
+10. All civilians rescued
+
+Notes:
+
+- Terminal labels should correctly reflect active elevated target (fuselage vs jetway).
+- No regression to older placeholder terminal wording.
 
 ---
 
-## Mission-Specific Controls And Modes
+## Full Functional Matrix
 
-### Meal Truck Driver Mode
+### A. Core Flow
 
-| # | Action | Expected Result |
-|---|--------|-----------------|
-| 19 | Enter meal-truck driver mode at valid gate | Camera follows truck; truck responds to directional input |
-| 20 | While driving truck, attempt gun/flare | Chopper gun + flare are blocked |
-| 21 | Exit truck mode | Camera and control ownership return cleanly to helicopter |
+| # | Action | Expected |
+| --- | --- | --- |
+| A1 | Mission start | Airport entities initialize cleanly |
+| A2 | Engineer deploy gate (land + doors near truck) | Engineer enters truck state |
+| A3 | Truck drives to active elevated terminal | Active terminal routing works |
+| A4 | Lift extension and loading | Loading only occurs under valid tech/truck/lift conditions |
+| A5 | Interrupt/recover extraction once | No soft-lock, state resumes correctly |
+| A6 | Truck returns to bus lane | Transfer gate triggers correctly |
+| A7 | Transfer completes with xN visible | Bus passenger marker and counts update |
+| A8 | Final elevated handoff | Engineer auto-transfers to bus |
+| A9 | Escort to tower LZ | Escort phase and threat activation hold |
+| A10 | Tower LZ disembark + reboard | Reboard prompt and handoff are correct |
+| A11 | Lower rescue continuation | Lower flow progresses without elevated state corruption |
+| A12 | Combined 16 reached | Success end state only at combined target |
 
-### Bus Driver Mode
+### B. Controls and Driver Modes
 
-| # | Action | Expected Result |
-|---|--------|-----------------|
-| 22 | Enter bus mode after tech-on-bus gate is valid | Manual bus control activates |
-| 23 | Drive bus left/right within clamps | Bus movement obeys world and stop clamps |
-| 24 | While driving bus, attempt gun/flare | Chopper gun + flare remain blocked |
-| 25 | Exit bus mode | Auto-drive resumes without desync |
+| # | Action | Expected |
+| --- | --- | --- |
+| B1 | Enter/exit meal truck mode | Clean handoff, no camera/control desync |
+| B2 | Enter/exit bus mode (valid gate only) | Gate rules enforced, clean exit |
+| B3 | Attempt gun/flare while driving vehicle | Chopper weapons are blocked |
+| B4 | Repeat B1-B3 on keyboard and gamepad | Parity holds |
 
-### Input Parity
+### C. Combat/Threats
 
-| # | Action | Expected Result |
-|---|--------|-----------------|
-| 26 | Repeat steps 19-25 on keyboard | Behavior is stable and consistent |
-| 27 | Repeat steps 19-25 on gamepad | Same behavior as keyboard path |
+| # | Action | Expected |
+| --- | --- | --- |
+| C1 | Escort inactive state | Airport escort threats remain dormant |
+| C2 | Escort active state | Threats spawn/engage as expected |
+| C3 | BARAK pre-launch flare case | Sidewind above chopper profile |
+| C4 | BARAK post-launch flare case | Near-nose diversion/detonation behavior |
+| C5 | BARAK nose-stick repro attempts | No long vertical pin/sticky missile visuals |
+| C6 | Friendly-fire bus checks | Damage routing follows current rules |
 
----
+### D. Failure and Recovery
 
-## Combat And Threat Behavior (Airport-Specific)
-
-| # | Action | Expected Result |
-|---|--------|-----------------|
-| 28 | Force BARAK overlap scenario (bus + chopper near same x) while flying helicopter | BARAK collision prioritizes helicopter when player is not driving ground vehicle |
-| 29 | Repeat overlap while driving truck or bus | BARAK can target/damage bus per driving-state preference |
-| 30 | Land chopper in tower LZ during airport escort threats | Tower-LZ immunity for helicopter damage is honored |
-| 31 | Test friendly fire on bus with player weapons | Bus health decreases according to friendly-fire logic |
-| 32 | Verify flare diversion path under pressure | BARAK/divertible missile behavior remains correct |
-
----
-
-## Crash/Respawn Option 3 Validation
-
-| # | Action | Expected Result |
-|---|--------|-----------------|
-| 33 | During active escort (`boarded`), intentionally crash chopper | Crash sequence runs, bus continues progressing (no mission pause) |
-| 34 | During first `~3s` post-respawn, allow bus impacts | Bus takes increased damage (`1.35x`) in the active escort window |
-| 35 | After window expires, allow similar impacts | Bus damage returns to baseline |
-| 36 | Crash outside escort-active state (`waiting` / `truck_loading`) | Temporary escort-risk multiplier is not applied |
-
----
-
-## Failure And Recovery Paths
-
-| # | Action | Expected Result |
-|---|--------|-----------------|
-| 37 | Destroy bus before successful mission completion | Mission fails with bus-destroyed outcome |
-| 38 | Trigger complete passenger-loss outcome where possible | Mission fails with passenger-loss outcome |
-| 39 | Let extraction deadline expire before completion | Deadline failure triggers correctly |
-| 40 | Accumulate chopper crashes to crash limit | Mission fails at configured crash threshold |
+| # | Action | Expected |
+| --- | --- | --- |
+| D1 | Bus destruction path | Failure condition triggers correctly |
+| D2 | Deadline expiration path | Failure condition triggers correctly |
+| D3 | Crash threshold failure | Failure condition triggers correctly |
+| D4 | Crash during active escort then recover | Continuity maintained; temporary risk window observed |
 
 ---
 
-## UI And Stateflow Regressions
+## Suggested Execution Passes
 
-| # | Action | Expected Result |
-|---|--------|-----------------|
-| 41 | Pause during active airport phases and resume | No state corruption; mission flow continues correctly |
-| 42 | Open pause from mission-end screen and navigate quit/cancel | Pause/menu behavior works on both keyboard and gamepad |
-| 43 | From chopper-select screen press `Esc` | Returns to mission-select as expected |
-
----
-
-## Suggested Execution Matrix
-
-Run at least these four passes:
-
-1. `Pass A (Keyboard Auto)`: no manual bus/truck driving, complete full flow to combined `16` rescue success.
-2. `Pass B (Keyboard Manual)`: use truck + bus manual modes, verify weapon lockouts and clean exits.
-3. `Pass C (Gamepad Mixed)`: repeat critical deployment/driver/reboard interactions on gamepad.
-4. `Pass D (Crash Stress)`: force 2+ crashes during escort and verify Option 3 risk window behavior.
+1. Pass A: Keyboard, mostly auto drive, full mission completion.
+2. Pass B: Keyboard with manual truck + bus usage.
+3. Pass C: Gamepad parity run of critical gates.
+4. Pass D: Combat stress (BARAK + escort threats + crash/recovery).
+5. Pass E: Failure-path run (bus destroy, deadline, crash limit).
 
 ---
 
-## Quick Reference Values
+## High-Value Telemetry To Capture During Runs
 
-| Setting | Target |
-|---------|--------|
-| Combined rescue win target | `16` |
-| Truck spawn area | `x~1060` |
-| Elevated pickup area | `x~1500` |
-| Tower LZ stop reference | `stop_x~500` (left side) |
-| Bus creep speed (pre-escort) | `20 px/s` |
-| Bus escort speed | `80 px/s` |
-| Passenger transfer cadence | `~0.5s` per passenger |
-| Bus entry gate | Tech on bus + helicopter within `~200px` |
-| Post-respawn escort-risk window | `3.0s` |
-| Escort-risk bus damage multiplier | `1.35x` (escort-active only) |
+- Mission phase transitions with timestamps.
+- Objective text at each transition.
+- terminal_remaining and meal_truck_loaded_hostages during final elevated handoff.
+- Engineer state transitions around transferring -> transfer_complete.
+- Bus health deltas in escort and post-respawn risk windows.
+- BARAK missile behavior clips for pre-launch flare and post-launch flare scenarios.
 
 ---
 
-## Reporting Checklist
+## Issue Filing Checklist
 
-When filing an issue from this guide, include:
+When filing a playtest issue, include:
 
-- Input device path (`keyboard`, `gamepad`, or both).
-- Exact objective text shown at failure point.
-- Last successful phase + next expected phase.
-- Bus health, visible passenger count (`xN`), and crash count.
-- Whether issue is deterministic across 2 reruns.
+- Input path (keyboard/gamepad/mixed)
+- Exact objective text at failure moment
+- Last known good phase and expected next phase
+- Relevant counters (bus health, xN, crash count, rescued totals)
+- Deterministic? (repro across at least 2 reruns)
+- Short repro steps
+
+---
+
+## Exit Criteria For "Polished" Validation Cycle
+
+A validation cycle is complete when:
+
+- All Quick Smoke steps pass.
+- No soft-locks in full matrix runs.
+- BARAK behavior checks pass in both flare timing modes.
+- Final elevated handoff auto-transfer is consistently correct.
+- Keyboard/gamepad parity is verified.
+- Smoke report card is submitted with PASS.
