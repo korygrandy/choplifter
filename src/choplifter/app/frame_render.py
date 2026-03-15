@@ -98,13 +98,14 @@ def draw_playing_hud_and_overlays(
     hud_disabled_timer: float,
     vip_kia_overlay_timer: float,
     tech_kia_overlay_timer: float,
+    hostage_kia_overlay_timer: float,
     city_objective_overlay_timer: float,
     frame_dt: float,
     draw_hud_fn: object,
     driver_mode_active: bool = False,
     debug_mode: bool = False,
-) -> tuple[float, float, float]:
-    """Draw playing HUD effects and return updated (vip_timer, tech_timer, objective_timer)."""
+) -> tuple[float, float, float, float]:
+    """Draw playing HUD effects and return updated overlay timers."""
     if hud_disabled_timer > 0.0:
         # Draw a static overlay to indicate HUD/targeting is disabled.
         overlay_surf = pygame.Surface(target.get_size(), pygame.SRCALPHA)
@@ -115,6 +116,7 @@ def draw_playing_hud_and_overlays(
 
     next_vip_timer = float(vip_kia_overlay_timer)
     next_tech_kia_timer = float(tech_kia_overlay_timer)
+    next_hostage_kia_timer = float(hostage_kia_overlay_timer)
     next_city_objective_timer = float(city_objective_overlay_timer)
 
     if next_city_objective_timer > 0.0:
@@ -180,7 +182,24 @@ def draw_playing_hud_and_overlays(
         overlay.blit(text, ((screen.get_width() - text.get_width()) // 2, 10))
         target.blit(overlay, (0, screen.get_height() // 2 - 30))
 
-    return next_vip_timer, next_tech_kia_timer, next_city_objective_timer
+    if next_hostage_kia_timer > 0.0:
+        next_hostage_kia_timer -= float(frame_dt)
+        font = pygame.font.SysFont("consolas", 36)
+        text = font.render("MISSION FAILED. Hostage KIA.", True, (255, 32, 32))
+        if next_hostage_kia_timer < 0.5:
+            alpha = int(255 * (next_hostage_kia_timer / 0.5))
+        elif next_hostage_kia_timer > 2.5:
+            alpha = int(255 * (3.0 - next_hostage_kia_timer) / 0.5)
+        else:
+            alpha = 255
+        overlay = pygame.Surface((screen.get_width(), 60), pygame.SRCALPHA)
+        bg_alpha = max(0, min(255, int(alpha * 0.5)))
+        overlay.fill((0, 0, 0, bg_alpha))
+        text.set_alpha(alpha)
+        overlay.blit(text, ((screen.get_width() - text.get_width()) // 2, 10))
+        target.blit(overlay, (0, screen.get_height() // 2 - 30))
+
+    return next_vip_timer, next_tech_kia_timer, next_hostage_kia_timer, next_city_objective_timer
 
 
 def draw_mode_overlays(
@@ -250,6 +269,7 @@ def render_world_branch(
     hud_disabled_timer: float,
     vip_kia_overlay_timer: float,
     tech_kia_overlay_timer: float,
+    hostage_kia_overlay_timer: float,
     city_objective_overlay_timer: float,
     mission_end_return_seconds: float,
     meal_truck_driver_mode: bool,
@@ -277,7 +297,7 @@ def render_world_branch(
     draw_mission_select_overlay_fn: object,
     draw_chopper_select_overlay_fn: object,
     draw_mission_end_overlay_fn: object,
-) -> tuple[float, float, float]:
+) -> tuple[float, float, float, float]:
     """Render the shared world branch and return updated overlay timers."""
     draw_sky_fn(
         target,
@@ -332,9 +352,10 @@ def render_world_branch(
 
     next_vip_timer = float(vip_kia_overlay_timer)
     next_tech_kia_timer = float(tech_kia_overlay_timer)
+    next_hostage_kia_timer = float(hostage_kia_overlay_timer)
     next_city_objective_timer = float(city_objective_overlay_timer)
     if mode == "playing":
-        next_vip_timer, next_tech_kia_timer, next_city_objective_timer = draw_playing_hud_and_overlays(
+        next_vip_timer, next_tech_kia_timer, next_hostage_kia_timer, next_city_objective_timer = draw_playing_hud_and_overlays(
             target=target,
             screen=screen,
             mission=mission,
@@ -342,6 +363,7 @@ def render_world_branch(
             hud_disabled_timer=hud_disabled_timer,
             vip_kia_overlay_timer=next_vip_timer,
             tech_kia_overlay_timer=next_tech_kia_timer,
+            hostage_kia_overlay_timer=next_hostage_kia_timer,
             city_objective_overlay_timer=next_city_objective_timer,
             frame_dt=frame_dt,
             draw_hud_fn=draw_hud_fn,
@@ -369,7 +391,7 @@ def render_world_branch(
         mission,
         mission_end_return_seconds=float(mission_end_return_seconds),
     )
-    return next_vip_timer, next_tech_kia_timer, next_city_objective_timer
+    return next_vip_timer, next_tech_kia_timer, next_hostage_kia_timer, next_city_objective_timer
 
 
 def render_frame_post_fx(
@@ -439,6 +461,7 @@ def render_mode_frame(
     hud_disabled_timer: float,
     vip_kia_overlay_timer: float,
     tech_kia_overlay_timer: float,
+    hostage_kia_overlay_timer: float,
     city_objective_overlay_timer: float,
     mission_end_return_seconds: float,
     meal_truck_driver_mode: bool,
@@ -479,21 +502,22 @@ def render_mode_frame(
     draw_debug_overlay_fn: object,
     draw_toast_fn: object,
     draw_damage_flash_fn: object,
-) -> tuple[float, float, float]:
+) -> tuple[float, float, float, float]:
     """Render the frame by mode and return updated overlay timers."""
     next_vip_timer = float(vip_kia_overlay_timer)
     next_tech_kia_timer = float(tech_kia_overlay_timer)
+    next_hostage_kia_timer = float(hostage_kia_overlay_timer)
     next_city_objective_timer = float(city_objective_overlay_timer)
 
     if mode == "intro":
         draw_intro_fn(cutscenes.intro, target, skip_hint=skip_hint)
-        return next_vip_timer, next_tech_kia_timer, next_city_objective_timer
+        return next_vip_timer, next_tech_kia_timer, next_hostage_kia_timer, next_city_objective_timer
 
     if mode == "cutscene":
         draw_mission_cutscene_fn(cutscenes.mission, target, skip_hint=skip_hint)
-        return next_vip_timer, next_tech_kia_timer, next_city_objective_timer
+        return next_vip_timer, next_tech_kia_timer, next_hostage_kia_timer, next_city_objective_timer
 
-    next_vip_timer, next_tech_kia_timer, next_city_objective_timer = render_world_branch(
+    next_vip_timer, next_tech_kia_timer, next_hostage_kia_timer, next_city_objective_timer = render_world_branch(
         mode=mode,
         target=target,
         screen=screen,
@@ -515,6 +539,7 @@ def render_mode_frame(
         hud_disabled_timer=hud_disabled_timer,
         vip_kia_overlay_timer=next_vip_timer,
         tech_kia_overlay_timer=next_tech_kia_timer,
+        hostage_kia_overlay_timer=next_hostage_kia_timer,
         city_objective_overlay_timer=next_city_objective_timer,
         mission_end_return_seconds=float(mission_end_return_seconds),
         meal_truck_driver_mode=meal_truck_driver_mode,
@@ -564,7 +589,7 @@ def render_mode_frame(
         draw_damage_flash_fn=draw_damage_flash_fn,
     )
 
-    return next_vip_timer, next_tech_kia_timer, next_city_objective_timer
+    return next_vip_timer, next_tech_kia_timer, next_hostage_kia_timer, next_city_objective_timer
 
 
 def render_mode_frame_from_runtime(
@@ -621,7 +646,7 @@ def render_mode_frame_from_runtime(
     draw_debug_overlay_fn: object,
     draw_toast_fn: object,
     draw_damage_flash_fn: object,
-) -> tuple[float, float, float]:
+) -> tuple[float, float, float, float]:
     """Render a frame by adapting grouped runtime settings into render_mode_frame."""
     return render_mode_frame(
         mode=mode,
@@ -647,6 +672,7 @@ def render_mode_frame_from_runtime(
         hud_disabled_timer=float(getattr(runtime, "hud_disabled_timer", 0.0)),
         vip_kia_overlay_timer=float(getattr(runtime, "vip_kia_overlay_timer", 0.0)),
         tech_kia_overlay_timer=float(getattr(runtime, "tech_kia_overlay_timer", 0.0)),
+        hostage_kia_overlay_timer=float(getattr(runtime, "hostage_kia_overlay_timer", 0.0)),
         city_objective_overlay_timer=float(getattr(runtime, "city_objective_overlay_timer", 0.0)),
         mission_end_return_seconds=float(getattr(runtime, "mission_end_return_seconds", 0.0)),
         meal_truck_driver_mode=bool(getattr(runtime, "meal_truck_driver_mode", False)),

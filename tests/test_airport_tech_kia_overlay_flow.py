@@ -25,6 +25,8 @@ class AirportTechKiaOverlayFlowTests(unittest.TestCase):
             vip_kia_overlay_shown=False,
             tech_kia_overlay_timer=0.0,
             tech_kia_overlay_shown=False,
+            hostage_kia_overlay_timer=0.0,
+            hostage_kia_overlay_shown=False,
         )
 
         self.assertEqual(state.tech_kia_overlay_timer, 3.0)
@@ -44,6 +46,8 @@ class AirportTechKiaOverlayFlowTests(unittest.TestCase):
             vip_kia_overlay_shown=False,
             tech_kia_overlay_timer=0.0,
             tech_kia_overlay_shown=False,
+            hostage_kia_overlay_timer=0.0,
+            hostage_kia_overlay_shown=False,
         )
 
         self.assertEqual(state.tech_kia_overlay_timer, 3.0)
@@ -63,6 +67,8 @@ class AirportTechKiaOverlayFlowTests(unittest.TestCase):
             vip_kia_overlay_shown=False,
             tech_kia_overlay_timer=0.0,
             tech_kia_overlay_shown=True,
+            hostage_kia_overlay_timer=0.0,
+            hostage_kia_overlay_shown=False,
         )
 
         self.assertEqual(state.tech_kia_overlay_timer, 0.0)
@@ -82,9 +88,55 @@ class AirportTechKiaOverlayFlowTests(unittest.TestCase):
             vip_kia_overlay_shown=False,
             tech_kia_overlay_timer=0.0,
             tech_kia_overlay_shown=True,
+            hostage_kia_overlay_timer=0.0,
+            hostage_kia_overlay_shown=False,
         )
 
         self.assertFalse(state.tech_kia_overlay_shown)
+
+    def test_starts_hostage_kia_overlay_once_when_any_hostage_dies(self) -> None:
+        mission = SimpleNamespace(
+            mission_id="airport",
+            hostages=[],
+            stats=SimpleNamespace(kia_by_player=0, kia_by_enemy=1),
+            airport_hostage_state=SimpleNamespace(terminal_kia=[0, 0]),
+            mission_tech=SimpleNamespace(state="waiting_at_lz"),
+        )
+
+        state = update_vip_overlay_state(
+            mission=mission,
+            vip_kia_overlay_timer=0.0,
+            vip_kia_overlay_shown=False,
+            tech_kia_overlay_timer=0.0,
+            tech_kia_overlay_shown=False,
+            hostage_kia_overlay_timer=0.0,
+            hostage_kia_overlay_shown=False,
+        )
+
+        self.assertEqual(state.hostage_kia_overlay_timer, 3.0)
+        self.assertTrue(state.hostage_kia_overlay_shown)
+
+    def test_does_not_restart_hostage_kia_overlay_after_first_show(self) -> None:
+        mission = SimpleNamespace(
+            mission_id="airport",
+            hostages=[],
+            stats=SimpleNamespace(kia_by_player=0, kia_by_enemy=2),
+            airport_hostage_state=SimpleNamespace(terminal_kia=[0, 0]),
+            mission_tech=SimpleNamespace(state="waiting_at_lz"),
+        )
+
+        state = update_vip_overlay_state(
+            mission=mission,
+            vip_kia_overlay_timer=0.0,
+            vip_kia_overlay_shown=False,
+            tech_kia_overlay_timer=0.0,
+            tech_kia_overlay_shown=False,
+            hostage_kia_overlay_timer=0.0,
+            hostage_kia_overlay_shown=True,
+        )
+
+        self.assertEqual(state.hostage_kia_overlay_timer, 0.0)
+        self.assertTrue(state.hostage_kia_overlay_shown)
 
 
 if __name__ == "__main__":

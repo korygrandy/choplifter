@@ -19,6 +19,8 @@ class VipOverlayStateResult:
     vip_kia_overlay_shown: bool
     tech_kia_overlay_timer: float
     tech_kia_overlay_shown: bool
+    hostage_kia_overlay_timer: float
+    hostage_kia_overlay_shown: bool
 
 
 @dataclass
@@ -87,6 +89,8 @@ def update_vip_overlay_state(
     vip_kia_overlay_shown: bool,
     tech_kia_overlay_timer: float,
     tech_kia_overlay_shown: bool,
+    hostage_kia_overlay_timer: float,
+    hostage_kia_overlay_shown: bool,
 ) -> VipOverlayStateResult:
     if hasattr(mission, "hostages"):
         vip_hostage = next((h for h in mission.hostages if getattr(h, "is_vip", False)), None)
@@ -98,6 +102,23 @@ def update_vip_overlay_state(
                 vip_kia_overlay_shown = True
 
     mission_id = str(getattr(mission, "mission_id", "")).strip().lower()
+    total_hostage_kia = int(getattr(getattr(mission, "stats", None), "kia_by_enemy", 0)) + int(
+        getattr(getattr(mission, "stats", None), "kia_by_player", 0)
+    )
+    airport_terminal_kia = sum(
+        max(0, int(v))
+        for v in (
+            getattr(getattr(mission, "airport_hostage_state", None), "terminal_kia", [])
+            or []
+        )
+    )
+    hostage_kia_failure = (total_hostage_kia + airport_terminal_kia) > 0
+    if not hostage_kia_failure:
+        hostage_kia_overlay_shown = False
+    elif hostage_kia_overlay_timer <= 0.0 and not hostage_kia_overlay_shown:
+        hostage_kia_overlay_timer = 3.0
+        hostage_kia_overlay_shown = True
+
     if mission_id in ("airport", "airport_special_ops", "airportspecialops", "mission2", "m2"):
         tech_state_name = str(getattr(getattr(mission, "mission_tech", None), "state", "")).strip().lower()
         tech_kia_failure = tech_state_name == "kia"
@@ -112,6 +133,8 @@ def update_vip_overlay_state(
         vip_kia_overlay_shown=vip_kia_overlay_shown,
         tech_kia_overlay_timer=tech_kia_overlay_timer,
         tech_kia_overlay_shown=tech_kia_overlay_shown,
+        hostage_kia_overlay_timer=hostage_kia_overlay_timer,
+        hostage_kia_overlay_shown=hostage_kia_overlay_shown,
     )
 
 
@@ -121,6 +144,8 @@ def apply_vip_overlay_update(*, runtime: object, vip_overlay_state: VipOverlaySt
     runtime.vip_kia_overlay_shown = vip_overlay_state.vip_kia_overlay_shown
     runtime.tech_kia_overlay_timer = vip_overlay_state.tech_kia_overlay_timer
     runtime.tech_kia_overlay_shown = vip_overlay_state.tech_kia_overlay_shown
+    runtime.hostage_kia_overlay_timer = vip_overlay_state.hostage_kia_overlay_timer
+    runtime.hostage_kia_overlay_shown = vip_overlay_state.hostage_kia_overlay_shown
 
 
 def apply_weather_runtime_update(
@@ -162,6 +187,8 @@ def run_frame_preamble(
         vip_kia_overlay_shown=runtime.vip_kia_overlay_shown,
         tech_kia_overlay_timer=runtime.tech_kia_overlay_timer,
         tech_kia_overlay_shown=runtime.tech_kia_overlay_shown,
+        hostage_kia_overlay_timer=runtime.hostage_kia_overlay_timer,
+        hostage_kia_overlay_shown=runtime.hostage_kia_overlay_shown,
     )
     apply_vip_overlay_update(runtime=runtime, vip_overlay_state=vip_overlay_state)
 

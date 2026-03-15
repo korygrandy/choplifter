@@ -102,6 +102,9 @@ class IntroVideoPlayer:
     _typing_sfx: pygame.mixer.Sound | None = None
     _typing_prev_typed_count: int = 0
     _typing_last_play_s: float = 0.0
+    _loading_screen_style: str = "terminal"
+    _loading_ready_text: str = "READY."
+    _loading_command_text: str = 'LOAD "CHOPLIFTER",8,1'
     done: bool = False
 
     _last_error: str | None = None
@@ -111,7 +114,14 @@ class IntroVideoPlayer:
         return IntroVideoPlayer._last_error
 
     @staticmethod
-    def try_create(path: Path, *, enable_terminal_typing_sfx: bool = False) -> "IntroVideoPlayer | None":
+    def try_create(
+        path: Path,
+        *,
+        enable_terminal_typing_sfx: bool = False,
+        loading_screen_style: str = "terminal",
+        loading_ready_text: str | None = None,
+        loading_command_text: str | None = None,
+    ) -> "IntroVideoPlayer | None":
         IntroVideoPlayer._last_error = None
         try:
             if not path.exists():
@@ -141,6 +151,21 @@ class IntroVideoPlayer:
                 _reader=reader,
                 _iter=it,
                 _enable_terminal_typing_sfx=bool(enable_terminal_typing_sfx),
+                _loading_screen_style=(
+                    "terminal"
+                    if str(loading_screen_style).strip().lower() == "terminal"
+                    else "black"
+                ),
+                _loading_ready_text=(
+                    str(loading_ready_text)
+                    if loading_ready_text is not None and str(loading_ready_text).strip()
+                    else "READY."
+                ),
+                _loading_command_text=(
+                    str(loading_command_text)
+                    if loading_command_text is not None and str(loading_command_text).strip()
+                    else 'LOAD "CHOPLIFTER",8,1'
+                ),
             )
             # Start audio extraction in background to avoid frame hitch on cutscene start.
             player._audio_extract_future = _VIDEO_IO_EXECUTOR.submit(_extract_audio_track_to_temp, path)
@@ -305,8 +330,8 @@ class IntroVideoPlayer:
         if self._loading_font is None:
             self._loading_font = pygame.font.SysFont("consolas", 24, bold=True)
 
-        ready_text = "READY."
-        load_command = 'LOAD "CHOPLIFTER",8,1'
+        ready_text = str(getattr(self, "_loading_ready_text", "READY."))
+        load_command = str(getattr(self, "_loading_command_text", 'LOAD "CHOPLIFTER",8,1'))
         ready_hold_s = 0.42
         load_rate = 22.0
 
@@ -410,7 +435,10 @@ class IntroVideoPlayer:
         screen.fill((0, 0, 0))
         if self._frame is None:
             if self._is_waiting_on_audio():
-                self._draw_terminal_loading_prompt(screen)
+                if str(self._loading_screen_style) == "terminal":
+                    self._draw_terminal_loading_prompt(screen)
+                else:
+                    self._stop_typing_sfx()
             else:
                 self._stop_typing_sfx()
             return
@@ -438,6 +466,9 @@ class IntroVideoPlayer:
         screen.blit(self._scaled, (x, y))
 
         if self._is_waiting_on_audio():
-            self._draw_terminal_loading_prompt(screen)
+            if str(self._loading_screen_style) == "terminal":
+                self._draw_terminal_loading_prompt(screen)
+            else:
+                self._stop_typing_sfx()
         else:
             self._stop_typing_sfx()

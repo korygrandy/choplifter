@@ -339,6 +339,7 @@ flare diversion behavior, and BARAK MRAD state cycle hardening.
 - [ ] Expand debug state inspector to include next transition forecast in addition to current state/timers.
 - [x] Add deterministic tests for full cycle progression and interruption scenarios.
 - [ ] Extend difficulty scaling hooks (faster deploy/reload and smarter reposition behavior).
+- [ ] Difficulty-mechanics candidate: optional grounded-tank fire mode (remove/relax tank altitude fire gate) behind a difficulty flag with balance safeguards (longer tell, lower damage, or reduced cadence).
 
 ### Execution Sprint Slice (2026-03-14)
 

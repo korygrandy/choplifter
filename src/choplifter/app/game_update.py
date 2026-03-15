@@ -311,6 +311,7 @@ def try_start_hostage_rescue_cutscene(
             logger=logger,
             event_id=cutscene_config.HOSTAGE_RESCUE_CUTSCENE_EVENT_ID,
             mission_id=str(getattr(mission, "mission_id", "")),
+            loading_screen_style="black",
         )
     )
     if not started:

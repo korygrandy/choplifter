@@ -130,6 +130,7 @@ def run_post_fixed_step_phase(
     (
         runtime.vip_kia_overlay_timer,
         runtime.tech_kia_overlay_timer,
+        runtime.hostage_kia_overlay_timer,
         runtime.city_objective_overlay_timer,
     ) = render_mode_frame_from_runtime(
         mode=mode,

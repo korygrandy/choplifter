@@ -97,6 +97,9 @@ def start_mission_cutscene(
     logger: Logger,
     event_id: str,
     mission_id: str,
+    loading_screen_style: str = "terminal",
+    loading_ready_text: str | None = None,
+    loading_command_text: str | None = None,
 ) -> bool:
     """Attempt to start a mission cutscene.
 
@@ -106,6 +109,9 @@ def start_mission_cutscene(
     cutscene_video = IntroVideoPlayer.try_create(
         cutscene_path,
         enable_terminal_typing_sfx=False,
+        loading_screen_style=loading_screen_style,
+        loading_ready_text=loading_ready_text,
+        loading_command_text=loading_command_text,
     )
     if cutscene_video is None:
         logger.info(
@@ -141,6 +147,13 @@ def start_mission_intro_or_playing(
     mission_id: str,
 ) -> str:
     """Start the mission intro cutscene when available, otherwise continue directly to playing."""
+    mission_key = str(mission_id or "").strip().lower()
+    mission_loader_label = "CITY_CENTER_SEIGE"
+    if mission_key in ("airport", "airport_special_ops", "airportspecialops", "mission2", "m2"):
+        mission_loader_label = "AIRPORT_SPECIAL_OPS"
+    elif mission_key in ("worship", "worship_center", "worshipcenter", "mission3", "m3"):
+        mission_loader_label = "WORSHIP_CENTER_WARFARE"
+
     cutscene_path = assets_dir / "city-seige-intro.avi"
     cutscene_started = start_mission_cutscene(
         state,
@@ -148,6 +161,8 @@ def start_mission_intro_or_playing(
         logger=logger,
         event_id="mission_start",
         mission_id=mission_id,
+        loading_ready_text="READY.",
+        loading_command_text=f'LOAD "MISSION:{mission_loader_label}",8,1',
     )
     return "cutscene" if cutscene_started else "playing"
 

@@ -33,6 +33,8 @@ class GameRuntimeState:
     vip_kia_overlay_shown: bool = False
     tech_kia_overlay_timer: float = 0.0
     tech_kia_overlay_shown: bool = False
+    hostage_kia_overlay_timer: float = 0.0
+    hostage_kia_overlay_shown: bool = False
     city_objective_overlay_timer: float = 0.0
     perf_frame_prep_ms: float = 0.0
     perf_render_present_ms: float = 0.0
