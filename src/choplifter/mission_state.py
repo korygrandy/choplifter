@@ -81,6 +81,7 @@ class MissionState:
     _sentiment_last_kia_player: int = 0
     _sentiment_last_kia_enemy: int = 0
     _sentiment_last_lost_in_transit: int = 0
+    _sentiment_last_elapsed_seconds: float = 0.0
     _last_logged_boarded: int = 0
     _last_logged_saved: int = 0
     _last_logged_kia_player: int = 0

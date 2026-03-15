@@ -16,10 +16,13 @@ def _mission(sentiment: float, *, saved: int = 0, kia_player: int = 0, kia_enemy
     return SimpleNamespace(
         sentiment=sentiment,
         stats=stats,
+        tuning=SimpleNamespace(sentiment_duration_penalty_per_min=0.0),
+        elapsed_seconds=0.0,
         _sentiment_last_saved=0,
         _sentiment_last_kia_player=0,
         _sentiment_last_kia_enemy=0,
         _sentiment_last_lost_in_transit=0,
+        _sentiment_last_elapsed_seconds=0.0,
     )
 
 
@@ -59,6 +62,14 @@ class SentimentHelpersTests(unittest.TestCase):
         mission_high = _mission(98.0, saved=20, kia_player=0, kia_enemy=0, lost=0)
         _update_sentiment(mission_high)
         self.assertEqual(mission_high.sentiment, 100.0)
+
+    def test_update_sentiment_applies_duration_penalty(self) -> None:
+        mission = _mission(50.0)
+        mission.tuning.sentiment_duration_penalty_per_min = 1.0
+        mission.elapsed_seconds = 60.0
+        mission._sentiment_last_elapsed_seconds = 0.0
+        _update_sentiment(mission)
+        self.assertEqual(mission.sentiment, 49.0)
 
 
 if __name__ == "__main__":

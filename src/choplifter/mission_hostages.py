@@ -152,7 +152,10 @@ def _update_hostages(
     if is_airport:
         _bus_state = getattr(mission, "airport_bus_state", None)
         _tower_stop_x = float(getattr(_bus_state, "stop_x", 500.0)) if _bus_state is not None else 500.0
-        rescue_pack_x = _tower_stop_x - 80.0  # pack left of tower LZ
+        # Keep rescued civilians visible near the tower, but avoid the mission-tech
+        # pickup point (which lives around stop_x-80) to prevent a "rogue singleton"
+        # illusion when the engineer boards.
+        rescue_pack_x = _tower_stop_x - 120.0  # pack further left of tower LZ
     else:
         rescue_pack_x = mission.base.pos.x
 

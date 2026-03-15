@@ -10,6 +10,7 @@ from ..airport_fuselage import is_airport_fuselage_boarding_unlocked
 from ..app.boarding_status import compute_boarding_ux_status, get_boarding_ux_visual
 from ..game_types import HostageState
 from ..helicopter import Helicopter
+from ..mission_helpers import format_duration
 
 if TYPE_CHECKING:
     from ..mission_state import MissionState
@@ -571,6 +572,19 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
         value_font=font,
     )
 
+    duration_seconds = float(getattr(mission, "elapsed_seconds", 0.0))
+    _draw_stat_chip(
+        screen,
+        x=hud_x,
+        y=hud_y + 190,
+        label="TIME",
+        value=format_duration(duration_seconds),
+        icon_name="hud_sentiment",
+        icon_kind="sentiment",
+        label_font=small,
+        value_font=font,
+    )
+
     vip_hostage = next((h for h in mission.hostages if getattr(h, "is_vip", False)), None)
     vip_status = "UNKNOWN"
     if vip_hostage:
@@ -590,7 +604,7 @@ def draw_hud(screen: pygame.Surface, mission: MissionState, helicopter: Helicopt
         _draw_stat_chip(
             screen,
             x=hud_x,
-            y=hud_y + 190,
+            y=hud_y + 228,
             label="VIP",
             value=vip_status,
             icon_name="hud_vip",

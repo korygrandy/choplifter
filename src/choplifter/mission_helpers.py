@@ -26,6 +26,16 @@ SENTIMENT_WEIGHT_LOST_IN_TRANSIT = -3.5
 SENTIMENT_MAX_DELTA_PER_UPDATE = 18.0
 
 
+def format_duration(seconds: float) -> str:
+    total = max(0, int(seconds))
+    hours = total // 3600
+    minutes = (total % 3600) // 60
+    secs = total % 60
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
+
+
 def boarded_count(mission: "MissionState") -> int:
     return sum(1 for h in mission.hostages if h.state is HostageState.BOARDED)
 
@@ -262,7 +272,14 @@ def _update_sentiment(mission: "MissionState") -> None:
     dkia_enemy = kia_enemy - mission._sentiment_last_kia_enemy
     dlost = lost - mission._sentiment_last_lost_in_transit
 
-    if dsaved or dkia_player or dkia_enemy or dlost:
+    elapsed_seconds = float(getattr(mission, "elapsed_seconds", 0.0))
+    last_elapsed_seconds = float(getattr(mission, "_sentiment_last_elapsed_seconds", elapsed_seconds))
+    dt = max(0.0, elapsed_seconds - last_elapsed_seconds)
+    tuning = getattr(mission, "tuning", None)
+    duration_penalty_per_min = float(getattr(tuning, "sentiment_duration_penalty_per_min", 0.0)) if tuning is not None else 0.0
+    duration_delta = -duration_penalty_per_min * (dt / 60.0)
+
+    if dsaved or dkia_player or dkia_enemy or dlost or abs(duration_delta) > 1e-9:
         delta_parts = sentiment_contributions(
             saved=dsaved,
             kia_player=dkia_player,
@@ -275,6 +292,7 @@ def _update_sentiment(mission: "MissionState") -> None:
             + float(delta_parts["kia_enemy"])
             + float(delta_parts["lost_in_transit"])
         )
+        delta_total += float(duration_delta)
         delta_total = clamp(delta_total, -SENTIMENT_MAX_DELTA_PER_UPDATE, SENTIMENT_MAX_DELTA_PER_UPDATE)
         mission.sentiment += delta_total
         mission.sentiment = clamp(mission.sentiment, 0.0, 100.0)
@@ -283,6 +301,7 @@ def _update_sentiment(mission: "MissionState") -> None:
     mission._sentiment_last_kia_player = kia_player
     mission._sentiment_last_kia_enemy = kia_enemy
     mission._sentiment_last_lost_in_transit = lost
+    setattr(mission, "_sentiment_last_elapsed_seconds", elapsed_seconds)
 
 
 def _update_fuel(

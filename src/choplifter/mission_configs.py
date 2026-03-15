@@ -76,6 +76,10 @@ class MissionTuning:
     airborne_fall_delay_min_s: float = 2.0
     airborne_fall_delay_max_s: float = 3.0
 
+    # Sentiment pacing.
+    # Applied continuously during missions: penalty_per_min * (dt / 60).
+    sentiment_duration_penalty_per_min: float = 0.15
+
     barak_deploy_angle_speed_rad_s: float = 1.5
     barak_deploy_extension_speed_s: float = 1.2
     barak_retract_angle_speed_rad_s: float = 1.9

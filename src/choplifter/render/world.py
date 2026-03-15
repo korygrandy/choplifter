@@ -95,7 +95,7 @@ from ..airport_fuselage import (
     get_airport_fuselage_damage_stage,
 )
 from ..hostage_logic import _draw_stick_figure_passenger, _draw_stick_figure_passenger_rotated
-from ..mission_helpers import sentiment_band_label, sentiment_contributions
+from ..mission_helpers import format_duration, sentiment_band_label, sentiment_contributions
 _airport_fuselage_half_image_cache: pygame.Surface | None | bool = False
 _airport_fuselage_total_image_cache: pygame.Surface | None | bool = False
 
@@ -339,6 +339,10 @@ def draw_mission_end_overlay(
         return
 
     boarded = sum(1 for h in mission.hostages if h.state is HostageState.BOARDED)
+    duration_seconds = float(getattr(mission, "elapsed_seconds", 0.0))
+    tuning = getattr(mission, "tuning", None)
+    duration_penalty_per_min = float(getattr(tuning, "sentiment_duration_penalty_per_min", 0.0)) if tuning is not None else 0.0
+    duration_penalty = max(0.0, duration_penalty_per_min) * (duration_seconds / 60.0)
     _draw_end(
         screen,
         mission.end_text,
@@ -355,6 +359,8 @@ def draw_mission_end_overlay(
         route_bonus_awarded=bool(getattr(mission, "airport_route_bonus_awarded", False)),
         route_bonus_value=float(getattr(mission, "airport_route_bonus_value", 0.0)),
         first_route=str(getattr(mission, "airport_first_rescue_route", "")),
+        duration_seconds=duration_seconds,
+        duration_penalty=duration_penalty,
         mission_end_return_seconds=float(mission_end_return_seconds),
     )
 
@@ -1726,6 +1732,7 @@ def _sentiment_reason_lines(
     kia_player: int,
     kia_enemy: int,
     lost_in_transit: int,
+    duration_penalty: float = 0.0,
     mission_id: str = "",
     route_bonus_awarded: bool = False,
     route_bonus_value: float = 0.0,
@@ -1748,6 +1755,10 @@ def _sentiment_reason_lines(
         f"Sentiment factors: -{sub_kia_enemy:0.1f} enemy-caused casualties",
         f"Sentiment factors: -{sub_lost:0.1f} lost in transit",
     ]
+
+    duration_penalty_value = max(0.0, float(duration_penalty or 0.0))
+    if duration_penalty_value > 0.0:
+        lines.append(f"Sentiment factors: -{duration_penalty_value:0.1f} mission duration")
 
     mission_id_norm = str(mission_id or "").strip().lower()
     is_airport = mission_id_norm in ("airport", "airport_special_ops", "airportspecialops", "mission2", "m2")
@@ -1785,6 +1796,8 @@ def _draw_end(
     route_bonus_awarded: bool = False,
     route_bonus_value: float = 0.0,
     first_route: str = "",
+    duration_seconds: float = 0.0,
+    duration_penalty: float = 0.0,
     mission_end_return_seconds: float = 0.0,
 ) -> None:
     panel = get_volatile_surface(screen.get_width(), screen.get_height(), pygame.SRCALPHA)
@@ -1800,6 +1813,7 @@ def _draw_end(
     band = sentiment_band_label(sentiment)
     lines = [
         f"Result: {reason}",
+        f"Duration: {format_duration(duration_seconds)}",
         f"Saved: {saved}",
         f"Boarded (not yet unloaded): {boarded}",
         f"KIA (player): {kia_player}",
@@ -1815,6 +1829,7 @@ def _draw_end(
             kia_player=kia_player,
             kia_enemy=kia_enemy,
             lost_in_transit=lost_in_transit,
+            duration_penalty=duration_penalty,
             mission_id=mission_id,
             route_bonus_awarded=route_bonus_awarded,
             route_bonus_value=route_bonus_value,

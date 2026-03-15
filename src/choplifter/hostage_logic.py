@@ -729,7 +729,10 @@ def draw_airport_hostages(target: pygame.Surface, hostage_state, *, camera_x: fl
 		frontage_count = max(1, visible_count - roof_count)
 
 		stop_x = float(getattr(bus_state, "stop_x", 500.0))
-		frontage_world_x = stop_x - 78.0
+		# Stage rescued civilians near the tower, but not at the engineer pickup point.
+		# The engineer waits at lz_wait_x (stop_x-80) and disappears instantly when
+		# picked up; placing civilians at ~stop_x-78 creates a convincing "swap" illusion.
+		frontage_world_x = stop_x - 118.0
 		tech_state_name = str(getattr(tech_state, "state", "")) if tech_state is not None else ""
 		tech_animation_state = str(getattr(tech_state, "boarding_animation_state", "")) if tech_state is not None else ""
 		if tech_animation_state == "returning":
@@ -737,8 +740,11 @@ def draw_airport_hostages(target: pygame.Surface, hostage_state, *, camera_x: fl
 			frontage_count = 0
 		tech_reboarding_lz = tech_state_name == "waiting_at_lz"
 		if tech_reboarding_lz:
+			# Keep the crowd offset from the reserved pickup ring so they never occupy
+			# the engineer's standing/pickup position.
 			reserved_pickup_x = float(getattr(tech_state, "lz_wait_x", stop_x - 80.0))
-			frontage_world_x = reserved_pickup_x - 18.0 - max(0, frontage_count - 1) * 10.0
+			safe_offset = 46.0
+			frontage_world_x = reserved_pickup_x - safe_offset - max(0, frontage_count - 1) * 10.0
 		frontage_base_x = int(frontage_world_x - float(camera_x))
 		frontage_base_y = int(float(ground_y) - 8)
 		for i in range(frontage_count):
