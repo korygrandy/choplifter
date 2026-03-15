@@ -72,6 +72,7 @@ class MissionTuning:
     hostage_chaotic_start_radius: float = 340.0
     hostage_chaos_probability: float = 0.35
     hostage_boarding_radius: float = 64.0
+    hostage_boarding_cadence_s: float = 0.30
     airborne_fall_delay_min_s: float = 2.0
     airborne_fall_delay_max_s: float = 3.0
 

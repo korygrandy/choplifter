@@ -51,7 +51,7 @@ class MissionTechTransitionTests(unittest.TestCase):
         self.assertEqual(first.state, "boarding_bus")
         self.assertEqual(first.boarding_animation_state, "boarding_bus")
         self.assertEqual(bus_state.door_state, "opening")
-        expected_anchor = 1160.0 + 64.0 * 0.68
+        expected_anchor = 1160.0 + 64.0 * 0.24
         self.assertLessEqual(abs(float(first.boarding_end_x) - expected_anchor), 2.0)
         self.assertEqual(audio.calls, 1)
 
@@ -198,6 +198,49 @@ class MissionTechTransitionTests(unittest.TestCase):
         self.assertEqual(updated.tech_y, 210.0)
         self.assertEqual(bus_state.door_state, "closing")
         self.assertEqual(bus_state.door_animation_progress, 0.0)
+
+    def test_transferring_to_bus_final_leg_moves_to_boarding_bus_without_hostage_state_boarded(self) -> None:
+        tech_state = MissionTechState(
+            state="transferring",
+            on_bus=False,
+            is_deployed=True,
+            tech_x=1300.0,
+            tech_y=210.0,
+            deploy_timer_s=3.0,
+            boarding_animation_state="idle",
+        )
+        meal_truck_state = SimpleNamespace(x=1320.0, y=210.0)
+        bus_state = SimpleNamespace(
+            x=1160.0,
+            y=210.0,
+            width=64,
+            door_state="closed",
+            door_animation_progress=0.0,
+        )
+        hostage_state = SimpleNamespace(
+            state="transferring_to_bus",
+            boarded_hostages=6,
+            rescued_hostages=0,
+            total_hostages=8,
+            terminal_remaining=[0, 0],
+            meal_truck_loaded_hostages=0,
+            transferring_hostages=2,
+            transferred_so_far=2,
+        )
+
+        updated = update_mission_tech(
+            tech_state,
+            0.016,
+            meal_truck_state=meal_truck_state,
+            bus_state=bus_state,
+            hostage_state=hostage_state,
+        )
+
+        self.assertEqual(updated.state, "boarding_bus")
+        self.assertEqual(updated.boarding_animation_state, "boarding_bus")
+        expected_anchor = 1160.0 + 64.0 * 0.24
+        self.assertLessEqual(abs(float(updated.boarding_end_x) - expected_anchor), 2.0)
+        self.assertEqual(bus_state.door_state, "opening")
 
     def test_mission_tech_falls_after_airborne_grace_window(self) -> None:
         tech_state = MissionTechState(

@@ -274,6 +274,45 @@ class AirportTechBoardingGateTests(unittest.TestCase):
 
         self.assertEqual(mission.hostages[0].state, HostageState.MOVING_TO_LZ)
 
+    def test_lower_boarding_is_singleton_not_instant_batch(self) -> None:
+        mission = _mission(mission_id="airport", tech_state_name="on_chopper")
+        mission.tuning.hostage_boarding_cadence_s = 0.30
+        helicopter = SimpleNamespace(pos=SimpleNamespace(x=100.0, y=606.0), grounded=True, doors_open=True)
+
+        mission.hostages = [
+            SimpleNamespace(
+                state=HostageState.MOVING_TO_LZ,
+                pos=SimpleNamespace(x=100.0, y=612.0),
+                move_speed=0.0,
+                saved_slot=-1,
+            ),
+            SimpleNamespace(
+                state=HostageState.MOVING_TO_LZ,
+                pos=SimpleNamespace(x=100.0, y=612.0),
+                move_speed=0.0,
+                saved_slot=-1,
+            ),
+            SimpleNamespace(
+                state=HostageState.MOVING_TO_LZ,
+                pos=SimpleNamespace(x=100.0, y=612.0),
+                move_speed=0.0,
+                saved_slot=-1,
+            ),
+        ]
+
+        boarded_count = lambda m: sum(1 for h in m.hostages if h.state is HostageState.BOARDED)
+
+        _update_hostages(mission, helicopter, 0.016, HelicopterSettings(), boarded_count_fn=boarded_count)
+        self.assertEqual(boarded_count(mission), 1)
+
+        # Cooldown active, so a second immediate tick should not board another.
+        _update_hostages(mission, helicopter, 0.016, HelicopterSettings(), boarded_count_fn=boarded_count)
+        self.assertEqual(boarded_count(mission), 1)
+
+        # After cadence interval elapses, next hostage boards.
+        _update_hostages(mission, helicopter, 0.35, HelicopterSettings(), boarded_count_fn=boarded_count)
+        self.assertEqual(boarded_count(mission), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

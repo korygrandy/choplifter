@@ -60,8 +60,8 @@ def _bus_door_boarding_x(bus_state) -> float:
 	"""Estimate a stable world-X boarding point near the bus door."""
 	bus_x = float(getattr(bus_state, "x", 0.0))
 	bus_w = float(getattr(bus_state, "width", 64.0))
-	# Door sits around the front-right side in the current sprite set.
-	return bus_x + bus_w * 0.68
+	# Use the front door (front-left while escorting toward tower LZ).
+	return bus_x + bus_w * 0.24
 
 
 def _tech_boarding_jitter_x(tech_state) -> float:
@@ -83,6 +83,15 @@ def _has_remaining_elevated_passengers(hostage_state) -> bool:
 	boarded = int(getattr(hostage_state, "boarded_hostages", 0))
 	loaded = int(getattr(hostage_state, "meal_truck_loaded_hostages", 0))
 	return max(0, total - rescued - boarded - loaded) > 0
+
+
+def _remaining_elevated_count(hostage_state) -> int:
+	if hostage_state is None:
+		return 0
+	remaining = list(getattr(hostage_state, "terminal_remaining", []) or [])
+	if remaining:
+		return sum(max(0, int(v)) for v in remaining)
+	return 0
 
 
 def _is_final_elevated_transfer_complete(hostage_state) -> bool:
@@ -331,7 +340,23 @@ def update_mission_tech(
 			boarded = int(getattr(hostage_state, "boarded_hostages", 0))
 			rescued = int(getattr(hostage_state, "rescued_hostages", 0))
 			total_hostages = int(getattr(hostage_state, "total_hostages", 16))
-			if hostage_state_name in ("boarded", "rescued") or boarded >= total_hostages or rescued >= total_hostages:
+			remaining_elevated = _remaining_elevated_count(hostage_state)
+			truck_loaded = max(0, int(getattr(hostage_state, "meal_truck_loaded_hostages", 0)))
+			transferring_total = max(0, int(getattr(hostage_state, "transferring_hostages", 0)))
+			transferred_so_far = max(0, int(getattr(hostage_state, "transferred_so_far", 0)))
+			transfer_leg_finished = transferring_total <= 0 or transferred_so_far >= transferring_total
+			elevated_transfer_finished = (
+				remaining_elevated <= 0
+				and truck_loaded <= 0
+				and transfer_leg_finished
+				and hostage_state_name in ("transferring_to_bus", "boarded", "rescued")
+			)
+			if (
+				hostage_state_name in ("boarded", "rescued")
+				or boarded >= total_hostages
+				or rescued >= total_hostages
+				or elevated_transfer_finished
+			):
 				if _is_final_elevated_transfer_complete(hostage_state):
 					# Final elevated transfer: auto-board engineer with the last passenger handoff.
 					tech_state.state = "transfer_complete"

@@ -62,6 +62,16 @@ def prepare_fixed_step_preamble(
             next_airport_runtime,
         ) = load_frame_locals_from_context(loop_ctx=loop_ctx)
 
+    if selected_mission_id == "airport" and bool(runtime.bus_driver_mode):
+        tech_on_bus = bool(
+            next_airport_runtime.tech_state is not None
+            and bool(getattr(next_airport_runtime.tech_state, "on_bus", False))
+        )
+        if not tech_on_bus:
+            runtime.bus_driver_mode = False
+            if next_airport_runtime.bus_state is not None:
+                next_airport_runtime.bus_state.driver_mode_active = False
+
     helicopter_input = build_helicopter_input_fn(
         mode=mode,
         kb_tilt_left=kb_tilt_left,

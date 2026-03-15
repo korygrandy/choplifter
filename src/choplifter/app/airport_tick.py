@@ -20,6 +20,7 @@ from ..enemy_spawns import update_airport_enemy_spawns
 from ..objective_manager import update_airport_objectives
 from ..cutscene_manager import update_airport_cutscene_state
 from ..mission_ending import _end_mission
+from ..mission_helpers import boarded_count
 from ..math2d import clamp
 
 
@@ -336,7 +337,11 @@ def update_airport_mission_tick(
             if hostage_state is not None
             else 0
         )
-        if (lower_rescued + elevated_rescued) >= int(airport_total_rescue_target):
+        boarded_not_yet_unloaded = 0
+        if hasattr(mission, "hostages"):
+            boarded_not_yet_unloaded = boarded_count(mission)
+
+        if (lower_rescued + elevated_rescued) >= int(airport_total_rescue_target) and boarded_not_yet_unloaded <= 0:
             _end_mission(mission, "THE END", "RESCUE SUCCESS", logger)
 
     return AirportTickResult(

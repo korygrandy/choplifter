@@ -129,6 +129,15 @@ def _update_hostages(
     load_radius = max(30.0, float(getattr(mission.tuning, "hostage_boarding_radius", 58.0)))
     load_r2 = load_radius * load_radius
 
+    # Lower-level boarding cadence: only allow one hostage to board per interval so
+    # a group doesn't instantly "pop" into the chopper on the same tick.
+    boarding_cadence_s = max(0.05, float(getattr(mission.tuning, "hostage_boarding_cadence_s", 0.30)))
+    boarding_cooldown_s = max(0.0, float(getattr(mission, "boarding_release_seconds", 0.0)) - dt)
+    if not lz_available:
+        boarding_cooldown_s = 0.0
+    mission.boarding_release_seconds = boarding_cooldown_s
+    boarded_this_update = False
+
     controlled_speed = mission.tuning.hostage_controlled_move_speed
     controlled_cap = max(1, int(mission.tuning.hostage_controlled_max_moving_to_lz))
     chaotic_speed = mission.tuning.hostage_chaotic_move_speed
@@ -243,10 +252,14 @@ def _update_hostages(
             if dx * dx + dy * dy <= load_r2:
                 boarded = boarded_count_fn(mission)
                 if boarded < capacity:
+                    if boarded_this_update or float(getattr(mission, "boarding_release_seconds", 0.0)) > 0.0:
+                        continue
                     h.state = HostageState.BOARDED
                     h.pos = Vec2(-9999.0, -9999.0)
                     h.move_speed = 0.0
                     moving_to_lz = max(0, moving_to_lz - 1)
+                    mission.boarding_release_seconds = boarding_cadence_s
+                    boarded_this_update = True
                 else:
                     record_boarding_failure(mission, BOARDING_FAIL_FULL)
                     h.state = HostageState.WAITING

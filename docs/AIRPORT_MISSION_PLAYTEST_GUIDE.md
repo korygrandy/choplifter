@@ -61,12 +61,25 @@ Airport Smoke Report
 - Engineer must end up on bus for escort phase logic and threat activation.
 - Final elevated transfer behavior:
   - When the final elevated passenger handoff completes, engineer auto-transfers to bus.
+  - Engineer boarding should visually target the bus front door (not the rear).
 - Tower LZ sequence remains:
   - bus reaches LZ band -> engineer disembarks -> reboard gate for continuation.
 
 ---
 
 ## New/Important Behavioral Gates To Verify
+
+### Transfer Control Handoff (Regression Guard)
+
+Expected after elevated transfer completes:
+
+- Engineer transitions onto the bus for escort.
+- Player controls return to the helicopter (no lingering vehicle-driver lockout).
+- Any stale bus-driver mode is cleared automatically once engineer is no longer on the bus.
+
+Expected boarding visual:
+
+- Engineer approaches/boards from the bus front-door side.
 
 ### Escort Threat Activation
 
@@ -106,19 +119,31 @@ Expected UX:
 
 | # | Action | Expected |
 | --- | --- | --- |
-| Q1 | Start airport mission and deploy engineer to meal truck | Engineer exits chopper and truck phase begins |
-| Q2 | Complete one elevated extraction and transfer cycle | Transfer lane works, doors and xN marker update |
-| Q3 | Complete final elevated passenger handoff | Engineer auto-transfers with final handoff |
-| Q4 | Confirm escort phase starts with threats active | Threat warning objective text + one-time escort toast |
-| Q5 | Trigger a BARAK engagement with flare before launch | Missile sidewinds above chopper |
-| Q6 | Trigger flare after BARAK missile launch | Near-nose diversion behavior remains intact |
-| Q7 | During escort, induce one crash and recover | Bus continues; post-respawn risk window observable |
-| Q8 | Reach tower LZ and reboard engineer | Continuation prompt clears after valid reboard |
-| Q9 | Finish remaining lower rescues (if needed) | Combined total reaches 16 and mission succeeds |
+| Q1 | Start airport mission | Mission intro loader shows `MISSION:AIRPORT_SPECIAL_OPS` |
+| Q2 | Deploy engineer to meal truck | Engineer exits chopper and truck phase begins |
+| Q3 | Complete one elevated extraction and transfer cycle | Transfer lane works, doors and xN marker update |
+| Q4 | Complete final elevated passenger handoff | Engineer auto-transfers with final handoff; helicopter controls are active |
+| Q5 | Observe engineer boarding position | Boarding targets bus front door (not rear) |
+| Q6 | Confirm escort phase starts with threats active | Threat warning objective text + one-time escort toast |
+| Q7 | Trigger a BARAK engagement with flare before launch | Missile sidewinds above chopper |
+| Q8 | Trigger flare after BARAK missile launch | Near-nose diversion behavior remains intact |
+| Q9 | During escort, induce one crash and recover | Bus continues; post-respawn risk window observable |
+| Q10 | Reach tower LZ and reboard engineer | Continuation prompt clears after valid reboard |
+| Q11 | Finish remaining lower rescues (if needed) | Combined total reaches 16 and mission succeeds |
+
+Optional 90-second regression probes (run after Q2 or Q3):
+
+- Fuselage callouts:
+  - On fuselage terminal unlock, hear `fuselage-about-to-collapse.ogg` once.
+  - When fuselage has exactly 1 passenger remaining, hear `lets-go.ogg` once.
+- Hostage KIA failure overlay:
+  - If any hostage KIA occurs, mission-failed overlay appears immediately.
+- Hostage rescue cutscene preload:
+  - Hostage cutscenes preload with a black screen (no blue terminal loader).
 
 Quick result:
 
-- PASS: Q1-Q9 all valid with no blockers.
+- PASS: Q1-Q11 all valid with no blockers.
 - FAIL: any objective mismatch, stuck transition, or unrecoverable state.
 
 ---
